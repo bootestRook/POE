@@ -1,0 +1,26 @@
+[drop_pool.gem_basic]
+entries = [
+  { tag = "active_skill_gem", weight = 300 },
+  { tag = "support_gem", weight = 700 },
+]
+
+[drop_pool.active_skill_gems]
+entries = [
+  { id = "active_fire_bolt", weight = 100 },
+  { id = "active_ice_shards", weight = 100 },
+  { id = "active_lightning_chain", weight = 100 },
+  { id = "active_frost_nova", weight = 100 },
+  { id = "active_puncture", weight = 100 },
+  { id = "active_penetrating_shot", weight = 100 },
+  { id = "active_lava_orb", weight = 100 },
+  { id = "active_fungal_petards", weight = 100 },
+]
+
+[drop_pool.support_gems]
+entries = [
+  { tag = "gem_type_3", weight = 400 },
+  { tag = "gem_type_4", weight = 120 },
+  { tag = "gem_type_5", weight = 250 },
+  { tag = "gem_type_8", weight = 100 },
+  { tag = "gem_type_9", weight = 150 },
+]

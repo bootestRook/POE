@@ -1,0 +1,87 @@
+[[skill_templates]]
+id = "skill_fire_bolt"
+template_id = "skill_fire_bolt"
+name_key = "skill_template.fire_bolt.name"
+damage_type = "fire"
+behavior_type = "projectile"
+base_damage = 12
+base_cooldown_ms = 700
+tags = ["spell", "fire", "projectile"]
+scaling_stats = ["damage_add_percent", "fire_damage_add_percent", "cast_speed_add_percent", "projectile_speed_add_percent"]
+
+[[skill_templates]]
+id = "skill_ice_shards"
+template_id = "skill_ice_shards"
+name_key = "skill_template.ice_shards.name"
+damage_type = "cold"
+behavior_type = "projectile"
+base_damage = 8
+base_cooldown_ms = 900
+tags = ["spell", "cold", "projectile"]
+scaling_stats = ["damage_add_percent", "cold_damage_add_percent", "cast_speed_add_percent", "projectile_count_add"]
+
+[[skill_templates]]
+id = "skill_lightning_chain"
+template_id = "skill_lightning_chain"
+name_key = "skill_template.lightning_chain.name"
+damage_type = "lightning"
+behavior_type = "chain"
+base_damage = 10
+base_cooldown_ms = 1000
+tags = ["spell", "lightning", "chain"]
+scaling_stats = ["damage_add_percent", "lightning_damage_add_percent", "cast_speed_add_percent"]
+
+[[skill_templates]]
+id = "skill_frost_nova"
+template_id = "skill_frost_nova"
+name_key = "skill_template.frost_nova.name"
+damage_type = "cold"
+behavior_type = "area"
+base_damage = 14
+base_cooldown_ms = 1200
+tags = ["spell", "cold", "area", "nova"]
+scaling_stats = ["damage_add_percent", "cold_damage_add_percent", "cast_speed_add_percent", "area_add_percent"]
+
+[[skill_templates]]
+id = "skill_puncture"
+template_id = "skill_puncture"
+name_key = "skill_template.puncture.name"
+damage_type = "physical"
+behavior_type = "melee"
+base_damage = 16
+base_cooldown_ms = 800
+tags = ["attack", "physical", "melee", "dot"]
+scaling_stats = ["damage_add_percent", "physical_damage_add_percent", "attack_speed_add_percent", "status_chance_add_percent"]
+
+[[skill_templates]]
+id = "skill_penetrating_shot"
+template_id = "skill_penetrating_shot"
+name_key = "skill_template.penetrating_shot.name"
+damage_type = "physical"
+behavior_type = "projectile"
+base_damage = 13
+base_cooldown_ms = 850
+tags = ["attack", "physical", "ranged", "projectile", "pierce"]
+scaling_stats = ["damage_add_percent", "physical_damage_add_percent", "attack_speed_add_percent", "projectile_speed_add_percent"]
+
+[[skill_templates]]
+id = "skill_lava_orb"
+template_id = "skill_lava_orb"
+name_key = "skill_template.lava_orb.name"
+damage_type = "fire"
+behavior_type = "orbit"
+base_damage = 9
+base_cooldown_ms = 1100
+tags = ["spell", "fire", "orbit", "area"]
+scaling_stats = ["damage_add_percent", "fire_damage_add_percent", "cast_speed_add_percent", "area_add_percent"]
+
+[[skill_templates]]
+id = "skill_fungal_petards"
+template_id = "skill_fungal_petards"
+name_key = "skill_template.fungal_petards.name"
+damage_type = "physical"
+behavior_type = "trap_or_mine"
+base_damage = 18
+base_cooldown_ms = 1300
+tags = ["summon", "area", "trap_or_mine", "physical"]
+scaling_stats = ["damage_add_percent", "physical_damage_add_percent", "area_add_percent", "status_chance_add_percent"]

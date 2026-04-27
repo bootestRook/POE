@@ -1,0 +1,20 @@
+[[status_effects]]
+id = "burning"
+name_key = "status.burning.name"
+display_name_key = "status.burning.name"
+description_key = "status.burning.description"
+v1_runtime = "placeholder"
+
+[[status_effects]]
+id = "chill"
+name_key = "status.chill.name"
+display_name_key = "status.chill.name"
+description_key = "status.chill.description"
+v1_runtime = "placeholder"
+
+[[status_effects]]
+id = "bleed"
+name_key = "status.bleed.name"
+display_name_key = "status.bleed.name"
+description_key = "status.bleed.description"
+v1_runtime = "placeholder"

@@ -1,0 +1,63 @@
+[[active_skill_gems]]
+id = "active_fire_bolt"
+name_key = "gem.active_fire_bolt.name"
+description_key = "gem.active_fire_bolt.description"
+gem_type = "gem_type_1"
+skill_template = "skill_fire_bolt"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "spell", "fire", "projectile"]
+
+[[active_skill_gems]]
+id = "active_ice_shards"
+name_key = "gem.active_ice_shards.name"
+description_key = "gem.active_ice_shards.description"
+gem_type = "gem_type_1"
+skill_template = "skill_ice_shards"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "spell", "cold", "projectile"]
+
+[[active_skill_gems]]
+id = "active_lightning_chain"
+name_key = "gem.active_lightning_chain.name"
+description_key = "gem.active_lightning_chain.description"
+gem_type = "gem_type_1"
+skill_template = "skill_lightning_chain"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "spell", "lightning", "chain"]
+
+[[active_skill_gems]]
+id = "active_frost_nova"
+name_key = "gem.active_frost_nova.name"
+description_key = "gem.active_frost_nova.description"
+gem_type = "gem_type_1"
+skill_template = "skill_frost_nova"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "spell", "cold", "area", "nova"]
+
+[[active_skill_gems]]
+id = "active_puncture"
+name_key = "gem.active_puncture.name"
+description_key = "gem.active_puncture.description"
+gem_type = "gem_type_1"
+skill_template = "skill_puncture"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "attack", "physical", "melee", "dot"]
+
+[[active_skill_gems]]
+id = "active_penetrating_shot"
+name_key = "gem.active_penetrating_shot.name"
+description_key = "gem.active_penetrating_shot.description"
+gem_type = "gem_type_1"
+skill_template = "skill_penetrating_shot"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "attack", "physical", "ranged", "projectile", "pierce"]
+
+[[active_skill_gems]]
+id = "active_lava_orb"
+name_key = "gem.active_lava_orb.name"
+description_key = "gem.active_lava_orb.description"
+gem_type = "gem_type_1"
+skill_template = "skill_lava_orb"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "spell", "fire", "orbit", "area"]
+
+[[active_skill_gems]]
+id = "active_fungal_petards"
+name_key = "gem.active_fungal_petards.name"
+description_key = "gem.active_fungal_petards.description"
+gem_type = "gem_type_1"
+skill_template = "skill_fungal_petards"
+tags = ["gem", "active_skill_gem", "loot_gem", "gem_type_1", "summon", "area", "trap_or_mine", "physical"]

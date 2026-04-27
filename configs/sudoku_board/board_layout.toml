@@ -1,0 +1,5 @@
+[board]
+rows = 9
+columns = 9
+box_rows = 3
+box_columns = 3

@@ -1,0 +1,153 @@
+[[stats]]
+id = "max_life"
+name_key = "stat.max_life.name"
+category = "base"
+value_type = "number"
+affix_target = true
+
+[[stats]]
+id = "current_life"
+name_key = "stat.current_life.name"
+category = "runtime"
+value_type = "number"
+affix_target = false
+
+[[stats]]
+id = "move_speed"
+name_key = "stat.move_speed.name"
+category = "base"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "pickup_radius"
+name_key = "stat.pickup_radius.name"
+category = "base"
+value_type = "number"
+affix_target = true
+
+[[stats]]
+id = "skill_slots_active"
+name_key = "stat.skill_slots_active.name"
+category = "runtime"
+value_type = "integer"
+affix_target = false
+
+[[stats]]
+id = "damage_add_percent"
+name_key = "stat.damage_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "damage_final_percent"
+name_key = "stat.damage_final_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "attack_speed_add_percent"
+name_key = "stat.attack_speed_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "cast_speed_add_percent"
+name_key = "stat.cast_speed_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "skill_speed_final_percent"
+name_key = "stat.skill_speed_final_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "cooldown_reduction_percent"
+name_key = "stat.cooldown_reduction_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "added_cooldown_ms"
+name_key = "stat.added_cooldown_ms.name"
+category = "combat"
+value_type = "integer"
+affix_target = true
+
+[[stats]]
+id = "area_add_percent"
+name_key = "stat.area_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "projectile_count_add"
+name_key = "stat.projectile_count_add.name"
+category = "combat"
+value_type = "integer"
+affix_target = true
+
+[[stats]]
+id = "projectile_speed_add_percent"
+name_key = "stat.projectile_speed_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "crit_chance_add_percent"
+name_key = "stat.crit_chance_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "crit_damage_add_percent"
+name_key = "stat.crit_damage_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "status_chance_add_percent"
+name_key = "stat.status_chance_add_percent.name"
+category = "combat"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "physical_damage_add_percent"
+name_key = "stat.physical_damage_add_percent.name"
+category = "damage_type"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "fire_damage_add_percent"
+name_key = "stat.fire_damage_add_percent.name"
+category = "damage_type"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "cold_damage_add_percent"
+name_key = "stat.cold_damage_add_percent.name"
+category = "damage_type"
+value_type = "percent"
+affix_target = true
+
+[[stats]]
+id = "lightning_damage_add_percent"
+name_key = "stat.lightning_damage_add_percent.name"
+category = "damage_type"
+value_type = "percent"
+affix_target = true

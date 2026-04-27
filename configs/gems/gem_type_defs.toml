@@ -1,0 +1,44 @@
+[[gem_types]]
+id = "gem_type_1"
+name_key = "gem_type.1.name"
+v1_role = "active_skill_gem"
+
+[[gem_types]]
+id = "gem_type_2"
+name_key = "gem_type.2.name"
+v1_role = "reserved_support"
+
+[[gem_types]]
+id = "gem_type_3"
+name_key = "gem_type.3.name"
+v1_role = "general_support"
+
+[[gem_types]]
+id = "gem_type_4"
+name_key = "gem_type.4.name"
+v1_role = "risk_reward_support"
+
+[[gem_types]]
+id = "gem_type_5"
+name_key = "gem_type.5.name"
+v1_role = "damage_type_support"
+
+[[gem_types]]
+id = "gem_type_6"
+name_key = "gem_type.6.name"
+v1_role = "reserved_support"
+
+[[gem_types]]
+id = "gem_type_7"
+name_key = "gem_type.7.name"
+v1_role = "reserved_support"
+
+[[gem_types]]
+id = "gem_type_8"
+name_key = "gem_type.8.name"
+v1_role = "skill_level_support"
+
+[[gem_types]]
+id = "gem_type_9"
+name_key = "gem_type.9.name"
+v1_role = "board_conduit_support"

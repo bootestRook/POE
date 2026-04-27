@@ -1,0 +1,19 @@
+[[relations]]
+id = "adjacent"
+name_key = "relation.adjacent.name"
+coefficient = 1.25
+
+[[relations]]
+id = "same_row"
+name_key = "relation.same_row.name"
+coefficient = 1.0
+
+[[relations]]
+id = "same_column"
+name_key = "relation.same_column.name"
+coefficient = 1.0
+
+[[relations]]
+id = "same_box"
+name_key = "relation.same_box.name"
+coefficient = 1.0

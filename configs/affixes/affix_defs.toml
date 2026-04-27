@@ -1,0 +1,186 @@
+[[affixes]]
+id = "affix_damage_percent_t1"
+name_key = "affix.damage_percent.t1.name"
+description_key = "affix.damage_percent.t1.description"
+gen = "prefix"
+category = "skill_numeric"
+stat = "damage_add_percent"
+value_range = [8, 15]
+group = "damage_scaling"
+spawn_tags = [
+  { tag = "active_skill_gem", weight = 1000 },
+  { tag = "support_gem", weight = 400 },
+]
+
+[[affixes]]
+id = "affix_skill_speed_t1"
+name_key = "affix.skill_speed.t1.name"
+description_key = "affix.skill_speed.t1.description"
+gen = "prefix"
+category = "skill_numeric"
+stat = "skill_speed_final_percent"
+value_range = [4, 8]
+group = "speed_scaling"
+spawn_tags = [
+  { tag = "active_skill_gem", weight = 600 },
+  { tag = "support_speed", weight = 1000 },
+]
+
+[[affixes]]
+id = "affix_projectile_count_t1"
+name_key = "affix.projectile_count.t1.name"
+description_key = "affix.projectile_count.t1.description"
+gen = "prefix"
+category = "skill_numeric"
+stat = "projectile_count_add"
+value_range = [1, 1]
+group = "projectile_scaling"
+apply_filter.tags_any = ["projectile"]
+spawn_tags = [
+  { tag = "projectile", weight = 700 },
+  { tag = "support_projectile", weight = 1000 },
+]
+
+[[affixes]]
+id = "affix_fire_tag_power_t1"
+name_key = "affix.fire_tag_power.t1.name"
+description_key = "affix.fire_tag_power.t1.description"
+gen = "prefix"
+category = "tag_enhancement"
+stat = "fire_damage_add_percent"
+value_range = [10, 18]
+group = "damage_scaling"
+apply_filter.tags_any = ["fire"]
+spawn_tags = [
+  { tag = "fire", weight = 1000 },
+  { tag = "support_damage", weight = 300 },
+]
+
+[[affixes]]
+id = "affix_physical_tag_power_t1"
+name_key = "affix.physical_tag_power.t1.name"
+description_key = "affix.physical_tag_power.t1.description"
+gen = "prefix"
+category = "tag_enhancement"
+stat = "physical_damage_add_percent"
+value_range = [10, 18]
+group = "damage_scaling"
+apply_filter.tags_any = ["physical"]
+spawn_tags = [
+  { tag = "physical", weight = 1000 },
+  { tag = "support_damage", weight = 300 },
+]
+
+[[affixes]]
+id = "affix_row_source_power_t1"
+name_key = "affix.row_source_power.t1.name"
+description_key = "affix.row_source_power.t1.description"
+gen = "suffix"
+category = "board_source"
+stat = "source_power_row"
+value_range = [10, 20]
+group = "relation_source"
+spawn_tags = [
+  { tag = "active_skill_gem", weight = 600 },
+  { tag = "support_relation", weight = 1000 },
+  { tag = "support_conduit", weight = 1500 },
+]
+
+[[affixes]]
+id = "affix_column_source_power_t1"
+name_key = "affix.column_source_power.t1.name"
+description_key = "affix.column_source_power.t1.description"
+gen = "suffix"
+category = "board_source"
+stat = "source_power_column"
+value_range = [10, 20]
+group = "relation_source"
+spawn_tags = [
+  { tag = "active_skill_gem", weight = 600 },
+  { tag = "support_relation", weight = 1000 },
+  { tag = "support_conduit", weight = 1500 },
+]
+
+[[affixes]]
+id = "affix_box_source_power_t1"
+name_key = "affix.box_source_power.t1.name"
+description_key = "affix.box_source_power.t1.description"
+gen = "suffix"
+category = "board_source"
+stat = "source_power_box"
+value_range = [10, 20]
+group = "relation_source"
+spawn_tags = [
+  { tag = "active_skill_gem", weight = 600 },
+  { tag = "support_relation", weight = 1000 },
+  { tag = "support_conduit", weight = 1500 },
+]
+
+[[affixes]]
+id = "affix_row_target_power_t1"
+name_key = "affix.row_target_power.t1.name"
+description_key = "affix.row_target_power.t1.description"
+gen = "suffix"
+category = "board_target"
+stat = "target_power_row"
+value_range = [10, 20]
+group = "relation_target"
+spawn_tags = [
+  { tag = "support_gem", weight = 1000 },
+  { tag = "support_relation", weight = 1200 },
+]
+
+[[affixes]]
+id = "affix_column_target_power_t1"
+name_key = "affix.column_target_power.t1.name"
+description_key = "affix.column_target_power.t1.description"
+gen = "suffix"
+category = "board_target"
+stat = "target_power_column"
+value_range = [10, 20]
+group = "relation_target"
+spawn_tags = [
+  { tag = "support_gem", weight = 1000 },
+  { tag = "support_relation", weight = 1200 },
+]
+
+[[affixes]]
+id = "affix_box_target_power_t1"
+name_key = "affix.box_target_power.t1.name"
+description_key = "affix.box_target_power.t1.description"
+gen = "suffix"
+category = "board_target"
+stat = "target_power_box"
+value_range = [10, 20]
+group = "relation_target"
+spawn_tags = [
+  { tag = "support_gem", weight = 1000 },
+  { tag = "support_relation", weight = 1200 },
+]
+
+[[affixes]]
+id = "affix_overload_cost_t1"
+name_key = "affix.overload_cost.t1.name"
+description_key = "affix.overload_cost.t1.description"
+gen = "suffix"
+category = "risk_reward_cost"
+stat = "added_cooldown_ms"
+value_range = [80, 160]
+group = "risk_reward"
+spawn_tags = [
+  { tag = "active_skill_gem", weight = 500 },
+  { tag = "support_damage", weight = 900 },
+]
+
+[[affixes]]
+id = "affix_basic_implicit_t1"
+name_key = "affix.basic_implicit.t1.name"
+description_key = "affix.basic_implicit.t1.description"
+gen = "implicit"
+category = "skill_numeric"
+stat = "damage_add_percent"
+value_range = [1, 3]
+group = "damage_scaling"
+spawn_tags = [
+  { tag = "gem", weight = 1 },
+]

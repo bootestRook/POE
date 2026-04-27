@@ -1,0 +1,4 @@
+[[affix_tiers]]
+id = "t1"
+name_key = "affix_tier.t1.name"
+order = 1

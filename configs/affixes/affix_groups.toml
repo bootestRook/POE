@@ -1,0 +1,29 @@
+[[affix_groups]]
+id = "damage_scaling"
+name_key = "affix_group.damage_scaling.name"
+max_per_gem = 1
+
+[[affix_groups]]
+id = "speed_scaling"
+name_key = "affix_group.speed_scaling.name"
+max_per_gem = 1
+
+[[affix_groups]]
+id = "projectile_scaling"
+name_key = "affix_group.projectile_scaling.name"
+max_per_gem = 1
+
+[[affix_groups]]
+id = "relation_source"
+name_key = "affix_group.relation_source.name"
+max_per_gem = 1
+
+[[affix_groups]]
+id = "relation_target"
+name_key = "affix_group.relation_target.name"
+max_per_gem = 1
+
+[[affix_groups]]
+id = "risk_reward"
+name_key = "affix_group.risk_reward.name"
+max_per_gem = 1

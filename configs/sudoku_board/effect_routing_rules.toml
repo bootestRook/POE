@@ -1,0 +1,29 @@
+[routing]
+model = "source_target_relation_power"
+dedupe_same_source_target_stat = true
+allow_recursive_propagation = false
+conduit_creates_secondary_chain = false
+
+[[routing_stats]]
+id = "source_power_row"
+name_key = "routing_stat.source_power_row.name"
+
+[[routing_stats]]
+id = "source_power_column"
+name_key = "routing_stat.source_power_column.name"
+
+[[routing_stats]]
+id = "source_power_box"
+name_key = "routing_stat.source_power_box.name"
+
+[[routing_stats]]
+id = "target_power_row"
+name_key = "routing_stat.target_power_row.name"
+
+[[routing_stats]]
+id = "target_power_column"
+name_key = "routing_stat.target_power_column.name"
+
+[[routing_stats]]
+id = "target_power_box"
+name_key = "routing_stat.target_power_box.name"

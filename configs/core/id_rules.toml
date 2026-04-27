@@ -1,0 +1,10 @@
+[id_rules]
+allowed_pattern = "^[a-z][a-z0-9_]*$"
+reserved_prefixes = ["sys_", "debug_"]
+
+[id_rules.scopes]
+stat = "player_stat_defs"
+gem_type = "gem_type_defs"
+tag = "gem_tag_defs"
+affix_group = "affix_groups"
+localization = "zh_cn"

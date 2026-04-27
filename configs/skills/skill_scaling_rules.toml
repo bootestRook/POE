@@ -1,0 +1,253 @@
+[scaling]
+layers = ["base", "additive", "final"]
+allowed_scaling_stats = [
+  "damage_add_percent",
+  "damage_final_percent",
+  "attack_speed_add_percent",
+  "cast_speed_add_percent",
+  "skill_speed_final_percent",
+  "cooldown_reduction_percent",
+  "added_cooldown_ms",
+  "area_add_percent",
+  "projectile_count_add",
+  "projectile_speed_add_percent",
+  "crit_chance_add_percent",
+  "crit_damage_add_percent",
+  "status_chance_add_percent",
+  "physical_damage_add_percent",
+  "fire_damage_add_percent",
+  "cold_damage_add_percent",
+  "lightning_damage_add_percent",
+  "source_power_row",
+  "source_power_column",
+  "source_power_box",
+  "target_power_row",
+  "target_power_column",
+  "target_power_box",
+]
+
+[stat_layers]
+damage_add_percent = "additive"
+physical_damage_add_percent = "additive"
+fire_damage_add_percent = "additive"
+cold_damage_add_percent = "additive"
+lightning_damage_add_percent = "additive"
+attack_speed_add_percent = "additive"
+cast_speed_add_percent = "additive"
+cooldown_reduction_percent = "additive"
+added_cooldown_ms = "additive"
+area_add_percent = "additive"
+projectile_count_add = "additive"
+projectile_speed_add_percent = "additive"
+crit_chance_add_percent = "additive"
+crit_damage_add_percent = "additive"
+status_chance_add_percent = "additive"
+damage_final_percent = "final"
+skill_speed_final_percent = "final"
+
+[[support_base_modifiers]]
+support_id = "support_fast_attack"
+stat = "attack_speed_add_percent"
+value = 15
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fast_cast"
+stat = "cast_speed_add_percent"
+value = 15
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_skill_haste"
+stat = "skill_speed_final_percent"
+value = 8
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_cooldown_focus"
+stat = "cooldown_reduction_percent"
+value = 12
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_cooldown_focus"
+stat = "damage_final_percent"
+value = -5
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_heavy_impact"
+stat = "damage_final_percent"
+value = 18
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_heavy_impact"
+stat = "added_cooldown_ms"
+value = 120
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_wide_effect"
+stat = "area_add_percent"
+value = 20
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_wide_effect"
+stat = "added_cooldown_ms"
+value = 80
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_stable_output"
+stat = "damage_final_percent"
+value = 12
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_stable_output"
+stat = "crit_chance_add_percent"
+value = -100
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_precision"
+stat = "crit_chance_add_percent"
+value = 10
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_precision"
+stat = "projectile_speed_add_percent"
+value = -8
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_physical_mastery"
+stat = "physical_damage_add_percent"
+value = 18
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fire_mastery"
+stat = "fire_damage_add_percent"
+value = 18
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_cold_mastery"
+stat = "cold_damage_add_percent"
+value = 18
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lightning_mastery"
+stat = "lightning_damage_add_percent"
+value = 18
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_extra_projectile"
+stat = "projectile_count_add"
+value = 1
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_extra_projectile"
+stat = "damage_final_percent"
+value = -10
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_shotgun"
+stat = "projectile_count_add"
+value = 2
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_shotgun"
+stat = "projectile_speed_add_percent"
+value = -20
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_projectile_speed"
+stat = "projectile_speed_add_percent"
+value = 25
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_area_magnify"
+stat = "area_add_percent"
+value = 25
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_area_magnify"
+stat = "skill_speed_final_percent"
+value = -10
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_overcharge"
+stat = "damage_final_percent"
+value = 25
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_overcharge"
+stat = "added_cooldown_ms"
+value = 160
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_overkill"
+stat = "damage_add_percent"
+value = 35
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_overkill"
+stat = "skill_speed_final_percent"
+value = -20
+layer = "final"
+
+[[support_base_modifiers]]
+support_id = "support_critical_burst"
+stat = "crit_damage_add_percent"
+value = 40
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_critical_burst"
+stat = "crit_chance_add_percent"
+value = -5
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_elemental_level"
+stat = "damage_add_percent"
+value = 12
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_attack_spell_level"
+stat = "damage_add_percent"
+value = 10
+layer = "additive"
+
+[[conduit_amplifiers]]
+support_id = "support_row_conduit"
+relation = "same_row"
+multiplier = 1.25
+
+[[conduit_amplifiers]]
+support_id = "support_column_conduit"
+relation = "same_column"
+multiplier = 1.25
+
+[[conduit_amplifiers]]
+support_id = "support_box_conduit"
+relation = "same_box"
+multiplier = 1.25

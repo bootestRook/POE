@@ -1,0 +1,19 @@
+[gem_instance_schema]
+required_fields = [
+  "instance_id",
+  "base_gem_id",
+  "gem_type",
+  "rarity",
+  "level",
+  "prefix_affixes",
+  "suffix_affixes",
+  "implicit_affixes",
+  "locked",
+  "board_position",
+]
+rarities = ["normal", "magic", "rare"]
+
+[rarity_affix_counts]
+normal = 0
+magic = 1
+rare = 2

@@ -1,0 +1,7 @@
+[random]
+default_seed = 1
+seed_strategy = "explicit_or_generated"
+
+[random.validation]
+require_seed_source = true
+allow_runtime_override = true

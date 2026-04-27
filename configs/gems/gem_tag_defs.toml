@@ -1,0 +1,251 @@
+[[tags]]
+id = "gem"
+name_key = "tag.gem.name"
+display_name_key = "tag.gem.name"
+category = "base"
+
+[[tags]]
+id = "active_skill_gem"
+name_key = "tag.active_skill_gem.name"
+display_name_key = "tag.active_skill_gem.name"
+category = "base"
+
+[[tags]]
+id = "support_gem"
+name_key = "tag.support_gem.name"
+display_name_key = "tag.support_gem.name"
+category = "base"
+
+[[tags]]
+id = "loot_gem"
+name_key = "tag.loot_gem.name"
+display_name_key = "tag.loot_gem.name"
+category = "base"
+
+[[tags]]
+id = "gem_type_1"
+name_key = "tag.gem_type_1.name"
+display_name_key = "tag.gem_type_1.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_2"
+name_key = "tag.gem_type_2.name"
+display_name_key = "tag.gem_type_2.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_3"
+name_key = "tag.gem_type_3.name"
+display_name_key = "tag.gem_type_3.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_4"
+name_key = "tag.gem_type_4.name"
+display_name_key = "tag.gem_type_4.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_5"
+name_key = "tag.gem_type_5.name"
+display_name_key = "tag.gem_type_5.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_6"
+name_key = "tag.gem_type_6.name"
+display_name_key = "tag.gem_type_6.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_7"
+name_key = "tag.gem_type_7.name"
+display_name_key = "tag.gem_type_7.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_8"
+name_key = "tag.gem_type_8.name"
+display_name_key = "tag.gem_type_8.name"
+category = "gem_type"
+
+[[tags]]
+id = "gem_type_9"
+name_key = "tag.gem_type_9.name"
+display_name_key = "tag.gem_type_9.name"
+category = "gem_type"
+
+[[tags]]
+id = "attack"
+name_key = "tag.attack.name"
+display_name_key = "tag.attack.name"
+category = "source"
+
+[[tags]]
+id = "spell"
+name_key = "tag.spell.name"
+display_name_key = "tag.spell.name"
+category = "source"
+
+[[tags]]
+id = "melee"
+name_key = "tag.melee.name"
+display_name_key = "tag.melee.name"
+category = "source"
+
+[[tags]]
+id = "ranged"
+name_key = "tag.ranged.name"
+display_name_key = "tag.ranged.name"
+category = "source"
+
+[[tags]]
+id = "bow"
+name_key = "tag.bow.name"
+display_name_key = "tag.bow.name"
+category = "source"
+
+[[tags]]
+id = "summon"
+name_key = "tag.summon.name"
+display_name_key = "tag.summon.name"
+category = "source"
+
+[[tags]]
+id = "physical"
+name_key = "tag.physical.name"
+display_name_key = "tag.physical.name"
+category = "damage_type"
+
+[[tags]]
+id = "fire"
+name_key = "tag.fire.name"
+display_name_key = "tag.fire.name"
+category = "damage_type"
+
+[[tags]]
+id = "cold"
+name_key = "tag.cold.name"
+display_name_key = "tag.cold.name"
+category = "damage_type"
+
+[[tags]]
+id = "lightning"
+name_key = "tag.lightning.name"
+display_name_key = "tag.lightning.name"
+category = "damage_type"
+
+[[tags]]
+id = "projectile"
+name_key = "tag.projectile.name"
+display_name_key = "tag.projectile.name"
+category = "behavior"
+
+[[tags]]
+id = "area"
+name_key = "tag.area.name"
+display_name_key = "tag.area.name"
+category = "behavior"
+
+[[tags]]
+id = "chain"
+name_key = "tag.chain.name"
+display_name_key = "tag.chain.name"
+category = "behavior"
+
+[[tags]]
+id = "pierce"
+name_key = "tag.pierce.name"
+display_name_key = "tag.pierce.name"
+category = "behavior"
+
+[[tags]]
+id = "orbit"
+name_key = "tag.orbit.name"
+display_name_key = "tag.orbit.name"
+category = "behavior"
+
+[[tags]]
+id = "nova"
+name_key = "tag.nova.name"
+display_name_key = "tag.nova.name"
+category = "behavior"
+
+[[tags]]
+id = "dot"
+name_key = "tag.dot.name"
+display_name_key = "tag.dot.name"
+category = "behavior"
+
+[[tags]]
+id = "aura"
+name_key = "tag.aura.name"
+display_name_key = "tag.aura.name"
+category = "behavior"
+
+[[tags]]
+id = "trap_or_mine"
+name_key = "tag.trap_or_mine.name"
+display_name_key = "tag.trap_or_mine.name"
+category = "behavior"
+
+[[tags]]
+id = "support_damage"
+name_key = "tag.support_damage.name"
+display_name_key = "tag.support_damage.name"
+category = "support"
+
+[[tags]]
+id = "support_speed"
+name_key = "tag.support_speed.name"
+display_name_key = "tag.support_speed.name"
+category = "support"
+
+[[tags]]
+id = "support_cooldown"
+name_key = "tag.support_cooldown.name"
+display_name_key = "tag.support_cooldown.name"
+category = "support"
+
+[[tags]]
+id = "support_area"
+name_key = "tag.support_area.name"
+display_name_key = "tag.support_area.name"
+category = "support"
+
+[[tags]]
+id = "support_projectile"
+name_key = "tag.support_projectile.name"
+display_name_key = "tag.support_projectile.name"
+category = "support"
+
+[[tags]]
+id = "support_crit"
+name_key = "tag.support_crit.name"
+display_name_key = "tag.support_crit.name"
+category = "support"
+
+[[tags]]
+id = "support_status"
+name_key = "tag.support_status.name"
+display_name_key = "tag.support_status.name"
+category = "support"
+
+[[tags]]
+id = "support_level"
+name_key = "tag.support_level.name"
+display_name_key = "tag.support_level.name"
+category = "support"
+
+[[tags]]
+id = "support_relation"
+name_key = "tag.support_relation.name"
+display_name_key = "tag.support_relation.name"
+category = "support"
+
+[[tags]]
+id = "support_conduit"
+name_key = "tag.support_conduit.name"
+display_name_key = "tag.support_conduit.name"
+category = "support"

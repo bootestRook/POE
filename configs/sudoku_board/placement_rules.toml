@@ -1,0 +1,14 @@
+[placement]
+allowed_gem_types = [
+  "gem_type_1",
+  "gem_type_2",
+  "gem_type_3",
+  "gem_type_4",
+  "gem_type_5",
+  "gem_type_6",
+  "gem_type_7",
+  "gem_type_8",
+  "gem_type_9",
+]
+require_active_skill_to_enter_combat = true
+allow_empty_board_to_enter_combat = false

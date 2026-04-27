@@ -1,0 +1,6 @@
+[spawn_rules]
+require_spawn_tags = true
+require_affix_group = true
+random_generations = ["prefix", "suffix"]
+implicit_generation = "implicit"
+error_candidate_shortage_key = "affix.error.candidate_shortage"

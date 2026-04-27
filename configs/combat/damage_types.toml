@@ -1,0 +1,19 @@
+[[damage_types]]
+id = "physical"
+name_key = "damage_type.physical.name"
+display_name_key = "damage_type.physical.name"
+
+[[damage_types]]
+id = "fire"
+name_key = "damage_type.fire.name"
+display_name_key = "damage_type.fire.name"
+
+[[damage_types]]
+id = "cold"
+name_key = "damage_type.cold.name"
+display_name_key = "damage_type.cold.name"
+
+[[damage_types]]
+id = "lightning"
+name_key = "damage_type.lightning.name"
+display_name_key = "damage_type.lightning.name"
