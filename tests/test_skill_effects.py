@@ -2,18 +2,25 @@ from __future__ import annotations
 
 import sys
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from liufang.config import (
+    SkillScalingRules,
+    SupportBaseModifier,
+    load_behavior_templates,
     load_affix_definitions,
     load_board_rules,
     load_gem_definitions,
     load_relation_coefficients,
     load_skill_scaling_rules,
+    load_skill_packages,
+    load_skill_schema,
     load_skill_templates,
+    validate_skill_package_data,
 )
 from liufang.gem_board import SudokuGemBoard
 from liufang.inventory import AffixRoll, GemInventory
@@ -38,6 +45,49 @@ class SkillEffectTest(unittest.TestCase):
             },
         )
 
+    def test_active_fire_bolt_loads_from_skill_package(self) -> None:
+        packages = load_skill_packages(self.config_root)
+        templates = load_skill_templates(self.config_root)
+
+        self.assertEqual(set(packages), {"active_fire_bolt"})
+        self.assertEqual(packages["active_fire_bolt"]["behavior"]["template"], "projectile")
+        self.assertEqual(templates["skill_fire_bolt"].skill_package_id, "active_fire_bolt")
+        self.assertEqual(templates["skill_fire_bolt"].behavior_template, "projectile")
+        self.assertEqual(templates["skill_ice_shards"].skill_package_id, "")
+
+    def test_skill_package_schema_rejects_missing_required_field(self) -> None:
+        package = deepcopy(load_skill_packages(self.config_root)["active_fire_bolt"])
+        del package["hit"]["base_damage"]
+
+        with self.assertRaisesRegex(ValueError, "hit.base_damage"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+    def test_skill_package_schema_rejects_invalid_behavior_template(self) -> None:
+        package = deepcopy(load_skill_packages(self.config_root)["active_fire_bolt"])
+        package["behavior"]["template"] = "scripted_projectile"
+
+        with self.assertRaisesRegex(ValueError, "behavior.template"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+    def test_skill_package_schema_rejects_invalid_behavior_params(self) -> None:
+        package = deepcopy(load_skill_packages(self.config_root)["active_fire_bolt"])
+        package["behavior"]["params"]["script"] = "deal_damage()"
+
+        with self.assertRaisesRegex(ValueError, "script"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
     def test_invalid_or_empty_board_does_not_output_combat_skill(self) -> None:
         with self.assertRaises(SkillEffectError) as empty_error:
             self.calculator.calculate_all()
@@ -52,27 +102,9 @@ class SkillEffectTest(unittest.TestCase):
             self.calculator.calculate_all()
         self.assertEqual(invalid_error.exception.error_key, "skill_effect.error.invalid_board")
 
-    def test_active_self_affix_support_affix_source_target_power_and_conduit_are_applied(self) -> None:
-        active = self.inventory.add_instance(
-            "active",
-            "active_fire_bolt",
-            prefix_affixes=(
-                AffixRoll("affix_damage_percent_t1", "damage_add_percent", 10, "prefix", "damage_scaling"),
-            ),
-            suffix_affixes=(
-                AffixRoll("affix_row_target_power_t1", "target_power_row", 20, "suffix", "relation_target"),
-            ),
-        )
-        support = self.inventory.add_instance(
-            "support",
-            "support_fire_mastery",
-            prefix_affixes=(
-                AffixRoll("affix_damage_percent_t1", "damage_add_percent", 5, "prefix", "damage_scaling"),
-            ),
-            suffix_affixes=(
-                AffixRoll("affix_row_source_power_t1", "source_power_row", 10, "suffix", "relation_source"),
-            ),
-        )
+    def test_support_base_and_conduit_apply_without_random_affixes(self) -> None:
+        active = self.inventory.add_instance("active", "active_fire_bolt")
+        support = self.inventory.add_instance("support", "support_fire_mastery")
         self.inventory.add_instance("conduit", "support_row_conduit")
         self.board.mount_gem(active.instance_id, 0, 0)
         self.board.mount_gem(support.instance_id, 0, 3)
@@ -81,8 +113,19 @@ class SkillEffectTest(unittest.TestCase):
         final_skill = self.calculator.calculate_all()[0]
         self.assertEqual(final_skill.active_gem_instance_id, "active")
         self.assertEqual(final_skill.skill_template_id, "skill_fire_bolt")
+        self.assertEqual(final_skill.skill_package_id, "active_fire_bolt")
+        self.assertEqual(final_skill.skill_package_version, "1.0.0")
+        self.assertEqual(final_skill.behavior_template, "projectile")
+        self.assertEqual(final_skill.cast["target_selector"], "nearest_enemy")
+        self.assertEqual(final_skill.hit["base_damage"], 12)
+        package_count = load_skill_packages(self.config_root)["active_fire_bolt"]["behavior"]["params"]["projectile_count"]
+        self.assertEqual(final_skill.projectile_count, package_count)
+        self.assertEqual(final_skill.runtime_params["max_targets"], 1)
+        self.assertEqual(final_skill.presentation_keys["floating_text"], "skill_event.fire_bolt.floating_text")
+        self.assertEqual(final_skill.source_context["gem_kind"], "active_skill")
+        self.assertEqual(final_skill.source_context["sudoku_digit"], 1)
         self.assertEqual(final_skill.base_damage, 12)
-        self.assertAlmostEqual(final_skill.final_damage, 17.754, places=3)
+        self.assertAlmostEqual(final_skill.final_damage, 14.7, places=3)
         self.assertTrue(
             any(modifier.reason_key == "modifier.conduit_amplifier" for modifier in final_skill.applied_modifiers)
         )
@@ -95,13 +138,7 @@ class SkillEffectTest(unittest.TestCase):
                 for modifier in final_skill.applied_modifiers
             )
         )
-        self.assertTrue(
-            any(
-                modifier.stat == "target_power_row"
-                and modifier.reason_key == "modifier.ignored.board_power_trace"
-                for modifier in final_skill.applied_modifiers
-            )
-        )
+        self.assertFalse(any("affix" in modifier.reason_key for modifier in final_skill.applied_modifiers))
 
     def test_apply_filter_blocks_non_matching_support(self) -> None:
         self.inventory.add_instance("active", "active_fire_bolt")
@@ -137,24 +174,26 @@ class SkillEffectTest(unittest.TestCase):
 
     def test_same_source_target_stat_is_settled_once(self) -> None:
         self.inventory.add_instance("active", "active_fire_bolt")
-        self.inventory.add_instance(
-            "support",
-            "support_overcharge",
-            suffix_affixes=(
-                AffixRoll("affix_overload_cost_t1", "added_cooldown_ms", 100, "suffix", "risk_reward"),
-            ),
-        )
+        self.inventory.add_instance("support", "support_overcharge")
         self.board.mount_gem("active", 0, 0)
         self.board.mount_gem("support", 0, 3)
 
+        duplicate_rules = SkillScalingRules(
+            stat_layers=self.calculator.scaling_rules.stat_layers,
+            support_base_modifiers=self.calculator.scaling_rules.support_base_modifiers
+            + (SupportBaseModifier("support_overcharge", "damage_final_percent", 5, "final"),),
+            conduit_amplifiers=self.calculator.scaling_rules.conduit_amplifiers,
+        )
+        self.calculator.scaling_rules = duplicate_rules
+
         final_skill = self.calculator.calculate_all()[0]
-        added_cooldown_modifiers = [
-            modifier for modifier in final_skill.applied_modifiers if modifier.stat == "added_cooldown_ms"
+        damage_final_modifiers = [
+            modifier for modifier in final_skill.applied_modifiers if modifier.stat == "damage_final_percent"
         ]
-        self.assertEqual(len(added_cooldown_modifiers), 2)
-        self.assertTrue(added_cooldown_modifiers[0].applied)
-        self.assertFalse(added_cooldown_modifiers[1].applied)
-        self.assertEqual(added_cooldown_modifiers[1].reason_key, "modifier.ignored.duplicate_source_target_stat")
+        self.assertEqual(len(damage_final_modifiers), 2)
+        self.assertTrue(damage_final_modifiers[0].applied)
+        self.assertFalse(damage_final_modifiers[1].applied)
+        self.assertEqual(damage_final_modifiers[1].reason_key, "modifier.ignored.duplicate_source_target_stat")
 
     def test_final_skill_output_contains_core_fields(self) -> None:
         self.inventory.add_instance("active", "active_ice_shards")
@@ -168,6 +207,135 @@ class SkillEffectTest(unittest.TestCase):
         self.assertGreater(final_skill.final_cooldown_ms, 0)
         self.assertGreater(final_skill.area_multiplier, 0)
         self.assertIsInstance(final_skill.applied_modifiers, tuple)
+
+    def test_passive_to_active_and_support_to_passive_are_applied_in_order(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.inventory.add_instance("passive", "passive_fire_focus")
+        self.inventory.add_instance("support", "support_fire_mastery")
+        self.board.mount_gem("active", 0, 0)
+        self.board.mount_gem("passive", 1, 0)
+        self.board.mount_gem("support", 1, 3)
+
+        final_skill = self.calculator.calculate_all()[0]
+        support_to_passive = [
+            modifier for modifier in final_skill.applied_modifiers if modifier.reason_key == "modifier.support_to_passive"
+        ]
+        passive_to_active = [
+            modifier for modifier in final_skill.applied_modifiers if modifier.reason_key == "modifier.passive_base"
+        ]
+
+        self.assertTrue(support_to_passive)
+        self.assertTrue(passive_to_active)
+        self.assertLess(
+            final_skill.applied_modifiers.index(support_to_passive[0]),
+            final_skill.applied_modifiers.index(passive_to_active[0]),
+        )
+        self.assertEqual(support_to_passive[0].target_instance_id, "passive")
+        self.assertEqual(passive_to_active[0].source_instance_id, "passive")
+        self.assertEqual(passive_to_active[0].target_instance_id, "active")
+        self.assertGreater(final_skill.final_damage, 12)
+
+    def test_support_to_support_and_passive_recursive_routes_are_forbidden(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.inventory.add_instance("passive_a", "passive_fire_focus")
+        self.inventory.add_instance("passive_b", "passive_vitality")
+        self.inventory.add_instance("support_a", "support_fire_mastery")
+        self.inventory.add_instance("support_b", "support_fast_cast")
+        self.board.mount_gem("active", 0, 0)
+        self.board.mount_gem("passive_a", 1, 0)
+        self.board.mount_gem("passive_b", 1, 1)
+        self.board.mount_gem("support_a", 1, 3)
+        self.board.mount_gem("support_b", 1, 4)
+
+        final_skill = self.calculator.calculate_all()[0]
+        routes = {(modifier.source_instance_id, modifier.target_instance_id) for modifier in final_skill.applied_modifiers}
+
+        self.assertNotIn(("support_a", "support_b"), routes)
+        self.assertNotIn(("support_b", "support_a"), routes)
+        self.assertNotIn(("passive_b", "passive_a"), routes)
+        self.assertNotIn(("passive_a", "passive_b"), routes)
+
+    def test_passive_self_stats_update_player_attributes(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.inventory.add_instance("life", "passive_vitality")
+        self.inventory.add_instance("speed", "passive_swift_gathering")
+        self.board.mount_gem("active", 0, 0)
+        self.board.mount_gem("life", 1, 0)
+        self.board.mount_gem("speed", 2, 0)
+
+        class PlayerStub:
+            current_life = 100
+            max_life = 100
+            move_speed = 1.0
+
+        player = PlayerStub()
+        modifiers = self.calculator.apply_player_stat_contributions(player)
+
+        self.assertEqual({modifier.stat for modifier in modifiers}, {"max_life", "move_speed"})
+        self.assertEqual(player.max_life, 125)
+        self.assertEqual(player.current_life, 125)
+        self.assertAlmostEqual(player.move_speed, 1.1)
+
+    def test_each_active_skill_has_five_visible_shape_supports(self) -> None:
+        active_skill_tags = {
+            "active_fire_bolt": "skill_fire_bolt",
+            "active_ice_shards": "skill_ice_shards",
+            "active_lightning_chain": "skill_lightning_chain",
+            "active_frost_nova": "skill_frost_nova",
+            "active_puncture": "skill_puncture",
+            "active_penetrating_shot": "skill_penetrating_shot",
+            "active_lava_orb": "skill_lava_orb",
+            "active_fungal_petards": "skill_fungal_petards",
+        }
+
+        for active_id, skill_tag in active_skill_tags.items():
+            with self.subTest(active_id=active_id):
+                inventory = GemInventory(self.definitions)
+                board = SudokuGemBoard(load_board_rules(self.config_root), inventory)
+                calculator = SkillEffectCalculator(
+                    board=board,
+                    definitions=self.definitions,
+                    skill_templates=load_skill_templates(self.config_root),
+                    relation_coefficients=load_relation_coefficients(self.config_root),
+                    scaling_rules=load_skill_scaling_rules(self.config_root),
+                    affix_definitions={},
+                )
+                shape_supports = [
+                    definition
+                    for definition in self.definitions.values()
+                    if definition.category == "skill_shape_modifier"
+                    and skill_tag in definition.apply_filter_tags_all
+                ]
+
+                self.assertEqual(len(shape_supports), 5)
+                inventory.add_instance("active", active_id)
+                board.mount_gem("active", 0, 0)
+                for index, support_definition in enumerate(
+                    sorted(shape_supports, key=lambda definition: definition.sudoku_digit)
+                ):
+                    instance_id = f"shape_{index}"
+                    inventory.add_instance(instance_id, support_definition.base_gem_id)
+                    board.mount_gem(instance_id, 0, index + 1)
+
+                final_skill = calculator.calculate_all()[0]
+
+                self.assertEqual(
+                    set(final_skill.shape_effects),
+                    {definition.shape_effect for definition in shape_supports},
+                )
+
+    def test_only_active_skill_gems_generate_final_skill_instances(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.inventory.add_instance("passive", "passive_fire_focus")
+        self.inventory.add_instance("support", "support_fire_mastery")
+        self.board.mount_gem("active", 0, 0)
+        self.board.mount_gem("passive", 1, 0)
+        self.board.mount_gem("support", 1, 3)
+
+        final_skills = self.calculator.calculate_all()
+
+        self.assertEqual(len(final_skills), 1)
+        self.assertEqual(final_skills[0].active_gem_instance_id, "active")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from math import dist
@@ -69,6 +69,9 @@ class PresentationService:
             "description_text": self.localizer.text(definition.description_key),
             "category_text": self._gem_category_text(definition),
             "gem_type": self._gem_type_view(instance.gem_type),
+            "gem_kind": instance.gem_kind,
+            "gem_kind_text": self._gem_kind_text(instance.gem_kind),
+            "sudoku_digit": instance.sudoku_digit,
             "rarity_text": self.localizer.text(f"rarity.{instance.rarity}.name"),
             "level": instance.level,
             "locked": instance.locked,
@@ -78,6 +81,9 @@ class PresentationService:
             "can_affect": self._apply_filter_view(definition),
             "current_effective_targets": self._current_effective_targets(instance, final_skills),
             "board_relations": self._relations_for_instance(instance, board) if board is not None else [],
+            "visual_effect": definition.visual_effect,
+            "shape_effect": definition.shape_effect,
+            "shape_effect_text": self._shape_effect_text(definition.shape_effect),
         }
         detail["tooltip_view"] = self._gem_tooltip_view(instance, detail, final_skills)
         return detail
@@ -117,7 +123,23 @@ class PresentationService:
         return {
             "active_gem_instance_id": skill.active_gem_instance_id,
             "name_text": self.localizer.text(definition.name_key),
+            "skill_template_id": skill.skill_template_id,
+            "skill_package_id": skill.skill_package_id,
+            "skill_package_version": skill.skill_package_version,
             "template_text": self.localizer.text(template.name_key),
+            "damage_type": skill.damage_type,
+            "behavior_type": skill.behavior_type,
+            "behavior_template": skill.behavior_template,
+            "visual_effect": skill.visual_effect,
+            "cast": dict(skill.cast or {}),
+            "hit": dict(skill.hit or {}),
+            "runtime_params": dict(skill.runtime_params or {}),
+            "presentation_keys": dict(skill.presentation_keys or {}),
+            "source_context": dict(skill.source_context or {}),
+            "shape_effects": [
+                {"id": effect, "text": self._shape_effect_text(effect)}
+                for effect in skill.shape_effects
+            ],
             "labels": {
                 "base_damage": self.localizer.text("ui.skill.base_damage"),
                 "final_damage": self.localizer.text("ui.skill.final_damage"),
@@ -155,6 +177,12 @@ class PresentationService:
             "alive_monsters": {
                 "label_text": self.localizer.text("ui.hud.alive_monsters"),
                 "value": sum(1 for monster in session.monsters if monster.is_alive),
+            },
+            "player_stats": {
+                "move_speed": {
+                    "label_text": self.localizer.text("ui.hud.move_speed"),
+                    "value": session.player.move_speed,
+                },
             },
             "active_skills": [
                 {
@@ -196,9 +224,16 @@ class PresentationService:
         }
 
     def _gem_category_text(self, definition: GemDefinition) -> str:
-        if definition.is_active_skill:
+        return self._gem_kind_text(definition.gem_kind)
+
+    def _gem_kind_text(self, gem_kind: str) -> str:
+        if gem_kind == "active_skill":
             return self.localizer.text("tag.active_skill_gem.name")
-        return self.localizer.text("tag.support_gem.name")
+        if gem_kind == "passive_skill":
+            return self.localizer.text("tag.passive_skill_gem.name")
+        if gem_kind == "support":
+            return self.localizer.text("tag.support_gem.name")
+        return gem_kind
 
     def _tag_view(self, tag: str) -> dict[str, str]:
         return {"id": tag, "text": self.localizer.text(f"tag.{tag}.name")}
@@ -215,12 +250,30 @@ class PresentationService:
                 "scaling_stats": [self._stat_view(stat) for stat in template.scaling_stats],
             }
 
+        if definition.is_passive_skill:
+            return {
+                "title_text": self.localizer.text("ui.gem.passive_effect"),
+                "modifiers": [
+                    {
+                        "stat": self._stat_view(effect.stat),
+                        "value": effect.value,
+                        "layer_text": self.localizer.text(f"ui.modifier.layer.{effect.layer}"),
+                        "target_text": self.localizer.text(
+                            "ui.gem.self_stat_target"
+                            if effect.target == "self_stat"
+                            else "ui.gem.active_target"
+                        ),
+                    }
+                    for effect in definition.passive_effects
+                ],
+            }
+
         modifiers = [
             modifier
             for modifier in self.scaling_rules.support_base_modifiers
             if modifier.support_id == definition.base_gem_id
         ]
-        return {
+        view = {
             "title_text": self.localizer.text("ui.gem.support_effect"),
             "modifiers": [
                 {
@@ -231,6 +284,10 @@ class PresentationService:
                 for modifier in modifiers
             ],
         }
+        if definition.shape_effect:
+            view["shape_effect"] = definition.shape_effect
+            view["shape_effect_text"] = self._shape_effect_text(definition.shape_effect)
+        return view
 
     def _affix_roll_view(self, roll: AffixRoll) -> dict[str, Any]:
         definition = self.affix_definitions.get(roll.affix_id)
@@ -248,11 +305,27 @@ class PresentationService:
         prefix = "routing_stat" if stat.startswith(("source_power_", "target_power_")) else "stat"
         return {"id": stat, "text": self.localizer.text(f"{prefix}.{stat}.name")}
 
+    def _shape_effect_text(self, shape_effect: str) -> str:
+        if not shape_effect:
+            return ""
+        return self.localizer.text(f"shape_effect.{shape_effect}.name")
+
     def _apply_filter_view(self, definition: GemDefinition) -> dict[str, Any]:
         if definition.is_active_skill:
             return {"summary_text": self.localizer.text("ui.gem.affects_self"), "tags_any": [], "tags_all": [], "tags_none": []}
+        if definition.is_passive_skill:
+            return {
+                "summary_text": self.localizer.text("ui.gem.affects_active_targets"),
+                "target_kinds": [self._gem_kind_text(kind) for kind in sorted(definition.apply_filter_target_kinds)],
+                "tags_any": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_any)],
+                "tags_all": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_all)],
+                "tags_none": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_none)],
+            }
         return {
-            "summary_text": self.localizer.text("ui.gem.affects_filtered_targets"),
+            "summary_text": self.localizer.text("ui.gem.affects_active_or_passive")
+            if "passive_skill" in definition.apply_filter_target_kinds
+            else self.localizer.text("ui.gem.affects_filtered_targets"),
+            "target_kinds": [self._gem_kind_text(kind) for kind in sorted(definition.apply_filter_target_kinds)],
             "tags_any": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_any)],
             "tags_all": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_all)],
             "tags_none": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_none)],
@@ -270,6 +343,8 @@ class PresentationService:
         )
         if instance.is_active_skill:
             return self._active_skill_tooltip_view(instance, detail, final_skill)
+        if instance.is_passive_skill:
+            return self._passive_skill_tooltip_view(instance, detail)
         if "support_gem" in instance.tags:
             return self._support_gem_tooltip_view(instance, detail)
 
@@ -362,6 +437,46 @@ class PresentationService:
             },
         }
 
+    def _passive_skill_tooltip_view(
+        self,
+        instance: GemInstance,
+        detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        tags = self._active_tooltip_tags(detail["tags"])
+        sections: dict[str, Any] = {
+            "description": {
+                "title_text": self.localizer.text("ui.tooltip.section.description"),
+                "lines": [detail["description_text"]],
+            },
+            "stats": {
+                "title_text": self.localizer.text("ui.tooltip.section.stats"),
+                "lines": self._tooltip_stat_lines(instance, detail, None),
+            },
+        }
+        bonus_lines = [
+            f"{modifier['target_text']}：{modifier['stat']['text']} {self._format_modifier_value(modifier['stat']['id'], modifier['value'])}"
+            for modifier in detail["base_effect"].get("modifiers", [])
+        ]
+        shape_effect_text = detail["base_effect"].get("shape_effect_text", "")
+        if shape_effect_text:
+            bonus_lines.append(f"{self.localizer.text('ui.tooltip.shape_effect')}：{shape_effect_text}")
+        bonus_lines.append(self.localizer.text("ui.tooltip.support.sudoku_rule"))
+        sections["bonuses"] = {
+            "title_text": self.localizer.text("ui.tooltip.section.current_bonus"),
+            "lines": bonus_lines,
+        }
+        return {
+            "variant": "passive",
+            "icon_text": detail["name_text"][:1],
+            "icon_color_key": detail["gem_type"]["color_key"],
+            "icon_sprite": "",
+            "name_text": detail["name_text"],
+            "subtitle_text": self._active_tooltip_subtitle_text(detail, tags),
+            "type_identity_text": "",
+            "tags": tags,
+            "sections": sections,
+        }
+
     def _active_skill_tooltip_view(
         self,
         instance: GemInstance,
@@ -451,6 +566,9 @@ class PresentationService:
 
     def _support_target_segments(self, can_affect: dict[str, Any]) -> list[dict[str, str]]:
         tags = can_affect["tags_any"] or can_affect["tags_all"]
+        target_kinds = can_affect.get("target_kinds", [])
+        if not tags and target_kinds:
+            return [{"text": "或".join(target_kinds), "tone": "muted"}]
         if not tags:
             return [{"text": self.localizer.text("tag.gem.name"), "tone": "muted"}]
         segments: list[dict[str, str]] = []
@@ -465,7 +583,7 @@ class PresentationService:
 
     def _tag_target_segments(self, tag: dict[str, str]) -> list[dict[str, str]]:
         tag_id = tag["id"]
-        if tag_id == "active_skill_gem":
+        if tag_id in {"active_skill_gem", "passive_skill_gem"}:
             return [{"text": self.localizer.text("tag.gem.name"), "tone": "muted"}]
         if tag_id.startswith("gem_type_"):
             number = int(tag_id.rsplit("_", 1)[-1])
@@ -535,11 +653,11 @@ class PresentationService:
         return segments
 
     def _active_tooltip_tags(self, tags: list[dict[str, str]]) -> list[dict[str, str]]:
-        hidden = {"active_skill_gem", "loot_gem"}
+        hidden = {"active_skill_gem", "passive_skill_gem", "loot_gem"}
         visible = [
             tag
             for tag in tags
-            if tag["id"] not in hidden and not tag["id"].startswith("gem_type_")
+            if tag["id"] not in hidden and not tag["id"].startswith(("gem_type_", "skill_"))
         ]
         order = {
             tag_id: index
@@ -774,9 +892,13 @@ class PresentationService:
             return lines
 
         for modifier in base_effect.get("modifiers", []):
+            target_text = modifier.get("target_text")
+            label = f"{modifier['stat']['text']}（{modifier['layer_text']}）"
+            if target_text:
+                label = f"{target_text}：{label}"
             lines.append(
                 {
-                    "label_text": f"{modifier['stat']['text']}（{modifier['layer_text']}）",
+                    "label_text": label,
                     "value_text": self._format_number(modifier["value"], signed=True),
                 }
             )
@@ -835,7 +957,8 @@ class PresentationService:
             for modifier in skill.applied_modifiers:
                 if modifier.source_instance_id != instance.instance_id or not modifier.applied:
                     continue
-                target_definition = self.definitions[skill.base_gem_id]
+                target_base_gem_id = modifier.target_base_gem_id or skill.base_gem_id
+                target_definition = self.definitions[target_base_gem_id]
                 targets[modifier.target_instance_id] = {
                     "instance_id": modifier.target_instance_id,
                     "name_text": self.localizer.text(target_definition.name_key),
@@ -897,6 +1020,9 @@ class PresentationService:
             "name_text": self.localizer.text(definition.name_key),
             "category_text": self._gem_category_text(definition),
             "gem_type": self._gem_type_view(instance.gem_type),
+            "gem_kind": instance.gem_kind,
+            "gem_kind_text": self._gem_kind_text(instance.gem_kind),
+            "sudoku_digit": instance.sudoku_digit,
             "rarity_text": self.localizer.text(f"rarity.{instance.rarity}.name"),
             "position": self._position_view(instance.board_position),
         }
@@ -939,20 +1065,28 @@ class PresentationService:
         }
 
     def _modifier_view(self, modifier: AppliedModifier) -> dict[str, Any]:
+        target_base_gem_id = modifier.target_base_gem_id or ""
         return {
             "source_instance_id": modifier.source_instance_id,
             "source_name_text": self.localizer.text(self.definitions[modifier.source_base_gem_id].name_key),
             "target_instance_id": modifier.target_instance_id,
+            "target_name_text": self.localizer.text(self.definitions[target_base_gem_id].name_key)
+            if target_base_gem_id in self.definitions
+            else "",
             "stat": self._stat_view(modifier.stat)
             if modifier.stat != "conduit_multiplier"
             else {"id": modifier.stat, "text": self.localizer.text("ui.modifier.conduit_multiplier")},
             "value": modifier.value,
             "layer_text": self.localizer.text(f"ui.modifier.layer.{modifier.layer}"),
+            "relation": modifier.relation,
             "relation_text": self.localizer.text(f"relation.{modifier.relation}.name")
             if modifier.relation != "self"
             else self.localizer.text("ui.relation.self"),
+            "reason_key": modifier.reason_key,
             "reason_text": self.localizer.text(modifier.reason_key),
             "applied": modifier.applied,
+            "shape_effect": modifier.shape_effect,
+            "shape_effect_text": self._shape_effect_text(modifier.shape_effect),
         }
 
     def _pickup_prompt(self, session: CombatSession, dropped: DroppedGem) -> dict[str, Any]:
@@ -961,7 +1095,7 @@ class PresentationService:
         elif dist(
             (session.player.position.x, session.player.position.y),
             (dropped.position.x, dropped.position.y),
-        ) <= session.player.pickup_radius:
+        ) <= session.player.item_interaction_reach:
             status_key = "ui.pickup.pending"
         else:
             status_key = "ui.pickup.out_of_range"

@@ -2,12 +2,11 @@
 required_fields = [
   "instance_id",
   "base_gem_id",
+  "gem_kind",
+  "sudoku_digit",
   "gem_type",
   "rarity",
   "level",
-  "prefix_affixes",
-  "suffix_affixes",
-  "implicit_affixes",
   "locked",
   "board_position",
 ]

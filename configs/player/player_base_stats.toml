@@ -2,7 +2,6 @@
 max_life = 100
 current_life = 100
 move_speed = 1.0
-pickup_radius = 2.0
 skill_slots_active = 0
 damage_add_percent = 0
 damage_final_percent = 0

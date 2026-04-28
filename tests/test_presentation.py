@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import random
 import sys
@@ -61,13 +61,17 @@ class PresentationTest(unittest.TestCase):
             rarity="magic",
         )
         support = self.inventory.add_instance("support", "support_fire_mastery")
+        passive = self.inventory.add_instance("passive", "passive_fire_focus")
         self.board.mount_gem(active.instance_id, 0, 0)
         self.board.mount_gem(support.instance_id, 0, 3)
+        self.board.mount_gem(passive.instance_id, 1, 0)
         final_skills = self.calculator().calculate_all()
 
         active_detail = self.presenter.gem_detail(active, board=self.board, final_skills=final_skills)
         self.assertEqual(active_detail["name_text"], self.presenter.localizer.text("gem.active_fire_bolt.name"))
         self.assertEqual(active_detail["category_text"], self.presenter.localizer.text("tag.active_skill_gem.name"))
+        self.assertEqual(active_detail["gem_kind"], "active_skill")
+        self.assertEqual(active_detail["sudoku_digit"], 1)
         self.assertEqual(active_detail["gem_type"]["number"], 1)
         self.assertNotIn("random_affixes", active_detail)
         self.assertNotIn("implicit_affixes", active_detail)
@@ -95,6 +99,10 @@ class PresentationTest(unittest.TestCase):
 
         support_detail = self.presenter.gem_detail(support, board=self.board, final_skills=final_skills)
         self.assertEqual(support_detail["category_text"], self.presenter.localizer.text("tag.support_gem.name"))
+        self.assertEqual(support_detail["gem_kind"], "support")
+        self.assertEqual(support_detail["sudoku_digit"], 5)
+        self.assertIn("主动技能宝石", support_detail["can_affect"]["target_kinds"])
+        self.assertIn("被动技能宝石", support_detail["can_affect"]["target_kinds"])
         self.assertEqual(
             support_detail["can_affect"]["tags_any"][0]["text"],
             self.presenter.localizer.text("tag.fire.name"),
@@ -124,11 +132,26 @@ class PresentationTest(unittest.TestCase):
         )
         self.assertEqual(
             "".join(segment["text"] for segment in support_tooltip["sections"]["support_rules"]["rich_lines"][0]),
-            "同颜色宝石不能位于同一行、列或宫格",
+            "同数独数字宝石不能位于同一行、列或宫格",
         )
         self.assertEqual(
             "".join(segment["text"] for segment in support_tooltip["sections"]["base_bonuses"]["rich_lines"][0]),
             "火焰伤害提高 18%",
+        )
+
+        passive_detail = self.presenter.gem_detail(passive, board=self.board, final_skills=final_skills)
+        self.assertEqual(passive_detail["category_text"], self.presenter.localizer.text("tag.passive_skill_gem.name"))
+        self.assertEqual(passive_detail["gem_kind"], "passive_skill")
+        self.assertEqual(passive_detail["sudoku_digit"], 2)
+        passive_tooltip = passive_detail["tooltip_view"]
+        self.assertEqual(passive_tooltip["variant"], "passive")
+        self.assertIn("stats", passive_tooltip["sections"])
+        self.assertNotIn("recent_dps", passive_tooltip["sections"])
+        self.assertNotIn("random_affixes", passive_tooltip["sections"])
+        self.assertNotIn("base_skill_level", passive_tooltip["sections"])
+        self.assertEqual(
+            passive_detail["current_effective_targets"][0]["name_text"],
+            self.presenter.localizer.text("gem.active_fire_bolt.name"),
         )
 
     def test_board_view_includes_grid_boxes_prompts_highlights_influence_and_skill_preview(self) -> None:
@@ -162,7 +185,7 @@ class PresentationTest(unittest.TestCase):
         self.inventory.add_instance("active", "active_fire_bolt")
         self.board.mount_gem("active", 0, 0)
         session = CombatSession.start(
-            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), pickup_radius=2),
+            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), item_interaction_reach=2),
             monsters=[Monster("monster_1", current_life=5, max_life=5, position=Position(1, 0))],
             inventory=self.inventory,
             skill_effect_calculator=self.calculator(),
@@ -170,6 +193,7 @@ class PresentationTest(unittest.TestCase):
         )
 
         session.tick(1)
+        session.tick(420)
         hud = self.presenter.combat_hud(session)
         self.assertEqual(hud["player_life"]["label_text"], self.presenter.localizer.text("ui.hud.player_life"))
         self.assertEqual(hud["alive_monsters"]["value"], 0)

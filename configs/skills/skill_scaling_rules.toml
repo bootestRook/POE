@@ -237,6 +237,246 @@ stat = "damage_add_percent"
 value = 10
 layer = "additive"
 
+[[support_base_modifiers]]
+support_id = "support_fire_bolt_fork"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fire_bolt_nova"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fire_bolt_rain"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fire_bolt_lance"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fire_bolt_orbit"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_ice_shards_fan"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_ice_shards_storm"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_ice_shards_mirror"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_ice_shards_wall"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_ice_shards_freeze_burst"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lightning_chain_fork"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lightning_chain_storm"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lightning_chain_ball"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lightning_chain_nova"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lightning_chain_beam"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_frost_nova_double_ring"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_frost_nova_mist"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_frost_nova_spikes"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_frost_nova_pulse"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_frost_nova_glacier"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_puncture_arc"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_puncture_dash"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_puncture_spin"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_puncture_bleed_burst"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_puncture_shadow_combo"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_penetrating_shot_multi"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_penetrating_shot_blast"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_penetrating_shot_ricochet"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_penetrating_shot_chain"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_penetrating_shot_fan"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lava_orb_double"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lava_orb_volcano"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lava_orb_nova"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lava_orb_trail"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_lava_orb_gravity"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fungal_petards_cloud"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fungal_petards_cluster"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fungal_petards_chain_burst"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fungal_petards_decoy"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
+[[support_base_modifiers]]
+support_id = "support_fungal_petards_shock_spore"
+stat = "damage_add_percent"
+value = 0
+layer = "additive"
+
 [[conduit_amplifiers]]
 support_id = "support_row_conduit"
 relation = "same_row"

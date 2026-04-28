@@ -9,6 +9,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = ROOT / "configs"
+sys.path.insert(0, str(ROOT / "src"))
+
+from liufang.config import load_skill_packages
 
 EXPECTED_FILES = [
     "core/id_rules.toml",
@@ -20,6 +23,7 @@ EXPECTED_FILES = [
     "combat/status_effects.toml",
     "gems/gem_type_defs.toml",
     "gems/active_skill_gems.toml",
+    "gems/passive_skill_gems.toml",
     "gems/support_gems.toml",
     "gems/gem_tag_defs.toml",
     "gems/gem_instance_schema.toml",
@@ -37,12 +41,16 @@ EXPECTED_FILES = [
     "loot/drop_weight_rules.toml",
     "localization/zh_cn.toml",
 ]
+EXPECTED_SKILL_PACKAGE_FILES = [
+    "skills/schema/skill.schema.json",
+    "skills/active/active_fire_bolt/skill.yaml",
+    "skills/behavior_templates/projectile.yaml",
+]
 
 REQUIRED_STATS = {
     "max_life",
     "current_life",
     "move_speed",
-    "pickup_radius",
     "skill_slots_active",
     "damage_add_percent",
     "damage_final_percent",
@@ -80,6 +88,7 @@ FORBIDDEN_V1_STATS = {
 REQUIRED_TAGS = {
     "gem",
     "active_skill_gem",
+    "passive_skill_gem",
     "support_gem",
     "loot_gem",
     "gem_type_1",
@@ -110,6 +119,14 @@ REQUIRED_TAGS = {
     "dot",
     "aura",
     "trap_or_mine",
+    "skill_fire_bolt",
+    "skill_ice_shards",
+    "skill_lightning_chain",
+    "skill_frost_nova",
+    "skill_puncture",
+    "skill_penetrating_shot",
+    "skill_lava_orb",
+    "skill_fungal_petards",
     "support_damage",
     "support_speed",
     "support_cooldown",
@@ -120,6 +137,7 @@ REQUIRED_TAGS = {
     "support_level",
     "support_relation",
     "support_conduit",
+    "support_shape",
 }
 
 REQUIRED_DAMAGE_TYPES = {"physical", "fire", "cold", "lightning"}
@@ -128,10 +146,10 @@ REQUIRED_BOARD_RELATIONS = {"adjacent", "same_row", "same_column", "same_box"}
 REQUIRED_BOARD_LOCALIZATION_KEYS = {
     "board.enter_combat.empty_board",
     "board.enter_combat.no_active_skill",
-    "board.invalid_gem_type",
-    "board.duplicate_gem_type.row",
-    "board.duplicate_gem_type.column",
-    "board.duplicate_gem_type.box",
+    "board.invalid_sudoku_digit",
+    "board.duplicate_sudoku_digit.row",
+    "board.duplicate_sudoku_digit.column",
+    "board.duplicate_sudoku_digit.box",
 }
 REQUIRED_RARITY_COUNTS = {"normal": 0, "magic": 1, "rare": 2}
 REQUIRED_AFFIX_GENERATIONS = {"prefix", "suffix", "implicit"}
@@ -158,7 +176,8 @@ REQUIRED_AFFIX_GROUPS = {
     "relation_target",
     "risk_reward",
 }
-REQUIRED_LOOT_POOLS = {"gem_basic", "active_skill_gems", "support_gems"}
+REQUIRED_LOOT_POOLS = {"gem_basic", "active_skill_gems", "passive_skill_gems", "support_gems"}
+REQUIRED_GEM_KINDS = {"active_skill", "passive_skill", "support"}
 REQUIRED_PHASE4_LOCALIZATION_KEYS = {
     "rarity.normal.name",
     "rarity.magic.name",
@@ -171,9 +190,10 @@ REQUIRED_PHASE5_LOCALIZATION_KEYS = {
     "skill_effect.error.invalid_board",
     "skill_effect.error.cannot_enter_combat",
     "skill_effect.error.missing_template",
-    "modifier.active_affix",
     "modifier.support_base",
-    "modifier.support_affix",
+    "modifier.passive_base",
+    "modifier.support_to_passive",
+    "modifier.self_stat_passive",
     "modifier.conduit_amplifier",
     "modifier.ignored.unknown_affix",
     "modifier.ignored.apply_filter",
@@ -188,9 +208,14 @@ REQUIRED_PHASE7_LOCALIZATION_KEYS = {
     "ui.board.valid",
     "ui.board.box_suffix",
     "ui.gem.base_skill_effect",
+    "ui.gem.passive_effect",
     "ui.gem.support_effect",
     "ui.gem.affects_self",
     "ui.gem.affects_filtered_targets",
+    "ui.gem.affects_active_or_passive",
+    "ui.gem.affects_active_targets",
+    "ui.gem.self_stat_target",
+    "ui.gem.active_target",
     "ui.affix.unknown",
     "ui.affix.gen.prefix",
     "ui.affix.gen.suffix",
@@ -207,6 +232,7 @@ REQUIRED_PHASE7_LOCALIZATION_KEYS = {
     "ui.skill.ready",
     "ui.skill.cooldown",
     "ui.hud.player_life",
+    "ui.hud.move_speed",
     "ui.hud.elapsed_ms",
     "ui.hud.alive_monsters",
     "ui.drop.picked",
@@ -276,6 +302,53 @@ REQUIRED_SUPPORT_GEMS = {
         "support_column_conduit",
         "support_box_conduit",
     },
+    "skill_shape_modifier": {
+        "support_fire_bolt_fork",
+        "support_fire_bolt_nova",
+        "support_fire_bolt_rain",
+        "support_fire_bolt_lance",
+        "support_fire_bolt_orbit",
+        "support_ice_shards_fan",
+        "support_ice_shards_storm",
+        "support_ice_shards_mirror",
+        "support_ice_shards_wall",
+        "support_ice_shards_freeze_burst",
+        "support_lightning_chain_fork",
+        "support_lightning_chain_storm",
+        "support_lightning_chain_ball",
+        "support_lightning_chain_nova",
+        "support_lightning_chain_beam",
+        "support_frost_nova_double_ring",
+        "support_frost_nova_mist",
+        "support_frost_nova_spikes",
+        "support_frost_nova_pulse",
+        "support_frost_nova_glacier",
+        "support_puncture_arc",
+        "support_puncture_dash",
+        "support_puncture_spin",
+        "support_puncture_bleed_burst",
+        "support_puncture_shadow_combo",
+        "support_penetrating_shot_multi",
+        "support_penetrating_shot_blast",
+        "support_penetrating_shot_ricochet",
+        "support_penetrating_shot_chain",
+        "support_penetrating_shot_fan",
+        "support_lava_orb_double",
+        "support_lava_orb_volcano",
+        "support_lava_orb_nova",
+        "support_lava_orb_trail",
+        "support_lava_orb_gravity",
+        "support_fungal_petards_cloud",
+        "support_fungal_petards_cluster",
+        "support_fungal_petards_chain_burst",
+        "support_fungal_petards_decoy",
+        "support_fungal_petards_shock_spore",
+    },
+}
+REQUIRED_PASSIVE_GEMS = {
+    "passive_fire_focus",
+    "passive_vitality",
+    "passive_swift_gathering",
 }
 
 FORBIDDEN_CONFIG_IDS = {
@@ -379,6 +452,33 @@ def check_tags(tag_refs: Any, tag_ids: set[str], context: str, errors: list[str]
             errors.append(f"{context}: unknown tag '{tag}'")
 
 
+def check_gem_kind_and_digit(entry: dict[str, Any], expected_kind: str, context: str, errors: list[str]) -> None:
+    gem_kind = entry.get("gem_kind")
+    if gem_kind != expected_kind:
+        errors.append(f"{context}: gem_kind must be '{expected_kind}'")
+    if gem_kind not in REQUIRED_GEM_KINDS:
+        errors.append(f"{context}: invalid gem_kind '{gem_kind}'")
+    sudoku_digit = entry.get("sudoku_digit")
+    if not isinstance(sudoku_digit, int) or not 1 <= sudoku_digit <= 9:
+        errors.append(f"{context}: sudoku_digit must be an integer from 1 to 9")
+    gem_type = entry.get("gem_type")
+    if isinstance(gem_type, str) and gem_type.startswith("gem_type_") and isinstance(sudoku_digit, int):
+        try:
+            legacy_digit = int(gem_type.rsplit("_", 1)[-1])
+        except ValueError:
+            errors.append(f"{context}: gem_type cannot map to sudoku_digit")
+        else:
+            if legacy_digit != sudoku_digit:
+                errors.append(f"{context}: legacy gem_type and sudoku_digit must match during migration")
+
+
+def check_no_random_affix_fields(entry: dict[str, Any], context: str, errors: list[str]) -> None:
+    forbidden_fields = {"prefix_affixes", "suffix_affixes", "implicit_affixes", "random_affixes"}
+    present = sorted(forbidden_fields & set(entry))
+    if present:
+        errors.append(f"{context}: real gem config must not contain random affix fields: {', '.join(present)}")
+
+
 def check_forbidden_config_entries(value: Any, path: str, errors: list[str]) -> None:
     if isinstance(value, dict):
         for key, nested in value.items():
@@ -409,6 +509,9 @@ def validate() -> list[str]:
     for relative in EXPECTED_FILES:
         if not (CONFIGS / relative).is_file():
             errors.append(f"missing required config file: configs/{relative}")
+    for relative in EXPECTED_SKILL_PACKAGE_FILES:
+        if not (CONFIGS / relative).is_file():
+            errors.append(f"missing required skill package file: configs/{relative}")
 
     for path in CONFIGS.rglob("*.toml"):
         if path.name.startswith("all."):
@@ -431,6 +534,28 @@ def validate() -> list[str]:
     if not isinstance(localization, dict):
         errors.append("localization/zh_cn.toml: [strings] table is required")
         localization = {}
+    try:
+        skill_packages = load_skill_packages(CONFIGS)
+    except Exception as exc:
+        errors.append(f"skill packages: {exc}")
+        skill_packages = {}
+    if set(skill_packages) != {"active_fire_bolt"}:
+        errors.append("skill packages must contain only active_fire_bolt in this apply slice")
+    for package_id, package in skill_packages.items():
+        display = package.get("display", {})
+        presentation = package.get("presentation", {})
+        for key_name in ["name_key", "description_key"]:
+            localization_key = display.get(key_name) if isinstance(display, dict) else None
+            if localization_key not in localization:
+                errors.append(f"skill package '{package_id}' missing localization key '{localization_key}'")
+        if isinstance(presentation, dict):
+            for key_name, localization_key in presentation.items():
+                if key_name in {"hit_stop_ms", "camera_shake"}:
+                    continue
+                if localization_key not in localization:
+                    errors.append(
+                        f"skill package '{package_id}' presentation.{key_name} missing localization key '{localization_key}'"
+                    )
 
     id_pattern = data.get("core/id_rules.toml", {}).get("id_rules", {}).get(
         "allowed_pattern", "^[a-z][a-z0-9_]*$"
@@ -624,8 +749,12 @@ def validate() -> list[str]:
     for gem in active_gems:
         context = f"active_skill_gems:{gem.get('id', '<unknown>')}"
         gem_id = gem.get("id")
+        check_gem_kind_and_digit(gem, "active_skill", context, errors)
+        check_no_random_affix_fields(gem, context, errors)
         if gem.get("gem_type") != "gem_type_1":
             errors.append(f"{context}: active skill gems must use gem_type_1")
+        if gem.get("sudoku_digit") != 1:
+            errors.append(f"{context}: active skill gems must use sudoku_digit 1")
         tags_value = gem.get("tags")
         check_tags(tags_value, tag_ids, context, errors)
         tags_set = set(tags_value) if isinstance(tags_value, list) else set()
@@ -638,15 +767,64 @@ def validate() -> list[str]:
         require_localization(gem, "active skill gems", localization, errors)
         require_localized_key(gem, "description_key", "active skill gems", localization, errors)
 
+    passive_gems = items(data.get("gems/passive_skill_gems.toml", {}), "passive_skill_gems")
+    passive_gem_ids = unique_ids(passive_gems, "passive skill gems", errors)
+    if passive_gem_ids != REQUIRED_PASSIVE_GEMS:
+        errors.append("passive skill gems must match the planned V1 Phase 2 passive ids exactly")
+    for gem in passive_gems:
+        context = f"passive_skill_gems:{gem.get('id', '<unknown>')}"
+        check_gem_kind_and_digit(gem, "passive_skill", context, errors)
+        check_no_random_affix_fields(gem, context, errors)
+        if "skill_template" in gem:
+            errors.append(f"{context}: passive skill gems must not declare skill_template")
+        if gem.get("gem_type") not in gem_type_ids:
+            errors.append(f"{context}: unknown gem_type '{gem.get('gem_type')}'")
+        tags_value = gem.get("tags")
+        check_tags(tags_value, tag_ids, context, errors)
+        tags_set = set(tags_value) if isinstance(tags_value, list) else set()
+        if "passive_skill_gem" not in tags_set:
+            errors.append(f"{context}: passive skill gems must include passive_skill_gem tag")
+        passive_effects = gem.get("passive_effects", [])
+        if not isinstance(passive_effects, list) or not passive_effects:
+            errors.append(f"{context}: passive skill gem must declare passive_effects")
+        else:
+            for effect in passive_effects:
+                if not isinstance(effect, dict):
+                    errors.append(f"{context}: passive_effects entries must be tables")
+                    continue
+                if effect.get("target") not in {"active_skill", "self_stat"}:
+                    errors.append(f"{context}: passive effect target must be active_skill or self_stat")
+                stat = effect.get("stat")
+                if stat not in legal_stat_ids:
+                    errors.append(f"{context}: unknown passive effect stat '{stat}'")
+                if not isinstance(effect.get("value"), (int, float)):
+                    errors.append(f"{context}: passive effect value must be numeric")
+                if effect.get("layer") not in {"additive", "final"}:
+                    errors.append(f"{context}: passive effect layer must be additive or final")
+        apply_filter = gem.get("apply_filter", {})
+        if isinstance(apply_filter, dict):
+            target_kinds = apply_filter.get("target_kinds", [])
+            if target_kinds:
+                for kind in target_kinds:
+                    if kind not in REQUIRED_GEM_KINDS - {"support"}:
+                        errors.append(f"{context}: invalid passive target kind '{kind}'")
+            check_tags(apply_filter.get("tags_any"), tag_ids, context, errors)
+            check_tags(apply_filter.get("tags_all"), tag_ids, context, errors)
+            check_tags(apply_filter.get("tags_none"), tag_ids, context, errors)
+        require_localization(gem, "passive skill gems", localization, errors)
+        require_localized_key(gem, "description_key", "passive skill gems", localization, errors)
+
     support_gems = items(data.get("gems/support_gems.toml", {}), "support_gems")
     support_gem_ids = unique_ids(support_gems, "support gems", errors)
     required_support_ids = set().union(*REQUIRED_SUPPORT_GEMS.values())
     if support_gem_ids != required_support_ids:
-        errors.append("support gems must match the 24 V1 support gem ids exactly")
+        errors.append("support gems must match the planned V1 support gem ids exactly")
     category_counts: dict[str, int] = {}
     for gem in support_gems:
         context = f"support_gems:{gem.get('id', '<unknown>')}"
         category = gem.get("category")
+        check_gem_kind_and_digit(gem, "support", context, errors)
+        check_no_random_affix_fields(gem, context, errors)
         if isinstance(category, str):
             category_counts[category] = category_counts.get(category, 0) + 1
         if gem.get("gem_type") not in gem_type_ids:
@@ -659,6 +837,13 @@ def validate() -> list[str]:
         ):
             errors.append(f"{context}: support gem must declare non-empty apply_filter tags")
         elif isinstance(apply_filter, dict):
+            target_kinds = apply_filter.get("target_kinds", [])
+            if not isinstance(target_kinds, list) or not target_kinds:
+                errors.append(f"{context}: support gem must declare apply_filter.target_kinds")
+            else:
+                for kind in target_kinds:
+                    if kind not in {"active_skill", "passive_skill"}:
+                        errors.append(f"{context}: support target kind must be active_skill or passive_skill")
             check_tags(apply_filter.get("tags_any"), tag_ids, context, errors)
             check_tags(apply_filter.get("tags_all"), tag_ids, context, errors)
             check_tags(apply_filter.get("tags_none"), tag_ids, context, errors)
@@ -735,17 +920,19 @@ def validate() -> list[str]:
     required_instance_fields = {
         "instance_id",
         "base_gem_id",
+        "gem_kind",
+        "sudoku_digit",
         "gem_type",
         "rarity",
         "level",
-        "prefix_affixes",
-        "suffix_affixes",
-        "implicit_affixes",
         "locked",
         "board_position",
     }
     if not required_instance_fields.issubset(schema_fields):
-        errors.append("gem instance schema missing required Phase 4 fields")
+        errors.append("gem instance schema missing required Phase 2 fields")
+    forbidden_instance_fields = {"prefix_affixes", "suffix_affixes", "implicit_affixes", "random_affixes"}
+    if forbidden_instance_fields & schema_fields:
+        errors.append("gem instance schema must not require random affix fields in Phase 2")
     rarity_counts = schema.get("rarity_affix_counts", {})
     if rarity_counts != REQUIRED_RARITY_COUNTS:
         errors.append("rarity affix counts must be normal=0, magic=1, rare=2")
@@ -810,7 +997,7 @@ def validate() -> list[str]:
         errors.append("gem_drop_pools.toml: [drop_pool.*] tables are required")
         drop_pool = {}
     if set(drop_pool) != REQUIRED_LOOT_POOLS:
-        errors.append("drop pools must be exactly gem_basic, active_skill_gems, and support_gems")
+        errors.append("drop pools must be exactly gem_basic, active_skill_gems, passive_skill_gems, and support_gems")
     for pool_name, pool in drop_pool.items():
         entries = pool.get("entries", []) if isinstance(pool, dict) else []
         if not isinstance(entries, list) or not entries:
@@ -821,7 +1008,7 @@ def validate() -> list[str]:
             has_tag = isinstance(entry.get("tag"), str)
             if has_id == has_tag:
                 errors.append(f"drop pool '{pool_name}' entries must reference exactly one id or tag")
-            if has_id and entry["id"] not in active_gem_ids | support_gem_ids:
+            if has_id and entry["id"] not in active_gem_ids | passive_gem_ids | support_gem_ids:
                 errors.append(f"drop pool '{pool_name}': unknown gem id '{entry['id']}'")
             if has_tag and entry["tag"] not in tag_ids:
                 errors.append(f"drop pool '{pool_name}': unknown tag '{entry['tag']}'")

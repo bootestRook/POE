@@ -1,0 +1,33 @@
+{
+  "tileSize": 128,
+  "tiles": [
+    {
+      "id": "ground_grass_base",
+      "terrainKind": "grass",
+      "width": 128,
+      "height": 128,
+      "src": "/assest/battle/tiles/cropped/ground_grass_base.png"
+    },
+    {
+      "id": "ground_grass_dark",
+      "terrainKind": "grass_dark",
+      "width": 128,
+      "height": 128,
+      "src": "/assest/battle/tiles/cropped/ground_grass_dark.png"
+    },
+    {
+      "id": "ground_dirt_patch",
+      "terrainKind": "dirt_patch",
+      "width": 128,
+      "height": 128,
+      "src": "/assest/battle/tiles/cropped/ground_dirt_patch.png"
+    },
+    {
+      "id": "ground_stone_patch",
+      "terrainKind": "stone_patch",
+      "width": 128,
+      "height": 128,
+      "src": "/assest/battle/tiles/cropped/ground_stone_patch.png"
+    }
+  ]
+}

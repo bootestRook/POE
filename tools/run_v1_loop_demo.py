@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import random
 import sys
@@ -119,7 +119,7 @@ def main() -> int:
     initial_damage = initial_board["skill_preview"][0]["final_damage"]
 
     session = CombatSession.start(
-        player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), pickup_radius=2),
+        player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), item_interaction_reach=2),
         monsters=[Monster("monster_1", current_life=5, max_life=5, position=Position(1, 0))],
         inventory=inventory,
         skill_effect_calculator=build_calculator(board, definitions),

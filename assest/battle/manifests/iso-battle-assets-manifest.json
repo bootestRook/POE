@@ -1,0 +1,109 @@
+{
+  "projection": {
+    "kind": "dimetric",
+    "isoTileWidth": 128,
+    "isoTileHeight": 64,
+    "worldTileSize": 64
+  },
+  "assets": [
+    {
+      "id": "iso_ground_base",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_base.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "iso_ground_dark",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_dark.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "iso_ground_stone",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_stone.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "iso_ground_crack",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_crack.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "player_adventurer_iso_idle",
+      "type": "unit",
+      "path": "/assest/battle/units/cropped/player_adventurer_iso_idle.png",
+      "width": 53,
+      "height": 92,
+      "anchorX": 0.5,
+      "anchorY": 0.967
+    },
+    {
+      "id": "enemy_imp_iso_idle",
+      "type": "unit",
+      "path": "/assest/battle/units/cropped/enemy_imp_iso_idle.png",
+      "width": 65,
+      "height": 78,
+      "anchorX": 0.5,
+      "anchorY": 0.949
+    },
+    {
+      "id": "enemy_brute_iso_idle",
+      "type": "unit",
+      "path": "/assest/battle/units/cropped/enemy_brute_iso_idle.png",
+      "width": 98,
+      "height": 116,
+      "anchorX": 0.5,
+      "anchorY": 0.974
+    },
+    {
+      "id": "rock_small_iso",
+      "type": "prop",
+      "path": "/assest/battle/props/cropped/rock_small_iso.png",
+      "width": 93,
+      "height": 78,
+      "anchorX": 0.5,
+      "anchorY": 0.923
+    },
+    {
+      "id": "rock_tall_iso",
+      "type": "prop",
+      "path": "/assest/battle/props/cropped/rock_tall_iso.png",
+      "width": 111,
+      "height": 154,
+      "anchorX": 0.5,
+      "anchorY": 0.959
+    },
+    {
+      "id": "pillar_iso",
+      "type": "prop",
+      "path": "/assest/battle/props/cropped/pillar_iso.png",
+      "width": 103,
+      "height": 178,
+      "anchorX": 0.5,
+      "anchorY": 0.96
+    },
+    {
+      "id": "shrine_iso",
+      "type": "prop",
+      "path": "/assest/battle/props/cropped/shrine_iso.png",
+      "width": 138,
+      "height": 184,
+      "anchorX": 0.5,
+      "anchorY": 0.958
+    }
+  ]
+}

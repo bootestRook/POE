@@ -41,6 +41,8 @@ class V1RequestHandler(BaseHTTPRequestHandler):
                 payload = self.api.start_combat()
             elif parsed.path == "/api/pickup":
                 payload = self.api.pickup(str(body["drop_id"]))
+            elif parsed.path == "/api/skill-editor/save":
+                payload = self.api.save_skill_package(str(body["skill_id"]), body["package"])
             else:
                 self._send_json({"error": "未知接口。"}, status=404)
                 return

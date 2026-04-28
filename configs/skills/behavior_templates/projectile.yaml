@@ -1,0 +1,55 @@
+id: projectile
+allowed_params: ["projectile_count", "burst_interval_ms", "spread_angle_deg", "projectile_speed", "projectile_width", "projectile_height", "max_distance", "hit_policy", "pierce_count", "collision_radius", "spawn_offset", "projectile_radius", "impact_radius", "max_targets", "min_duration_ms", "max_duration_ms"]
+param_constraints:
+  projectile_count:
+    type: integer
+    minimum: 1
+  burst_interval_ms:
+    type: integer
+    minimum: 0
+  spread_angle_deg:
+    type: number
+    minimum: 0
+    maximum: 180
+  projectile_speed:
+    type: number
+    minimum: 1
+  projectile_width:
+    type: number
+    minimum: 1
+  projectile_height:
+    type: number
+    minimum: 1
+  max_distance:
+    type: number
+    minimum: 1
+  hit_policy:
+    type: string
+    enum: ["first_hit", "pierce"]
+  pierce_count:
+    type: integer
+    minimum: 0
+  collision_radius:
+    type: number
+    minimum: 0
+  spawn_offset:
+    type: object
+    required: ["x", "y"]
+    properties: ["x", "y"]
+  projectile_radius:
+    type: number
+    minimum: 0
+  impact_radius:
+    type: number
+    minimum: 0
+  max_targets:
+    type: integer
+    minimum: 1
+  min_duration_ms:
+    type: integer
+    minimum: 0
+  max_duration_ms:
+    type: integer
+    minimum: 1
+events: ["projectile_spawn", "damage", "hit_vfx", "floating_text"]
+damage_timing: on_projectile_hit

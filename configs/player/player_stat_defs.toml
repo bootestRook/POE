@@ -20,13 +20,6 @@ value_type = "percent"
 affix_target = true
 
 [[stats]]
-id = "pickup_radius"
-name_key = "stat.pickup_radius.name"
-category = "base"
-value_type = "number"
-affix_target = true
-
-[[stats]]
 id = "skill_slots_active"
 name_key = "stat.skill_slots_active.name"
 category = "runtime"

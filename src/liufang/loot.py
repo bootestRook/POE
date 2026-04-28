@@ -71,6 +71,8 @@ class LootRuntime:
             instance_id=self._next_instance_id(),
             base_gem_id=base_gem_id,
             gem_type=definition.gem_type,
+            gem_kind=definition.gem_kind,
+            sudoku_digit=definition.sudoku_digit,
             rarity=rarity,
             level=1,
             locked=False,
@@ -86,6 +88,8 @@ class LootRuntime:
         top_entry = self._weighted_entry(self._require_pool("gem_basic"))
         if top_entry.tag == "active_skill_gem":
             return self._choose_from_pool("active_skill_gems")
+        if top_entry.tag == "passive_skill_gem":
+            return self._choose_from_pool("passive_skill_gems")
         if top_entry.tag == "support_gem":
             return self._choose_from_pool("support_gems")
         if top_entry.base_gem_id:

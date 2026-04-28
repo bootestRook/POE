@@ -21,6 +21,7 @@ from .gem_board import SudokuGemBoard
 from .inventory import GemInventory, GemInstance
 from .loot import LootRuntime
 from .presentation import PresentationService
+from .skill_editor import SkillEditorService
 from .skill_effects import FinalSkillInstance, SkillEffectCalculator, SkillEffectError
 
 
@@ -31,15 +32,18 @@ class V1WebAppApi:
     inventory: GemInventory = field(init=False)
     board: SudokuGemBoard = field(init=False)
     presenter: PresentationService = field(init=False)
+    skill_editor: SkillEditorService = field(init=False)
+    loot_runtime: LootRuntime = field(init=False)
     combat_session: CombatSession | None = None
     logs: list[str] = field(default_factory=list)
-    _loot_seed: int = 6
 
     def __post_init__(self) -> None:
         self.definitions = load_gem_definitions(self.config_root)
         self.inventory = GemInventory(self.definitions)
         self.board = SudokuGemBoard(load_board_rules(self.config_root), self.inventory)
         self.presenter = PresentationService.from_configs(self.config_root)
+        self.skill_editor = SkillEditorService(self.config_root)
+        self.loot_runtime = self._create_loot_runtime()
         self._seed_inventory()
 
     def state(self) -> dict[str, Any]:
@@ -61,6 +65,8 @@ class V1WebAppApi:
             "combat": self.presenter.combat_hud(self.combat_session) if self.combat_session else None,
             "drops": drops,
             "logs": list(self.logs),
+            "player_stats": self._player_stats_view(),
+            "skill_editor": self.skill_editor.view(),
             "ui_text": {
                 "only_gems_on_board": self.presenter.localizer.text("ui.inventory.only_gems_on_board"),
             },
@@ -80,11 +86,11 @@ class V1WebAppApi:
 
     def start_combat(self) -> dict[str, Any]:
         session = CombatSession.start(
-            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), pickup_radius=2),
+            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), item_interaction_reach=2),
             monsters=[Monster("monster_1", current_life=5, max_life=5, position=Position(1, 0))],
             inventory=self.inventory,
             skill_effect_calculator=self._calculator(),
-            loot_runtime=self._loot_runtime(),
+            loot_runtime=self.loot_runtime,
         )
         events = session.tick(1)
         self.combat_session = session
@@ -107,50 +113,52 @@ class V1WebAppApi:
             raise ValueError("该宝石已经拾取。")
         picked = self.combat_session.pickup_nearby()
         if not picked:
-            raise ValueError("没有位于拾取范围内的宝石。")
+            raise ValueError("距离太远，无法拾取该宝石。")
         for instance in picked:
             self.logs.append(f"已拾取{self._gem_name(instance)}并加入库存。")
         return self.state()
 
+    def save_skill_package(self, skill_id: str, package: dict[str, Any]) -> dict[str, Any]:
+        result = self.skill_editor.save_package(skill_id, package)
+        if result["ok"]:
+            self._reload_config_backed_services()
+            self.combat_session = None
+            result["skill_editor"] = self.skill_editor.view()
+        state = self.state()
+        state["skill_editor"] = result["skill_editor"]
+        return {
+            "ok": result["ok"],
+            "message_text": result["message_text"],
+            "state": state,
+        }
+
+    def _reload_config_backed_services(self) -> None:
+        self.presenter = PresentationService.from_configs(self.config_root)
+        self.skill_editor = SkillEditorService(self.config_root)
+
     def _seed_inventory(self) -> None:
-        active = self.inventory.add_instance(
-            "web_active_fire_bolt",
-            "active_fire_bolt",
-            rarity="magic",
-        )
         seed_gems = [
-            ("web_seed_g1_fire_bolt", "active_fire_bolt", "gem_type_1", "magic", 1),
-            ("web_seed_g1_ice_shards", "active_ice_shards", "gem_type_1", "normal", 1),
-            ("web_seed_g1_puncture", "active_puncture", "gem_type_1", "normal", 2),
-            ("web_seed_g2_fast_attack", "support_fast_attack", "gem_type_2", "normal", 1),
-            ("web_seed_g2_precision", "support_precision", "gem_type_2", "normal", 1),
-            ("web_seed_g2_extra_projectile", "support_extra_projectile", "gem_type_2", "normal", 2),
-            ("web_seed_g3_fast_cast", "support_fast_cast", "gem_type_3", "normal", 1),
-            ("web_seed_g3_skill_haste", "support_skill_haste", "gem_type_3", "normal", 1),
-            ("web_seed_g3_cooldown_focus", "support_cooldown_focus", "gem_type_3", "normal", 2),
-            ("web_seed_g4_overcharge", "support_overcharge", "gem_type_4", "normal", 1),
-            ("web_seed_g4_overkill", "support_overkill", "gem_type_4", "normal", 1),
-            ("web_seed_g4_critical_burst", "support_critical_burst", "gem_type_4", "normal", 2),
-            ("web_seed_g5_physical_mastery", "support_physical_mastery", "gem_type_5", "normal", 1),
-            ("web_seed_g5_fire_mastery", "support_fire_mastery", "gem_type_5", "normal", 1),
-            ("web_seed_g5_cold_mastery", "support_cold_mastery", "gem_type_5", "normal", 2),
-            ("web_seed_g6_lightning_mastery", "support_lightning_mastery", "gem_type_6", "normal", 1),
-            ("web_seed_g6_area_magnify", "support_area_magnify", "gem_type_6", "normal", 1),
-            ("web_seed_g6_projectile_speed", "support_projectile_speed", "gem_type_6", "normal", 2),
-            ("web_seed_g7_wide_effect", "support_wide_effect", "gem_type_7", "normal", 1),
-            ("web_seed_g7_heavy_impact", "support_heavy_impact", "gem_type_7", "normal", 1),
-            ("web_seed_g7_stable_output", "support_stable_output", "gem_type_7", "normal", 2),
-            ("web_seed_g8_elemental_level", "support_elemental_level", "gem_type_8", "normal", 1),
-            ("web_seed_g8_attack_spell_level", "support_attack_spell_level", "gem_type_8", "normal", 1),
-            ("web_seed_g8_elemental_level_plus", "support_elemental_level", "gem_type_8", "normal", 2),
-            ("web_seed_g9_row_conduit", "support_row_conduit", "gem_type_9", "normal", 1),
-            ("web_seed_g9_column_conduit", "support_column_conduit", "gem_type_9", "normal", 1),
-            ("web_seed_g9_box_conduit", "support_box_conduit", "gem_type_9", "normal", 2),
+            ("active_fire_bolt", "magic"),
+            ("active_ice_shards", "normal"),
+            ("active_puncture", "normal"),
+            ("passive_fire_focus", "normal"),
+            ("passive_vitality", "normal"),
+            ("passive_swift_gathering", "normal"),
+            ("support_fire_bolt_fork", "normal"),
+            ("support_ice_shards_fan", "normal"),
+            ("support_puncture_arc", "normal"),
         ]
-        for instance_id, base_gem_id, gem_type, rarity, level in seed_gems:
-            self._add_seed_gem(instance_id, base_gem_id, gem_type, rarity=rarity, level=level)
-        self.board.mount_gem(active.instance_id, 0, 0)
-        self.logs.append("已准备初始宝石和数独盘。")
+        for base_gem_id, rarity in seed_gems:
+            definition = self.definitions[base_gem_id]
+            for copy_index in range(1, 4):
+                self._add_seed_gem(
+                    f"web_seed_{base_gem_id}_{copy_index}",
+                    base_gem_id,
+                    definition.gem_type,
+                    rarity=rarity,
+                    level=1,
+                )
+        self.logs.append("已准备 9 种初始宝石，每种 3 颗。")
 
     def _add_seed_gem(
         self,
@@ -163,11 +171,14 @@ class V1WebAppApi:
     ) -> GemInstance:
         definition = self.definitions[base_gem_id]
         tags = frozenset(tag for tag in definition.tags if not tag.startswith("gem_type_")) | {gem_type}
+        sudoku_digit = int(gem_type.rsplit("_", 1)[-1])
         return self.inventory.add_existing_instance(
             GemInstance(
                 instance_id=instance_id,
                 base_gem_id=base_gem_id,
                 gem_type=gem_type,
+                gem_kind=definition.gem_kind,
+                sudoku_digit=sudoku_digit,
                 tags=tags,
                 rarity=rarity,
                 level=level,
@@ -191,9 +202,8 @@ class V1WebAppApi:
             affix_definitions={definition.affix_id: definition for definition in affixes},
         )
 
-    def _loot_runtime(self) -> LootRuntime:
-        seed = self._loot_seed
-        self._loot_seed += 1
+    def _create_loot_runtime(self) -> LootRuntime:
+        seed = 6
         affixes = load_affix_definitions(self.config_root)
         return LootRuntime.from_configs(
             self.config_root,
@@ -202,6 +212,21 @@ class V1WebAppApi:
             AffixGenerator(affixes, load_rarity_affix_counts(self.config_root), random.Random(seed)),
             rng=random.Random(seed),
         )
+
+    def _player_stats_view(self) -> dict[str, Any]:
+        player = Player(
+            "player_preview",
+            current_life=100,
+            max_life=100,
+            position=Position(0, 0),
+            item_interaction_reach=2,
+            move_speed=1.0,
+        )
+        self._calculator().apply_player_stat_contributions(player)
+        return {
+            "max_life": {"label_text": self.presenter.localizer.text("stat.max_life.name"), "value": player.max_life},
+            "move_speed": {"label_text": self.presenter.localizer.text("stat.move_speed.name"), "value": player.move_speed},
+        }
 
     def _gem_name(self, instance: GemInstance) -> str:
         return self.presenter.localizer.text(self.definitions[instance.base_gem_id].name_key)
@@ -217,6 +242,9 @@ class V1WebAppApi:
             "description_text": description_text,
             "category_text": category_text,
             "gem_type": {"id": "", "display_text": category_text, "identity_text": description_text},
+            "gem_kind": "",
+            "gem_kind_text": category_text,
+            "sudoku_digit": 0,
             "rarity_text": self.presenter.localizer.text("rarity.normal.name"),
             "level": 1,
             "locked": False,

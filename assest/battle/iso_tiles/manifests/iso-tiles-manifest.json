@@ -1,0 +1,42 @@
+{
+  "tileWidth": 128,
+  "tileHeight": 64,
+  "assets": [
+    {
+      "id": "iso_ground_base",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_base.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "iso_ground_dark",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_dark.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "iso_ground_stone",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_stone.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    },
+    {
+      "id": "iso_ground_crack",
+      "type": "tile",
+      "path": "/assest/battle/iso_tiles/cropped/iso_ground_crack.png",
+      "width": 128,
+      "height": 64,
+      "anchorX": 0.5,
+      "anchorY": 0.0
+    }
+  ]
+}

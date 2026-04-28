@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "liufang.skill.schema.json",
+  "title": "Liufang Skill Package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "display",
+    "classification",
+    "cast",
+    "behavior",
+    "hit",
+    "scaling",
+    "presentation",
+    "preview"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^active_[a-z0-9_]+$" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name_key", "description_key"],
+      "properties": {
+        "name_key": { "$ref": "#/$defs/localization_key" },
+        "description_key": { "$ref": "#/$defs/localization_key" }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tags", "damage_type", "damage_form"],
+      "properties": {
+        "tags": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "damage_type": { "enum": ["physical", "fire", "cold", "lightning"] },
+        "damage_form": { "enum": ["attack", "spell", "secondary", "damage_over_time"] }
+      }
+    },
+    "cast": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "target_selector", "search_range", "cooldown_ms", "windup_ms", "recovery_ms"],
+      "properties": {
+        "mode": { "enum": ["instant", "attack", "spell"] },
+        "target_selector": { "enum": ["nearest_enemy", "target_enemy", "self", "ground"] },
+        "search_range": { "type": "number", "minimum": 0 },
+        "cooldown_ms": { "type": "integer", "minimum": 0 },
+        "windup_ms": { "type": "integer", "minimum": 0 },
+        "recovery_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "params"],
+      "properties": {
+        "template": {
+          "enum": [
+            "projectile",
+            "fan_projectile",
+            "chain",
+            "player_nova",
+            "melee_arc",
+            "line_pierce",
+            "orbit",
+            "delayed_area"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectile_speed": { "type": "number", "minimum": 1 },
+            "projectile_count": { "type": "integer", "minimum": 1 },
+            "burst_interval_ms": { "type": "integer", "minimum": 0 },
+            "spread_angle_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+            "projectile_width": { "type": "number", "minimum": 1 },
+            "projectile_height": { "type": "number", "minimum": 1 },
+            "max_distance": { "type": "number", "minimum": 1 },
+            "hit_policy": { "enum": ["first_hit", "pierce"] },
+            "pierce_count": { "type": "integer", "minimum": 0 },
+            "collision_radius": { "type": "number", "minimum": 0 },
+            "spawn_offset": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["x", "y"],
+              "properties": {
+                "x": { "type": "number" },
+                "y": { "type": "number" }
+              }
+            },
+            "projectile_radius": { "type": "number", "minimum": 0 },
+            "impact_radius": { "type": "number", "minimum": 0 },
+            "max_targets": { "type": "integer", "minimum": 1 },
+            "min_duration_ms": { "type": "integer", "minimum": 0 },
+            "max_duration_ms": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "hit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_damage", "can_crit", "can_apply_status"],
+      "properties": {
+        "base_damage": { "type": "number", "minimum": 0 },
+        "can_crit": { "type": "boolean" },
+        "can_apply_status": { "type": "boolean" },
+        "damage_timing": { "enum": ["on_projectile_hit"] },
+        "hit_delay_ms": { "type": "integer", "minimum": 0 },
+        "hit_radius": { "type": "number", "minimum": 0 },
+        "target_policy": { "enum": ["selected_target", "nearest_enemy"] }
+      }
+    },
+    "scaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["additive_stats", "final_stats", "runtime_params"],
+      "properties": {
+        "additive_stats": { "type": "array", "items": { "type": "string" } },
+        "final_stats": { "type": "array", "items": { "type": "string" } },
+        "runtime_params": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vfx", "sfx", "floating_text", "screen_feedback"],
+      "properties": {
+        "vfx": { "$ref": "#/$defs/localization_key" },
+        "cast_vfx_key": { "$ref": "#/$defs/localization_key" },
+        "projectile_vfx_key": { "$ref": "#/$defs/localization_key" },
+        "hit_vfx_key": { "$ref": "#/$defs/localization_key" },
+        "sfx": { "$ref": "#/$defs/localization_key" },
+        "floating_text": { "$ref": "#/$defs/localization_key" },
+        "floating_text_style": { "$ref": "#/$defs/localization_key" },
+        "screen_feedback": { "$ref": "#/$defs/localization_key" },
+        "hit_stop_ms": { "type": "integer", "minimum": 0 },
+        "camera_shake": { "type": "number", "minimum": 0 }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["show_fields"],
+      "properties": {
+        "show_fields": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "final_damage",
+              "final_cooldown_ms",
+              "projectile_count",
+              "speed_multiplier",
+              "base_damage",
+              "base_cooldown_ms",
+              "damage_type",
+              "damage_form"
+            ]
+          },
+          "minItems": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "localization_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*\\.[a-z0-9_.-]+$"
+    }
+  }
+}

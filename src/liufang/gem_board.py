@@ -58,7 +58,7 @@ class SudokuGemBoard:
         instance = self.inventory.require(instance_id)
         if instance.board_position is not None:
             raise ValueError("同一个宝石实例不能同时占用多个格子")
-        self._require_legal_gem_type(instance)
+        self._require_legal_sudoku_digit(instance)
 
         self._cells[(row, column)] = instance_id
         self.inventory.set_board_position(instance_id, position)
@@ -79,7 +79,7 @@ class SudokuGemBoard:
         mounted = self._mounted_by_instance_id()
 
         for instance in mounted.values():
-            self._append_gem_type_issue(instance, issues)
+            self._append_sudoku_digit_issue(instance, issues)
 
         self._append_duplicate_issues(mounted, issues)
 
@@ -140,18 +140,18 @@ class SudokuGemBoard:
         if not (0 <= position.row < self.rules.rows and 0 <= position.column < self.rules.columns):
             raise ValueError("坐标超出数独宝石盘范围")
 
-    def _require_legal_gem_type(self, instance: GemInstance) -> None:
-        if instance.gem_type not in self.rules.allowed_gem_types:
-            raise ValueError("宝石 gem_type 不合法")
+    def _require_legal_sudoku_digit(self, instance: GemInstance) -> None:
+        if instance.sudoku_digit not in self.rules.allowed_sudoku_digits:
+            raise ValueError("宝石数独数字不合法")
 
-    def _append_gem_type_issue(self, instance: GemInstance, issues: list[BoardIssue]) -> None:
+    def _append_sudoku_digit_issue(self, instance: GemInstance, issues: list[BoardIssue]) -> None:
         if instance.board_position is None:
             return
-        if instance.gem_type not in self.rules.allowed_gem_types:
+        if instance.sudoku_digit not in self.rules.allowed_sudoku_digits:
             issues.append(
                 BoardIssue(
-                    error_key="board.invalid_gem_type",
-                    message="宝石 gem_type 不合法",
+                    error_key="board.invalid_sudoku_digit",
+                    message="宝石数独数字不合法",
                     instance_ids=(instance.instance_id,),
                     positions=(instance.board_position,),
                 )
@@ -173,14 +173,14 @@ class SudokuGemBoard:
                 ("column", position.column),
                 ("box", box_index),
             ]:
-                groups.setdefault((scope, value, self._gem_color_key(instance.gem_type)), []).append(instance)
+                groups.setdefault((scope, value, instance.sudoku_digit), []).append(instance)
 
         key_by_scope = {
-            "row": ("board.duplicate_gem_type.row", "同一行不能出现重复 gem_type"),
-            "column": ("board.duplicate_gem_type.column", "同一列不能出现重复 gem_type"),
-            "box": ("board.duplicate_gem_type.box", "同一 3x3 宫不能出现重复 gem_type"),
+            "row": ("board.duplicate_sudoku_digit.row", "同一行不能出现重复数独数字"),
+            "column": ("board.duplicate_sudoku_digit.column", "同一列不能出现重复数独数字"),
+            "box": ("board.duplicate_sudoku_digit.box", "同一 3x3 宫不能出现重复数独数字"),
         }
-        for (scope, _value, _gem_color), instances in groups.items():
+        for (scope, _value, _sudoku_digit), instances in groups.items():
             if len(instances) < 2:
                 continue
             error_key, message = key_by_scope[scope]
@@ -192,19 +192,6 @@ class SudokuGemBoard:
                     positions=tuple(instance.board_position for instance in instances if instance.board_position),
                 )
             )
-
-    def _gem_color_key(self, gem_type: str) -> str:
-        return {
-            "gem_type_1": "red",
-            "gem_type_2": "blue",
-            "gem_type_3": "green",
-            "gem_type_4": "pink",
-            "gem_type_5": "yellow",
-            "gem_type_6": "white",
-            "gem_type_7": "black",
-            "gem_type_8": "cyan",
-            "gem_type_9": "orange",
-        }.get(gem_type, gem_type)
 
     def _mounted_by_instance_id(self) -> dict[str, GemInstance]:
         mounted: dict[str, GemInstance] = {}

@@ -33,6 +33,8 @@ class GemInstance:
     base_gem_id: str
     gem_type: str
     tags: frozenset[str]
+    gem_kind: str = ""
+    sudoku_digit: int = 0
     rarity: str = "normal"
     level: int = 1
     prefix_affixes: tuple[AffixRoll, ...] = ()
@@ -44,7 +46,15 @@ class GemInstance:
 
     @property
     def is_active_skill(self) -> bool:
-        return "active_skill_gem" in self.tags
+        return self.gem_kind == "active_skill"
+
+    @property
+    def is_passive_skill(self) -> bool:
+        return self.gem_kind == "passive_skill"
+
+    @property
+    def is_support(self) -> bool:
+        return self.gem_kind == "support"
 
     @property
     def random_affixes(self) -> tuple[AffixRoll, ...]:
@@ -81,6 +91,8 @@ class GemInventory:
             instance_id=instance_id,
             base_gem_id=base_gem_id,
             gem_type=definition.gem_type,
+            gem_kind=definition.gem_kind,
+            sudoku_digit=definition.sudoku_digit,
             rarity=rarity,
             level=level,
             prefix_affixes=prefix_affixes,
@@ -97,8 +109,15 @@ class GemInventory:
     def add_existing_instance(self, instance: GemInstance) -> GemInstance:
         if instance.instance_id in self._instances:
             raise ValueError(f"宝石实例已存在：{instance.instance_id}")
-        if instance.base_gem_id not in self._definitions:
+        definition = self._definitions.get(instance.base_gem_id)
+        if definition is None:
             raise ValueError(f"宝石基础定义不存在：{instance.base_gem_id}")
+        if not instance.gem_kind:
+            instance.gem_kind = definition.gem_kind
+        if not instance.sudoku_digit:
+            instance.sudoku_digit = definition.sudoku_digit
+        if not instance.gem_type:
+            instance.gem_type = definition.gem_type
         instance.acquired_order = self._next_order
         self._next_order += 1
         self._instances[instance.instance_id] = instance
@@ -131,6 +150,8 @@ class GemInventory:
         base_gem_id: str | None = None,
         rarity: str | None = None,
         gem_type: str | None = None,
+        gem_kind: str | None = None,
+        sudoku_digit: int | None = None,
         tag: str | None = None,
     ) -> list[GemInstance]:
         result = self.all_instances()
@@ -140,6 +161,10 @@ class GemInventory:
             result = [instance for instance in result if instance.rarity == rarity]
         if gem_type is not None:
             result = [instance for instance in result if instance.gem_type == gem_type]
+        if gem_kind is not None:
+            result = [instance for instance in result if instance.gem_kind == gem_kind]
+        if sudoku_digit is not None:
+            result = [instance for instance in result if instance.sudoku_digit == sudoku_digit]
         if tag is not None:
             result = [instance for instance in result if tag in instance.tags]
         return result

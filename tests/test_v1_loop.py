@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import random
 import sys
@@ -47,22 +47,25 @@ class V1LoopTest(unittest.TestCase):
         self.assertNotIn("gem", {tag["id"] for tag in test_item["tags"]})
         self.assertEqual(state["ui_text"]["only_gems_on_board"], api.presenter.localizer.text("ui.inventory.only_gems_on_board"))
 
-    def test_web_seed_inventory_has_three_gems_per_gem_type(self) -> None:
+    def test_web_seed_inventory_has_nine_gem_kinds_with_three_copies_each(self) -> None:
         api = V1WebAppApi(ROOT / "configs")
         seeded_gems = [
             instance
             for instance in api.inventory.sort_instances("acquired_order")
-            if instance.instance_id.startswith("web_seed_g")
+            if instance.instance_id.startswith("web_seed_")
         ]
 
+        counts_by_base_id: dict[str, int] = {}
+        for instance in seeded_gems:
+            counts_by_base_id[instance.base_gem_id] = counts_by_base_id.get(instance.base_gem_id, 0) + 1
+
         self.assertEqual(len(seeded_gems), 27)
-        for index in range(1, 10):
-            gems = [instance for instance in seeded_gems if instance.gem_type == f"gem_type_{index}"]
-            self.assertEqual(len(gems), 3)
-            self.assertGreater(len({(instance.base_gem_id, instance.level, instance.rarity) for instance in gems}), 1)
-        self.assertTrue(
-            all(instance.rarity == "normal" for instance in seeded_gems if "support_gem" in instance.tags)
-        )
+        self.assertEqual(len(counts_by_base_id), 9)
+        self.assertTrue(all(count == 3 for count in counts_by_base_id.values()))
+        self.assertEqual({instance.gem_kind for instance in seeded_gems}, {"active_skill", "passive_skill", "support"})
+        self.assertTrue(all(instance.board_position is None for instance in seeded_gems))
+        self.assertFalse(api.board.view().cells)
+        self.assertIn("已准备 9 种初始宝石，每种 3 颗。", api.logs)
 
     def calculator(self) -> SkillEffectCalculator:
         return SkillEffectCalculator(
@@ -96,13 +99,14 @@ class V1LoopTest(unittest.TestCase):
         self.assertTrue(first_board_view["can_enter_combat"])
 
         session = CombatSession.start(
-            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), pickup_radius=2),
+            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), item_interaction_reach=2),
             monsters=[Monster("monster_1", current_life=5, max_life=5, position=Position(1, 0))],
             inventory=self.inventory,
             skill_effect_calculator=self.calculator(),
-            loot_runtime=self.loot_runtime(seed=6),
+            loot_runtime=self.loot_runtime(seed=33),
         )
-        events = session.tick(1)
+        session.tick(1)
+        events = session.tick(420)
         self.assertTrue(events[0].killed)
         self.assertEqual(len(session.dropped_gems), 1)
 

@@ -1,0 +1,31 @@
+{
+  "assets": [
+    {
+      "id": "player_adventurer_iso_idle",
+      "type": "unit",
+      "path": "/assest/battle/units/cropped/player_adventurer_iso_idle.png",
+      "width": 53,
+      "height": 92,
+      "anchorX": 0.5,
+      "anchorY": 0.967
+    },
+    {
+      "id": "enemy_imp_iso_idle",
+      "type": "unit",
+      "path": "/assest/battle/units/cropped/enemy_imp_iso_idle.png",
+      "width": 65,
+      "height": 78,
+      "anchorX": 0.5,
+      "anchorY": 0.949
+    },
+    {
+      "id": "enemy_brute_iso_idle",
+      "type": "unit",
+      "path": "/assest/battle/units/cropped/enemy_brute_iso_idle.png",
+      "width": 98,
+      "height": 116,
+      "anchorX": 0.5,
+      "anchorY": 0.974
+    }
+  ]
+}

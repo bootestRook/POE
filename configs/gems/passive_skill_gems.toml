@@ -1,0 +1,40 @@
+[[passive_skill_gems]]
+id = "passive_fire_focus"
+name_key = "gem.passive_fire_focus.name"
+description_key = "gem.passive_fire_focus.description"
+gem_type = "gem_type_2"
+gem_kind = "passive_skill"
+sudoku_digit = 2
+visual_effect = "passive_fire_focus"
+tags = ["gem", "passive_skill_gem", "loot_gem", "gem_type_2", "aura", "fire", "spell"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_any = ["fire"]
+passive_effects = [
+  { target = "active_skill", stat = "fire_damage_add_percent", value = 10, layer = "additive" },
+]
+
+[[passive_skill_gems]]
+id = "passive_vitality"
+name_key = "gem.passive_vitality.name"
+description_key = "gem.passive_vitality.description"
+gem_type = "gem_type_6"
+gem_kind = "passive_skill"
+sudoku_digit = 6
+visual_effect = "passive_vitality"
+tags = ["gem", "passive_skill_gem", "loot_gem", "gem_type_6", "aura"]
+passive_effects = [
+  { target = "self_stat", stat = "max_life", value = 25, layer = "additive" },
+]
+
+[[passive_skill_gems]]
+id = "passive_swift_gathering"
+name_key = "gem.passive_swift_gathering.name"
+description_key = "gem.passive_swift_gathering.description"
+gem_type = "gem_type_7"
+gem_kind = "passive_skill"
+sudoku_digit = 7
+visual_effect = "passive_swift_gathering"
+tags = ["gem", "passive_skill_gem", "loot_gem", "gem_type_7", "aura"]
+passive_effects = [
+  { target = "self_stat", stat = "move_speed", value = 10, layer = "additive" },
+]

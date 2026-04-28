@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from .config import (
     AffixDefinition,
     ConduitAmplifier,
     GemDefinition,
+    PassiveEffect,
     SkillScalingRules,
     SkillTemplate,
     SupportBaseModifier,
@@ -45,6 +47,8 @@ class AppliedModifier:
     relation: str
     reason_key: str
     applied: bool = True
+    target_base_gem_id: str = ""
+    shape_effect: str = ""
 
 
 @dataclass(frozen=True)
@@ -55,12 +59,38 @@ class FinalSkillInstance:
     tags: frozenset[str]
     base_damage: float
     final_damage: float
+    damage_type: str
+    behavior_type: str
+    visual_effect: str
+    shape_effects: tuple[str, ...]
     base_cooldown_ms: int
     final_cooldown_ms: int
     projectile_count: int
     area_multiplier: float
     speed_multiplier: float
     applied_modifiers: tuple[AppliedModifier, ...]
+    skill_package_id: str = ""
+    skill_package_version: str = ""
+    behavior_template: str = ""
+    cast: dict[str, Any] | None = None
+    hit: dict[str, Any] | None = None
+    runtime_params: dict[str, Any] | None = None
+    presentation_keys: dict[str, str] | None = None
+    source_context: dict[str, Any] | None = None
+
+    @property
+    def uses_skill_event_pipeline(self) -> bool:
+        return bool(self.skill_package_id and self.behavior_template)
+
+
+@dataclass(frozen=True)
+class PlayerStatModifier:
+    source_instance_id: str
+    source_base_gem_id: str
+    stat: str
+    value: float
+    layer: str
+    reason_key: str
 
 
 @dataclass
@@ -85,36 +115,24 @@ class SkillEffectCalculator:
         active_instances = [
             self.board.inventory.require(instance_id)
             for instance_id in self.board.view().cells.values()
-            if self.board.inventory.require(instance_id).is_active_skill
+            if self.board.inventory.require(instance_id).gem_kind == "active_skill"
         ]
         return tuple(self.calculate_for_active(instance) for instance in active_instances)
 
     def calculate_for_active(self, active: GemInstance) -> FinalSkillInstance:
         definition = self.definitions[active.base_gem_id]
+        if active.gem_kind != "active_skill":
+            raise SkillEffectError("skill_effect.error.missing_template", "主动技能缺少技能模板")
         if definition.skill_template_id is None:
             raise SkillEffectError("skill_effect.error.missing_template", "主动技能缺少技能模板")
         template = self.skill_templates[definition.skill_template_id]
         modifiers: list[AppliedModifier] = []
         dedupe: set[tuple[str, str, str]] = set()
 
-        # 1-2. 读取主动技能基础定义并应用主动宝石自身随机词缀。
-        for roll in active.prefix_affixes + active.suffix_affixes + active.implicit_affixes:
-            self._append_affix_modifier(
-                modifiers,
-                dedupe,
-                source=active,
-                target=active,
-                roll=roll,
-                relation="self",
-                scale=1.0,
-                reason_key="modifier.active_affix",
-                active_tags=template.tags,
-            )
-
-        # 3-6. 查找可影响目标的辅助宝石，应用基础效果、随机词缀和导管放大。
+        # 第二阶段真实技能计算不读取随机词缀，只保留辅助与被动关系。
         for support, relation in self._support_sources_for(active):
             support_definition = self.definitions[support.base_gem_id]
-            if not self._gem_filter_matches(support_definition, template.tags):
+            if not self._gem_filter_matches(support_definition, definition):
                 continue
             relation_scale, conduit_modifiers = self._relation_scale(support, active, relation)
             modifiers.extend(conduit_modifiers)
@@ -131,34 +149,158 @@ class SkillEffectCalculator:
                     scale=relation_scale,
                     reason_key="modifier.support_base",
                 )
-            for roll in support.prefix_affixes + support.suffix_affixes + support.implicit_affixes:
-                self._append_affix_modifier(
-                    modifiers,
-                    dedupe,
-                    source=support,
-                    target=active,
-                    roll=roll,
-                    relation=relation,
-                    scale=relation_scale,
-                    reason_key="modifier.support_affix",
-                    active_tags=template.tags,
-                )
 
-        # 7-9. 汇总 additive/final 并输出最终技能实例。
+        self._append_passive_contributions(active, definition, modifiers, dedupe)
         return self._build_final_skill(active, template, tuple(modifiers))
 
-    def _support_sources_for(self, active: GemInstance) -> list[tuple[GemInstance, str]]:
+    def calculate_player_stat_modifiers(self) -> tuple[PlayerStatModifier, ...]:
+        validation = self.board.validate()
+        if not validation.is_valid:
+            return ()
+        modifiers: list[PlayerStatModifier] = []
+        for passive in self._passive_instances():
+            passive_definition = self.definitions[passive.base_gem_id]
+            supported_values = self._support_values_for_passive(passive, passive_definition, "self_stat", [])
+            for effect in passive_definition.passive_effects:
+                if effect.target != "self_stat":
+                    continue
+                value = effect.value + supported_values.get(effect.stat, 0.0)
+                modifiers.append(
+                    PlayerStatModifier(
+                        source_instance_id=passive.instance_id,
+                        source_base_gem_id=passive.base_gem_id,
+                        stat=effect.stat,
+                        value=value,
+                        layer=effect.layer,
+                        reason_key="modifier.self_stat_passive",
+                    )
+                )
+        return tuple(modifiers)
+
+    def apply_player_stat_contributions(self, player: object) -> tuple[PlayerStatModifier, ...]:
+        modifiers = self.calculate_player_stat_modifiers()
+        max_life_add = sum(modifier.value for modifier in modifiers if modifier.stat == "max_life")
+        move_speed_add = sum(modifier.value for modifier in modifiers if modifier.stat == "move_speed")
+
+        if max_life_add:
+            old_max = float(getattr(player, "max_life"))
+            old_current = float(getattr(player, "current_life"))
+            setattr(player, "max_life", old_max + max_life_add)
+            if old_current >= old_max:
+                setattr(player, "current_life", old_current + max_life_add)
+        if move_speed_add:
+            base_move_speed = float(getattr(player, "move_speed", 1.0))
+            setattr(player, "move_speed", base_move_speed * (1.0 + move_speed_add / 100.0))
+        return modifiers
+
+    def _support_sources_for(self, target: GemInstance) -> list[tuple[GemInstance, str]]:
         sources: list[tuple[GemInstance, str]] = []
         for instance_id in self.board.view().cells.values():
-            if instance_id == active.instance_id:
+            if instance_id == target.instance_id:
                 continue
             instance = self.board.inventory.require(instance_id)
-            if "support_gem" not in instance.tags:
+            if instance.gem_kind != "support":
                 continue
-            relation = self._effective_relation(instance.instance_id, active.instance_id)
+            if target.gem_kind == "support":
+                continue
+            relation = self._effective_relation(instance.instance_id, target.instance_id)
             if relation is not None:
                 sources.append((instance, relation))
         return sources
+
+    def _passive_instances(self) -> list[GemInstance]:
+        return [
+            self.board.inventory.require(instance_id)
+            for instance_id in self.board.view().cells.values()
+            if self.board.inventory.require(instance_id).gem_kind == "passive_skill"
+        ]
+
+    def _append_passive_contributions(
+        self,
+        active: GemInstance,
+        active_definition: GemDefinition,
+        modifiers: list[AppliedModifier],
+        dedupe: set[tuple[str, str, str]],
+    ) -> None:
+        for passive in self._passive_instances():
+            passive_definition = self.definitions[passive.base_gem_id]
+            if not self._gem_filter_matches(passive_definition, active_definition):
+                continue
+            relation = self._effective_relation(passive.instance_id, active.instance_id)
+            if relation is None:
+                continue
+            supported_values = self._support_values_for_passive(passive, passive_definition, "active_skill", modifiers, dedupe)
+            relation_scale, conduit_modifiers = self._relation_scale(passive, active, relation)
+            modifiers.extend(conduit_modifiers)
+            for effect in passive_definition.passive_effects:
+                if effect.target != "active_skill":
+                    continue
+                self._append_passive_effect_modifier(
+                    modifiers,
+                    dedupe,
+                    source=passive,
+                    target=active,
+                    effect=effect,
+                    relation=relation,
+                    scale=relation_scale,
+                    extra_value=supported_values.get(effect.stat, 0.0),
+                )
+
+    def _support_values_for_passive(
+        self,
+        passive: GemInstance,
+        passive_definition: GemDefinition,
+        target_effect_kind: str,
+        modifiers: list[AppliedModifier],
+        dedupe: set[tuple[str, str, str]] | None = None,
+    ) -> dict[str, float]:
+        supported_stats = {
+            effect.stat
+            for effect in passive_definition.passive_effects
+            if effect.target == target_effect_kind
+        }
+        values: dict[str, float] = {}
+        local_dedupe: set[tuple[str, str, str]] = set()
+        for support, relation in self._support_sources_for(passive):
+            support_definition = self.definitions[support.base_gem_id]
+            if not self._gem_filter_matches(support_definition, passive_definition):
+                continue
+            relation_scale, conduit_modifiers = self._relation_scale(support, passive, relation)
+            modifiers.extend(conduit_modifiers)
+            for base_modifier in self._support_base_modifiers(support.base_gem_id):
+                if base_modifier.stat not in supported_stats:
+                    continue
+                key = (support.instance_id, passive.instance_id, base_modifier.stat)
+                route_dedupe = dedupe if dedupe is not None else local_dedupe
+                if key in route_dedupe:
+                    self._append_ignored(
+                        modifiers,
+                        support,
+                        passive,
+                        base_modifier.stat,
+                        base_modifier.value,
+                        relation,
+                        "modifier.ignored.duplicate_source_target_stat",
+                    )
+                    continue
+                route_dedupe.add(key)
+                value = base_modifier.value * relation_scale
+                values[base_modifier.stat] = values.get(base_modifier.stat, 0.0) + value
+                modifiers.append(
+                    AppliedModifier(
+                        source_instance_id=support.instance_id,
+                        source_base_gem_id=support.base_gem_id,
+                        target_instance_id=passive.instance_id,
+                        stat=base_modifier.stat,
+                        value=value,
+                        layer=base_modifier.layer,
+                        relation=relation,
+                        reason_key="modifier.support_to_passive",
+                        applied=True,
+                        target_base_gem_id=passive.base_gem_id,
+                    )
+                )
+        return values
 
     def _effective_relation(self, source_id: str, target_id: str) -> str | None:
         relations = [
@@ -187,11 +329,7 @@ class SkillEffectCalculator:
         return relation_coefficient * source_power * target_power * conduit_multiplier, conduit_modifiers
 
     def _board_power(self, instance: GemInstance, stat: str) -> float:
-        total = 0.0
-        for roll in instance.prefix_affixes + instance.suffix_affixes + instance.implicit_affixes:
-            if roll.stat == stat:
-                total += float(roll.value)
-        return 1.0 + total / 100.0
+        return 1.0
 
     def _conduit_multiplier(
         self,
@@ -216,6 +354,7 @@ class SkillEffectCalculator:
                     relation=relation,
                     reason_key="modifier.conduit_amplifier",
                     applied=True,
+                    target_base_gem_id=target.base_gem_id,
                 )
             )
         return multiplier, modifiers
@@ -303,6 +442,7 @@ class SkillEffectCalculator:
             return
         dedupe.add(key)
         value = raw_value * scale
+        source_definition = self.definitions.get(source.base_gem_id)
         modifiers.append(
             AppliedModifier(
                 source_instance_id=source.instance_id,
@@ -313,7 +453,34 @@ class SkillEffectCalculator:
                 layer=layer,
                 relation=relation,
                 reason_key=reason_key,
+                target_base_gem_id=target.base_gem_id,
+                shape_effect=source_definition.shape_effect if source_definition is not None else "",
             )
+        )
+
+    def _append_passive_effect_modifier(
+        self,
+        modifiers: list[AppliedModifier],
+        dedupe: set[tuple[str, str, str]],
+        *,
+        source: GemInstance,
+        target: GemInstance,
+        effect: PassiveEffect,
+        relation: str,
+        scale: float,
+        extra_value: float,
+    ) -> None:
+        self._append_raw_modifier(
+            modifiers,
+            dedupe,
+            source=source,
+            target=target,
+            stat=effect.stat,
+            raw_value=effect.value + extra_value,
+            layer=effect.layer,
+            relation=relation,
+            scale=scale,
+            reason_key="modifier.passive_base",
         )
 
     def _append_ignored(
@@ -337,15 +504,19 @@ class SkillEffectCalculator:
                 relation=relation,
                 reason_key=reason_key,
                 applied=False,
+                target_base_gem_id=target.base_gem_id,
             )
         )
 
-    def _gem_filter_matches(self, definition: GemDefinition, active_tags: frozenset[str]) -> bool:
-        if definition.apply_filter_tags_any and not (definition.apply_filter_tags_any & active_tags):
+    def _gem_filter_matches(self, definition: GemDefinition, target_definition: GemDefinition) -> bool:
+        if definition.apply_filter_target_kinds and target_definition.gem_kind not in definition.apply_filter_target_kinds:
             return False
-        if definition.apply_filter_tags_all and not definition.apply_filter_tags_all.issubset(active_tags):
+        target_tags = target_definition.tags
+        if definition.apply_filter_tags_any and not (definition.apply_filter_tags_any & target_tags):
             return False
-        if definition.apply_filter_tags_none and definition.apply_filter_tags_none & active_tags:
+        if definition.apply_filter_tags_all and not definition.apply_filter_tags_all.issubset(target_tags):
+            return False
+        if definition.apply_filter_tags_none and definition.apply_filter_tags_none & target_tags:
             return False
         return True
 
@@ -358,6 +529,10 @@ class SkillEffectCalculator:
         applied = [modifier for modifier in modifiers if modifier.applied]
         additive = self._sum_by_stat(applied, "additive")
         final = [modifier for modifier in applied if modifier.layer == "final"]
+        shape_effects = tuple(
+            dict.fromkeys(modifier.shape_effect for modifier in applied if modifier.shape_effect)
+        )
+        active_definition = self.definitions[active.base_gem_id]
 
         damage_add = additive.get("damage_add_percent", 0.0)
         for damage_stat, tag in [
@@ -387,6 +562,15 @@ class SkillEffectCalculator:
         cooldown *= max(0.0, 1.0 - additive.get("cooldown_reduction_percent", 0.0) / 100.0)
         if speed_multiplier > 0:
             cooldown /= speed_multiplier
+        runtime_params = dict(template.runtime_params)
+        if "projectile_speed" in runtime_params:
+            runtime_params["projectile_speed"] = float(runtime_params["projectile_speed"]) * speed_multiplier
+        base_projectile_count = int(runtime_params.get("projectile_count", 1))
+        runtime_params["projectile_count"] = max(
+            1,
+            base_projectile_count + round(additive.get("projectile_count_add", 0.0)),
+        )
+        runtime_params["max_targets"] = max(1, int(runtime_params.get("max_targets", 1)))
 
         return FinalSkillInstance(
             active_gem_instance_id=active.instance_id,
@@ -395,12 +579,29 @@ class SkillEffectCalculator:
             tags=template.tags,
             base_damage=template.base_damage,
             final_damage=final_damage,
+            damage_type=template.damage_type,
+            behavior_type=template.behavior_type,
+            visual_effect=active_definition.visual_effect or template.visual_effect or template.behavior_type,
+            shape_effects=shape_effects,
             base_cooldown_ms=template.base_cooldown_ms,
             final_cooldown_ms=max(0, round(cooldown)),
-            projectile_count=max(1, 1 + round(additive.get("projectile_count_add", 0.0))),
+            projectile_count=int(runtime_params["projectile_count"]),
             area_multiplier=1.0 + additive.get("area_add_percent", 0.0) / 100.0,
             speed_multiplier=speed_multiplier,
             applied_modifiers=modifiers,
+            skill_package_id=template.skill_package_id,
+            skill_package_version=template.skill_package_version,
+            behavior_template=template.behavior_template,
+            cast=dict(template.cast),
+            hit=dict(template.hit),
+            runtime_params=runtime_params,
+            presentation_keys=dict(template.presentation_keys),
+            source_context={
+                "active_gem_instance_id": active.instance_id,
+                "base_gem_id": active.base_gem_id,
+                "gem_kind": active.gem_kind,
+                "sudoku_digit": active.sudoku_digit,
+            },
         )
 
     def _sum_by_stat(self, modifiers: list[AppliedModifier], layer: str) -> dict[str, float]:

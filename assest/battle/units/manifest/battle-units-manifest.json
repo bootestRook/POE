@@ -1,0 +1,47 @@
+{
+  "atlas": "/assest/battle/units/atlas/battle-units-atlas.png",
+  "frames": [
+    {
+      "id": "player_adventurer_idle_down",
+      "unitType": "player_adventurer",
+      "direction": "down",
+      "x": 10,
+      "y": 10,
+      "width": 53,
+      "height": 92,
+      "anchorX": 0.5,
+      "anchorY": 0.967,
+      "src": "/assest/battle/units/cropped/player_adventurer_idle_down.png",
+      "recommendedRenderWidth": 53,
+      "recommendedRenderHeight": 92
+    },
+    {
+      "id": "enemy_imp_idle_down",
+      "unitType": "enemy_imp",
+      "direction": "down",
+      "x": 73,
+      "y": 10,
+      "width": 65,
+      "height": 78,
+      "anchorX": 0.5,
+      "anchorY": 0.949,
+      "src": "/assest/battle/units/cropped/enemy_imp_idle_down.png",
+      "recommendedRenderWidth": 65,
+      "recommendedRenderHeight": 78
+    },
+    {
+      "id": "enemy_brute_idle_down",
+      "unitType": "enemy_brute",
+      "direction": "down",
+      "x": 148,
+      "y": 10,
+      "width": 98,
+      "height": 116,
+      "anchorX": 0.5,
+      "anchorY": 0.974,
+      "src": "/assest/battle/units/cropped/enemy_brute_idle_down.png",
+      "recommendedRenderWidth": 98,
+      "recommendedRenderHeight": 116
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 [drop_pool.gem_basic]
 entries = [
   { tag = "active_skill_gem", weight = 300 },
-  { tag = "support_gem", weight = 700 },
+  { tag = "passive_skill_gem", weight = 200 },
+  { tag = "support_gem", weight = 500 },
 ]
 
 [drop_pool.active_skill_gems]
@@ -23,4 +24,12 @@ entries = [
   { tag = "gem_type_5", weight = 250 },
   { tag = "gem_type_8", weight = 100 },
   { tag = "gem_type_9", weight = 150 },
+  { tag = "support_shape", weight = 250 },
+]
+
+[drop_pool.passive_skill_gems]
+entries = [
+  { id = "passive_fire_focus", weight = 120 },
+  { id = "passive_vitality", weight = 100 },
+  { id = "passive_swift_gathering", weight = 100 },
 ]

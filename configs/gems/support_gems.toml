@@ -4,7 +4,10 @@ name_key = "gem.support_fast_attack.name"
 description_key = "gem.support_fast_attack.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_speed"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack"]
 effect_stats = ["attack_speed_add_percent"]
 
@@ -14,7 +17,10 @@ name_key = "gem.support_fast_cast.name"
 description_key = "gem.support_fast_cast.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_speed"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["spell"]
 effect_stats = ["cast_speed_add_percent"]
 
@@ -24,7 +30,10 @@ name_key = "gem.support_skill_haste.name"
 description_key = "gem.support_skill_haste.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_speed"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell", "summon"]
 effect_stats = ["skill_speed_final_percent"]
 
@@ -34,7 +43,10 @@ name_key = "gem.support_cooldown_focus.name"
 description_key = "gem.support_cooldown_focus.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_cooldown"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell", "summon"]
 effect_stats = ["cooldown_reduction_percent", "damage_final_percent"]
 
@@ -44,7 +56,10 @@ name_key = "gem.support_heavy_impact.name"
 description_key = "gem.support_heavy_impact.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_damage", "support_cooldown"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell", "summon"]
 effect_stats = ["damage_final_percent", "added_cooldown_ms"]
 
@@ -54,7 +69,10 @@ name_key = "gem.support_wide_effect.name"
 description_key = "gem.support_wide_effect.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_area", "support_cooldown"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["area", "nova"]
 effect_stats = ["area_add_percent", "added_cooldown_ms"]
 
@@ -64,7 +82,10 @@ name_key = "gem.support_stable_output.name"
 description_key = "gem.support_stable_output.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_damage", "support_crit"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell", "summon"]
 effect_stats = ["damage_final_percent", "crit_chance_add_percent"]
 
@@ -74,7 +95,10 @@ name_key = "gem.support_precision.name"
 description_key = "gem.support_precision.description"
 category = "general_skill_modifier"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_crit"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "projectile"]
 effect_stats = ["crit_chance_add_percent", "projectile_speed_add_percent"]
 
@@ -84,7 +108,10 @@ name_key = "gem.support_physical_mastery.name"
 description_key = "gem.support_physical_mastery.description"
 category = "damage_type_enhancer"
 gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
 tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_damage", "physical"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["physical"]
 effect_stats = ["physical_damage_add_percent"]
 
@@ -94,7 +121,10 @@ name_key = "gem.support_fire_mastery.name"
 description_key = "gem.support_fire_mastery.description"
 category = "damage_type_enhancer"
 gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
 tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_damage", "fire"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["fire"]
 effect_stats = ["fire_damage_add_percent"]
 
@@ -104,7 +134,10 @@ name_key = "gem.support_cold_mastery.name"
 description_key = "gem.support_cold_mastery.description"
 category = "damage_type_enhancer"
 gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
 tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_damage", "cold"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["cold"]
 effect_stats = ["cold_damage_add_percent"]
 
@@ -114,7 +147,10 @@ name_key = "gem.support_lightning_mastery.name"
 description_key = "gem.support_lightning_mastery.description"
 category = "damage_type_enhancer"
 gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
 tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_damage", "lightning"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["lightning"]
 effect_stats = ["lightning_damage_add_percent"]
 
@@ -124,7 +160,10 @@ name_key = "gem.support_extra_projectile.name"
 description_key = "gem.support_extra_projectile.description"
 category = "projectile_area_specialist"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_projectile"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["projectile"]
 effect_stats = ["projectile_count_add", "damage_final_percent"]
 
@@ -134,7 +173,10 @@ name_key = "gem.support_shotgun.name"
 description_key = "gem.support_shotgun.description"
 category = "projectile_area_specialist"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_projectile"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["projectile"]
 effect_stats = ["projectile_count_add", "projectile_speed_add_percent"]
 
@@ -144,7 +186,10 @@ name_key = "gem.support_projectile_speed.name"
 description_key = "gem.support_projectile_speed.description"
 category = "projectile_area_specialist"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_projectile"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["projectile"]
 effect_stats = ["projectile_speed_add_percent"]
 
@@ -154,7 +199,10 @@ name_key = "gem.support_area_magnify.name"
 description_key = "gem.support_area_magnify.description"
 category = "projectile_area_specialist"
 gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
 tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_area"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["area", "nova"]
 effect_stats = ["area_add_percent", "skill_speed_final_percent"]
 
@@ -164,7 +212,10 @@ name_key = "gem.support_overcharge.name"
 description_key = "gem.support_overcharge.description"
 category = "risk_reward"
 gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
 tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_damage", "support_cooldown"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell", "summon"]
 effect_stats = ["damage_final_percent", "added_cooldown_ms"]
 
@@ -174,7 +225,10 @@ name_key = "gem.support_overkill.name"
 description_key = "gem.support_overkill.description"
 category = "risk_reward"
 gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
 tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_damage", "support_speed"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell", "summon"]
 effect_stats = ["damage_add_percent", "skill_speed_final_percent"]
 
@@ -184,7 +238,10 @@ name_key = "gem.support_critical_burst.name"
 description_key = "gem.support_critical_burst.description"
 category = "risk_reward"
 gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
 tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_crit"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "projectile", "spell"]
 effect_stats = ["crit_damage_add_percent", "crit_chance_add_percent"]
 
@@ -194,7 +251,10 @@ name_key = "gem.support_elemental_level.name"
 description_key = "gem.support_elemental_level.description"
 category = "skill_level"
 gem_type = "gem_type_8"
+gem_kind = "support"
+sudoku_digit = 8
 tags = ["gem", "support_gem", "loot_gem", "gem_type_8", "support_level"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["fire", "cold", "lightning"]
 effect_stats = ["damage_add_percent"]
 
@@ -204,7 +264,10 @@ name_key = "gem.support_attack_spell_level.name"
 description_key = "gem.support_attack_spell_level.description"
 category = "skill_level"
 gem_type = "gem_type_8"
+gem_kind = "support"
+sudoku_digit = 8
 tags = ["gem", "support_gem", "loot_gem", "gem_type_8", "support_level"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
 apply_filter.tags_any = ["attack", "spell"]
 effect_stats = ["damage_add_percent"]
 
@@ -214,8 +277,11 @@ name_key = "gem.support_row_conduit.name"
 description_key = "gem.support_row_conduit.description"
 category = "board_conduit"
 gem_type = "gem_type_9"
+gem_kind = "support"
+sudoku_digit = 9
 tags = ["gem", "support_gem", "loot_gem", "gem_type_9", "support_relation", "support_conduit"]
-apply_filter.tags_any = ["active_skill_gem"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
+apply_filter.tags_any = ["active_skill_gem", "passive_skill_gem"]
 effect_stats = ["source_power_row", "target_power_row"]
 
 [[support_gems]]
@@ -224,8 +290,11 @@ name_key = "gem.support_column_conduit.name"
 description_key = "gem.support_column_conduit.description"
 category = "board_conduit"
 gem_type = "gem_type_9"
+gem_kind = "support"
+sudoku_digit = 9
 tags = ["gem", "support_gem", "loot_gem", "gem_type_9", "support_relation", "support_conduit"]
-apply_filter.tags_any = ["active_skill_gem"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
+apply_filter.tags_any = ["active_skill_gem", "passive_skill_gem"]
 effect_stats = ["source_power_column", "target_power_column"]
 
 [[support_gems]]
@@ -234,6 +303,569 @@ name_key = "gem.support_box_conduit.name"
 description_key = "gem.support_box_conduit.description"
 category = "board_conduit"
 gem_type = "gem_type_9"
+gem_kind = "support"
+sudoku_digit = 9
 tags = ["gem", "support_gem", "loot_gem", "gem_type_9", "support_relation", "support_conduit"]
-apply_filter.tags_any = ["active_skill_gem"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
+apply_filter.tags_any = ["active_skill_gem", "passive_skill_gem"]
 effect_stats = ["source_power_box", "target_power_box"]
+
+[[support_gems]]
+id = "support_fire_bolt_fork"
+name_key = "gem.support_fire_bolt_fork.name"
+description_key = "gem.support_fire_bolt_fork.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "fire_bolt_fork"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fire_bolt"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fire_bolt_nova"
+name_key = "gem.support_fire_bolt_nova.name"
+description_key = "gem.support_fire_bolt_nova.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "fire_bolt_nova"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fire_bolt"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fire_bolt_rain"
+name_key = "gem.support_fire_bolt_rain.name"
+description_key = "gem.support_fire_bolt_rain.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "fire_bolt_rain"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fire_bolt"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fire_bolt_lance"
+name_key = "gem.support_fire_bolt_lance.name"
+description_key = "gem.support_fire_bolt_lance.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "fire_bolt_lance"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fire_bolt"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fire_bolt_orbit"
+name_key = "gem.support_fire_bolt_orbit.name"
+description_key = "gem.support_fire_bolt_orbit.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "fire_bolt_orbit"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fire_bolt"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_ice_shards_fan"
+name_key = "gem.support_ice_shards_fan.name"
+description_key = "gem.support_ice_shards_fan.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "ice_shards_fan"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_ice_shards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_ice_shards_storm"
+name_key = "gem.support_ice_shards_storm.name"
+description_key = "gem.support_ice_shards_storm.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "ice_shards_storm"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_ice_shards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_ice_shards_mirror"
+name_key = "gem.support_ice_shards_mirror.name"
+description_key = "gem.support_ice_shards_mirror.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "ice_shards_mirror"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_ice_shards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_ice_shards_wall"
+name_key = "gem.support_ice_shards_wall.name"
+description_key = "gem.support_ice_shards_wall.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "ice_shards_wall"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_ice_shards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_ice_shards_freeze_burst"
+name_key = "gem.support_ice_shards_freeze_burst.name"
+description_key = "gem.support_ice_shards_freeze_burst.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "ice_shards_freeze_burst"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_ice_shards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lightning_chain_fork"
+name_key = "gem.support_lightning_chain_fork.name"
+description_key = "gem.support_lightning_chain_fork.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "lightning_chain_fork"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lightning_chain"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lightning_chain_storm"
+name_key = "gem.support_lightning_chain_storm.name"
+description_key = "gem.support_lightning_chain_storm.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "lightning_chain_storm"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lightning_chain"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lightning_chain_ball"
+name_key = "gem.support_lightning_chain_ball.name"
+description_key = "gem.support_lightning_chain_ball.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "lightning_chain_ball"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lightning_chain"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lightning_chain_nova"
+name_key = "gem.support_lightning_chain_nova.name"
+description_key = "gem.support_lightning_chain_nova.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "lightning_chain_nova"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lightning_chain"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lightning_chain_beam"
+name_key = "gem.support_lightning_chain_beam.name"
+description_key = "gem.support_lightning_chain_beam.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "lightning_chain_beam"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lightning_chain"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_frost_nova_double_ring"
+name_key = "gem.support_frost_nova_double_ring.name"
+description_key = "gem.support_frost_nova_double_ring.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "frost_nova_double_ring"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_frost_nova"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_frost_nova_mist"
+name_key = "gem.support_frost_nova_mist.name"
+description_key = "gem.support_frost_nova_mist.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "frost_nova_mist"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_frost_nova"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_frost_nova_spikes"
+name_key = "gem.support_frost_nova_spikes.name"
+description_key = "gem.support_frost_nova_spikes.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "frost_nova_spikes"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_frost_nova"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_frost_nova_pulse"
+name_key = "gem.support_frost_nova_pulse.name"
+description_key = "gem.support_frost_nova_pulse.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "frost_nova_pulse"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_frost_nova"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_frost_nova_glacier"
+name_key = "gem.support_frost_nova_glacier.name"
+description_key = "gem.support_frost_nova_glacier.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "frost_nova_glacier"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_frost_nova"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_puncture_arc"
+name_key = "gem.support_puncture_arc.name"
+description_key = "gem.support_puncture_arc.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "puncture_arc"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_puncture"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_puncture_dash"
+name_key = "gem.support_puncture_dash.name"
+description_key = "gem.support_puncture_dash.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "puncture_dash"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_puncture"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_puncture_spin"
+name_key = "gem.support_puncture_spin.name"
+description_key = "gem.support_puncture_spin.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "puncture_spin"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_puncture"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_puncture_bleed_burst"
+name_key = "gem.support_puncture_bleed_burst.name"
+description_key = "gem.support_puncture_bleed_burst.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "puncture_bleed_burst"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_puncture"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_puncture_shadow_combo"
+name_key = "gem.support_puncture_shadow_combo.name"
+description_key = "gem.support_puncture_shadow_combo.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "puncture_shadow_combo"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_puncture"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_penetrating_shot_multi"
+name_key = "gem.support_penetrating_shot_multi.name"
+description_key = "gem.support_penetrating_shot_multi.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "penetrating_shot_multi"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_penetrating_shot"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_penetrating_shot_blast"
+name_key = "gem.support_penetrating_shot_blast.name"
+description_key = "gem.support_penetrating_shot_blast.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "penetrating_shot_blast"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_penetrating_shot"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_penetrating_shot_ricochet"
+name_key = "gem.support_penetrating_shot_ricochet.name"
+description_key = "gem.support_penetrating_shot_ricochet.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "penetrating_shot_ricochet"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_penetrating_shot"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_penetrating_shot_chain"
+name_key = "gem.support_penetrating_shot_chain.name"
+description_key = "gem.support_penetrating_shot_chain.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "penetrating_shot_chain"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_penetrating_shot"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_penetrating_shot_fan"
+name_key = "gem.support_penetrating_shot_fan.name"
+description_key = "gem.support_penetrating_shot_fan.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "penetrating_shot_fan"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_penetrating_shot"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lava_orb_double"
+name_key = "gem.support_lava_orb_double.name"
+description_key = "gem.support_lava_orb_double.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "lava_orb_double"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lava_orb"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lava_orb_volcano"
+name_key = "gem.support_lava_orb_volcano.name"
+description_key = "gem.support_lava_orb_volcano.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "lava_orb_volcano"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lava_orb"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lava_orb_nova"
+name_key = "gem.support_lava_orb_nova.name"
+description_key = "gem.support_lava_orb_nova.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "lava_orb_nova"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lava_orb"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lava_orb_trail"
+name_key = "gem.support_lava_orb_trail.name"
+description_key = "gem.support_lava_orb_trail.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "lava_orb_trail"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lava_orb"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_lava_orb_gravity"
+name_key = "gem.support_lava_orb_gravity.name"
+description_key = "gem.support_lava_orb_gravity.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "lava_orb_gravity"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_lava_orb"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fungal_petards_cloud"
+name_key = "gem.support_fungal_petards_cloud.name"
+description_key = "gem.support_fungal_petards_cloud.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_2"
+gem_kind = "support"
+sudoku_digit = 2
+shape_effect = "fungal_petards_cloud"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_2", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fungal_petards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fungal_petards_cluster"
+name_key = "gem.support_fungal_petards_cluster.name"
+description_key = "gem.support_fungal_petards_cluster.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_3"
+gem_kind = "support"
+sudoku_digit = 3
+shape_effect = "fungal_petards_cluster"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_3", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fungal_petards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fungal_petards_chain_burst"
+name_key = "gem.support_fungal_petards_chain_burst.name"
+description_key = "gem.support_fungal_petards_chain_burst.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_4"
+gem_kind = "support"
+sudoku_digit = 4
+shape_effect = "fungal_petards_chain_burst"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_4", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fungal_petards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fungal_petards_decoy"
+name_key = "gem.support_fungal_petards_decoy.name"
+description_key = "gem.support_fungal_petards_decoy.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_5"
+gem_kind = "support"
+sudoku_digit = 5
+shape_effect = "fungal_petards_decoy"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_5", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fungal_petards"]
+effect_stats = ["damage_add_percent"]
+
+[[support_gems]]
+id = "support_fungal_petards_shock_spore"
+name_key = "gem.support_fungal_petards_shock_spore.name"
+description_key = "gem.support_fungal_petards_shock_spore.description"
+category = "skill_shape_modifier"
+gem_type = "gem_type_6"
+gem_kind = "support"
+sudoku_digit = 6
+shape_effect = "fungal_petards_shock_spore"
+tags = ["gem", "support_gem", "loot_gem", "gem_type_6", "support_shape"]
+apply_filter.target_kinds = ["active_skill"]
+apply_filter.tags_all = ["skill_fungal_petards"]
+effect_stats = ["damage_add_percent"]

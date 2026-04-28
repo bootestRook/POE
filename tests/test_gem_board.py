@@ -26,11 +26,14 @@ class SudokuGemBoardTest(unittest.TestCase):
     def add_as_type(self, instance_id: str, base_gem_id: str, gem_type: str) -> None:
         definition = self.definitions[base_gem_id]
         tags = frozenset(tag for tag in definition.tags if not tag.startswith("gem_type_")) | {gem_type}
+        sudoku_digit = int(gem_type.rsplit("_", 1)[-1])
         self.inventory.add_existing_instance(
             GemInstance(
                 instance_id=instance_id,
                 base_gem_id=base_gem_id,
                 gem_type=gem_type,
+                gem_kind=definition.gem_kind,
+                sudoku_digit=sudoku_digit,
                 tags=tags,
             )
         )
@@ -60,7 +63,7 @@ class SudokuGemBoardTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "多个格子"):
             self.board.mount_gem("gem_1", 0, 1)
 
-    def test_duplicate_gem_type_in_row_column_and_box_is_reported(self) -> None:
+    def test_duplicate_sudoku_digit_in_row_column_and_box_is_reported(self) -> None:
         self.add("active", "active_fire_bolt")
         self.add("support_a", "support_fast_attack")
         self.add("support_b", "support_fast_cast")
@@ -73,8 +76,8 @@ class SudokuGemBoardTest(unittest.TestCase):
 
         validation = self.board.validate()
         keys = {issue.error_key for issue in validation.issues}
-        self.assertIn("board.duplicate_gem_type.row", keys)
-        self.assertIn("board.duplicate_gem_type.box", keys)
+        self.assertIn("board.duplicate_sudoku_digit.row", keys)
+        self.assertIn("board.duplicate_sudoku_digit.box", keys)
         self.assertFalse(validation.is_valid)
 
     def test_column_duplicate_is_reported(self) -> None:
@@ -88,9 +91,9 @@ class SudokuGemBoardTest(unittest.TestCase):
 
         validation = self.board.validate()
         keys = {issue.error_key for issue in validation.issues}
-        self.assertIn("board.duplicate_gem_type.column", keys)
+        self.assertIn("board.duplicate_sudoku_digit.column", keys)
 
-    def test_different_gem_types_use_distinct_color_groups(self) -> None:
+    def test_different_sudoku_digits_do_not_conflict(self) -> None:
         self.add_as_type("type_6", "support_lightning_mastery", "gem_type_6")
         self.add_as_type("type_8", "support_elemental_level", "gem_type_8")
         self.add_as_type("type_7", "support_wide_effect", "gem_type_7")
@@ -103,9 +106,30 @@ class SudokuGemBoardTest(unittest.TestCase):
 
         validation = self.board.validate()
         duplicate_keys = {issue.error_key for issue in validation.issues}
-        self.assertNotIn("board.duplicate_gem_type.row", duplicate_keys)
-        self.assertNotIn("board.duplicate_gem_type.column", duplicate_keys)
-        self.assertNotIn("board.duplicate_gem_type.box", duplicate_keys)
+        self.assertNotIn("board.duplicate_sudoku_digit.row", duplicate_keys)
+        self.assertNotIn("board.duplicate_sudoku_digit.column", duplicate_keys)
+        self.assertNotIn("board.duplicate_sudoku_digit.box", duplicate_keys)
+
+    def test_same_gem_kind_different_sudoku_digit_does_not_conflict(self) -> None:
+        self.add("support_a", "support_fast_attack")
+        self.add("support_b", "support_overcharge")
+
+        self.board.mount_gem("support_a", 0, 0)
+        self.board.mount_gem("support_b", 0, 3)
+
+        validation = self.board.validate()
+        self.assertTrue(validation.is_valid)
+
+    def test_different_gem_kind_same_sudoku_digit_conflicts(self) -> None:
+        self.add("active", "active_fire_bolt")
+        self.add_as_type("passive", "passive_vitality", "gem_type_1")
+
+        self.board.mount_gem("active", 0, 0)
+        self.board.mount_gem("passive", 0, 3)
+
+        validation = self.board.validate()
+        keys = {issue.error_key for issue in validation.issues}
+        self.assertIn("board.duplicate_sudoku_digit.row", keys)
 
     def test_relations_and_highlights_include_row_column_box_and_adjacent(self) -> None:
         self.add("active_a", "active_fire_bolt")

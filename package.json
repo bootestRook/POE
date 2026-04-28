@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "python tools\\dev_webapp.py",
+    "dev:vite": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "python tools\\webapp_server.py --open",
     "test": "node webapp\\smoke-test.mjs"
