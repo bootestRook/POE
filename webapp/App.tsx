@@ -23,8 +23,10 @@ type TooltipView = {
     description: { title_text: string; lines: string[] };
     stats: { title_text: string; lines: TooltipStatLine[] };
     random_affixes?: { title_text: string; lines: TooltipAffixLine[]; empty_text: string };
-    current_targets: { title_text: string; lines: TooltipTargetLine[] };
-    rules: { title_text: string; lines: string[] };
+    recent_dps?: { title_text: string; lines: TooltipStatLine[] };
+    bonuses?: { title_text: string; lines: string[] };
+    current_targets?: { title_text: string; lines: TooltipTargetLine[] };
+    rules?: { title_text: string; lines: string[] };
   };
 };
 
@@ -864,11 +866,12 @@ function getBoardTooltipPosition(anchor: HTMLElement): Omit<Tooltip, "gem"> {
   const board = anchor.closest(".board-grid") as HTMLElement | null;
   const cellRect = (cell ?? anchor).getBoundingClientRect();
   const boardRect = (board ?? anchor).getBoundingClientRect();
+  const centerTop = clampTooltipTop(cellRect.top + cellRect.height / 2);
 
   return {
     left: clampTooltipLeft(boardRect.left - 5 - TOOLTIP_WIDTH),
-    top: clampTooltipTop(cellRect.top + cellRect.height / 2),
-    transform: "translateY(-50%)"
+    top: centerTop,
+    transform: `translateY(max(-50%, ${boardRect.top - centerTop}px))`
   };
 }
 
@@ -1065,21 +1068,38 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
           <p>{view.subtitle_text}</p>
         </div>
       </div>
-      <p className="tooltip-identity">{view.type_identity_text}</p>
+      {view.type_identity_text && <p className="tooltip-identity">{view.type_identity_text}</p>}
       <div className="tooltip-tag-list">{view.tags.map((tag) => <TooltipTag key={`${tag.id ?? tag.text}-${tag.text}`} tag={tag} />)}</div>
       <TooltipSection title={sections.description.title_text}>
         {sections.description.lines.map((line) => <p key={line}>{line}</p>)}
       </TooltipSection>
-      <TooltipSection title={sections.stats.title_text}>
+      {sections.stats.lines.length > 0 && <TooltipSection title={sections.stats.title_text}>
         <dl className="tooltip-stat-list">
           {sections.stats.lines.map((line) => (
             <div key={`${line.label_text}-${line.value_text}`} className="tooltip-stat-line">
-              <dt>{line.label_text}</dt>
+              <dt>{line.label_text}：</dt>
               <dd>{line.value_text}</dd>
             </div>
           ))}
         </dl>
-      </TooltipSection>
+      </TooltipSection>}
+      {sections.recent_dps && sections.recent_dps.lines.length > 0 && (
+        <TooltipSection title={sections.recent_dps.title_text}>
+          <dl className="tooltip-stat-list">
+            {sections.recent_dps.lines.map((line) => (
+              <div key={`${line.label_text}-${line.value_text}`} className="tooltip-stat-line">
+                <dt>{line.label_text}：</dt>
+                <dd>{line.value_text}</dd>
+              </div>
+            ))}
+          </dl>
+        </TooltipSection>
+      )}
+      {sections.bonuses && sections.bonuses.lines.length > 0 && (
+        <TooltipSection title={sections.bonuses.title_text}>
+          {sections.bonuses.lines.map((line, index) => <p key={`${index}-${line}`} className="tooltip-bonus-line">{line}</p>)}
+        </TooltipSection>
+      )}
       {sections.random_affixes && sections.random_affixes.lines.length > 0 && (
         <TooltipSection title={sections.random_affixes.title_text}>
           {sections.random_affixes.lines.map((line) => (
@@ -1090,17 +1110,17 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
           ))}
         </TooltipSection>
       )}
-      <TooltipSection title={sections.current_targets.title_text}>
+      {sections.current_targets && sections.current_targets.lines.length > 0 && <TooltipSection title={sections.current_targets.title_text}>
         {sections.current_targets.lines.map((line) => (
           <p key={`${line.name_text}-${line.status_text}`} className="tooltip-target-line">
             <span>{line.name_text}</span>
             <strong>{line.status_text}</strong>
           </p>
         ))}
-      </TooltipSection>
-      <TooltipSection title={sections.rules.title_text}>
+      </TooltipSection>}
+      {sections.rules && sections.rules.lines.length > 0 && <TooltipSection title={sections.rules.title_text}>
         {sections.rules.lines.map((line) => <p key={line}>{line}</p>)}
-      </TooltipSection>
+      </TooltipSection>}
     </div>
   );
 }
@@ -1113,10 +1133,9 @@ function TooltipTag({ tag }: { tag: TooltipTagView }) {
   return <span className={`tooltip-tag ${tag.tone ? `tooltip-tag-${tag.tone}` : ""}`}>{tag.text}</span>;
 }
 
-function TooltipSection({ title, children }: { title: string; children: ReactNode }) {
+function TooltipSection({ children }: { title: string; children: ReactNode }) {
   return (
     <section className="tooltip-section">
-      <h4>{title}</h4>
       <div className="tooltip-section-content">{children}</div>
     </section>
   );

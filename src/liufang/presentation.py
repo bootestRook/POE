@@ -267,6 +267,9 @@ class PresentationService:
             (skill for skill in final_skills if skill.active_gem_instance_id == instance.instance_id),
             None,
         )
+        if instance.is_active_skill:
+            return self._active_skill_tooltip_view(instance, detail, final_skill)
+
         tags = self._unique_tooltip_tags(
             [
                 {"id": "category", "text": detail["category_text"], "tone": "category"},
@@ -300,6 +303,42 @@ class PresentationService:
             },
         }
 
+    def _active_skill_tooltip_view(
+        self,
+        instance: GemInstance,
+        detail: dict[str, Any],
+        final_skill: FinalSkillInstance | None,
+    ) -> dict[str, Any]:
+        tags = self._active_tooltip_tags(detail["tags"])
+        sections: dict[str, Any] = {
+            "description": {
+                "title_text": self.localizer.text("ui.tooltip.section.description"),
+                "lines": [detail["description_text"]],
+            },
+            "stats": {
+                "title_text": self.localizer.text("ui.tooltip.section.stats"),
+                "lines": self._active_tooltip_stat_lines(instance, detail, final_skill),
+            },
+            "recent_dps": {
+                "title_text": self.localizer.text("ui.tooltip.section.recent_dps"),
+                "lines": self._active_tooltip_dps_lines(final_skill),
+            },
+        }
+        bonus_lines = self._active_tooltip_bonus_lines(final_skill)
+        if bonus_lines:
+            sections["bonuses"] = {
+                "title_text": self.localizer.text("ui.tooltip.section.current_bonus"),
+                "lines": bonus_lines,
+            }
+        return {
+            "icon_text": detail["name_text"][:1],
+            "name_text": detail["name_text"],
+            "subtitle_text": "、".join(tag["text"] for tag in tags),
+            "type_identity_text": "",
+            "tags": tags,
+            "sections": sections,
+        }
+
     def _unique_tooltip_tags(self, tags: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen: set[str] = set()
         result: list[dict[str, Any]] = []
@@ -310,6 +349,188 @@ class PresentationService:
             seen.add(text)
             result.append(tag)
         return result
+
+    def _active_tooltip_tags(self, tags: list[dict[str, str]]) -> list[dict[str, str]]:
+        hidden = {"active_skill_gem", "loot_gem"}
+        visible = [
+            tag
+            for tag in tags
+            if tag["id"] not in hidden and not tag["id"].startswith("gem_type_")
+        ]
+        order = {
+            tag_id: index
+            for index, tag_id in enumerate(
+                [
+                    "gem",
+                    "bow",
+                    "melee",
+                    "ranged",
+                    "attack",
+                    "spell",
+                    "summon",
+                    "physical",
+                    "fire",
+                    "cold",
+                    "lightning",
+                    "projectile",
+                    "area",
+                    "chain",
+                    "pierce",
+                    "orbit",
+                    "nova",
+                    "dot",
+                    "trap_or_mine",
+                ]
+            )
+        }
+        return self._unique_tooltip_tags(sorted(visible, key=lambda tag: order.get(tag["id"], 999)))
+
+    def _active_tooltip_stat_lines(
+        self,
+        instance: GemInstance,
+        detail: dict[str, Any],
+        final_skill: FinalSkillInstance | None,
+    ) -> list[dict[str, str]]:
+        lines = self._non_empty_stat_lines(
+            [
+                {
+                    "label_text": self.localizer.text("ui.tooltip.level"),
+                    "value_text": str(instance.level),
+                }
+                if instance.level
+                else None
+            ]
+        )
+        base_effect = detail["base_effect"]
+        if "base_damage" not in base_effect:
+            return lines
+
+        tags = final_skill.tags if final_skill is not None else frozenset(tag["id"] for tag in detail["tags"])
+        base_damage = float(base_effect["base_damage"])
+        damage = final_skill.final_damage if final_skill is not None else base_damage
+        damage_delta = damage - base_damage
+        lines.extend(
+            self._non_empty_stat_lines(
+                [
+                    {
+                        "label_text": self._active_damage_label(tags),
+                        "value_text": self._format_with_delta(damage, damage_delta),
+                    },
+                    self._cooldown_line(base_effect, final_skill),
+                    self._projectile_line(final_skill, tags),
+                    self._area_line(final_skill, tags),
+                    self._speed_line(final_skill),
+                ]
+            )
+        )
+        return lines
+
+    def _active_tooltip_dps_lines(self, final_skill: FinalSkillInstance | None) -> list[dict[str, str]]:
+        if final_skill is None or final_skill.final_cooldown_ms <= 0:
+            return []
+        dps = final_skill.final_damage * final_skill.projectile_count / (final_skill.final_cooldown_ms / 1000)
+        return [
+            {
+                "label_text": self.localizer.text("ui.tooltip.recent_dps"),
+                "value_text": self._format_number(dps),
+            }
+        ]
+
+    def _active_tooltip_bonus_lines(self, final_skill: FinalSkillInstance | None) -> list[str]:
+        if final_skill is None:
+            return []
+        return [
+            self._modifier_effect_text(modifier)
+            for modifier in final_skill.applied_modifiers
+            if modifier.applied and modifier.value != 0
+        ]
+
+    def _active_damage_label(self, tags: frozenset[str]) -> str:
+        if "attack" in tags:
+            return self.localizer.text("ui.tooltip.stat.attack_damage")
+        if "spell" in tags:
+            return self.localizer.text("ui.tooltip.stat.spell_damage")
+        return self.localizer.text("ui.tooltip.stat.skill_damage")
+
+    def _cooldown_line(
+        self,
+        base_effect: dict[str, Any],
+        final_skill: FinalSkillInstance | None,
+    ) -> dict[str, str] | None:
+        base_cooldown = float(base_effect["base_cooldown_ms"])
+        cooldown = final_skill.final_cooldown_ms if final_skill is not None else base_cooldown
+        if cooldown <= 0:
+            return None
+        return {
+            "label_text": self.localizer.text("ui.tooltip.stat.cooldown"),
+            "value_text": self._format_with_delta(cooldown, cooldown - base_cooldown, suffix=self.localizer.text("ui.tooltip.unit.ms")),
+        }
+
+    def _projectile_line(
+        self,
+        final_skill: FinalSkillInstance | None,
+        tags: frozenset[str],
+    ) -> dict[str, str] | None:
+        if final_skill is None or "projectile" not in tags or final_skill.projectile_count <= 0:
+            return None
+        return {
+            "label_text": self.localizer.text("ui.skill.projectile_count"),
+            "value_text": str(final_skill.projectile_count),
+        }
+
+    def _area_line(
+        self,
+        final_skill: FinalSkillInstance | None,
+        tags: frozenset[str],
+    ) -> dict[str, str] | None:
+        if final_skill is None or not (tags & {"area", "nova", "orbit"}) or final_skill.area_multiplier <= 0:
+            return None
+        delta = final_skill.area_multiplier - 1
+        return {
+            "label_text": self.localizer.text("ui.skill.area_multiplier"),
+            "value_text": self._format_multiplier_with_delta(final_skill.area_multiplier, delta),
+        }
+
+    def _speed_line(self, final_skill: FinalSkillInstance | None) -> dict[str, str] | None:
+        if final_skill is None or final_skill.speed_multiplier <= 0:
+            return None
+        delta_percent = (final_skill.speed_multiplier - 1) * 100
+        return {
+            "label_text": self.localizer.text("ui.tooltip.stat.skill_speed"),
+            "value_text": self.localizer.format(
+                "ui.tooltip.value.base_percent",
+                value=self._format_number(final_skill.speed_multiplier * 100),
+            )
+            + (self._delta_text(delta_percent, suffix="%") if delta_percent else ""),
+        }
+
+    def _non_empty_stat_lines(self, lines: list[dict[str, str] | None]) -> list[dict[str, str]]:
+        return [
+            line
+            for line in lines
+            if line is not None and line["value_text"] not in {"", "0", "0%"}
+        ]
+
+    def _modifier_effect_text(self, modifier: AppliedModifier) -> str:
+        return f"{self._stat_view(modifier.stat)['text']} {self._format_modifier_value(modifier.stat, modifier.value)}"
+
+    def _format_modifier_value(self, stat: str, value: float) -> str:
+        if stat == "conduit_multiplier":
+            return f"×{self._format_number(value)}"
+        if stat.endswith("_percent"):
+            return self._format_number(value, signed=True) + "%"
+        return self._format_number(value, signed=True)
+
+    def _format_with_delta(self, value: float, delta: float, *, suffix: str = "") -> str:
+        return self._format_number(value) + suffix + self._delta_text(delta, suffix=suffix)
+
+    def _format_multiplier_with_delta(self, value: float, delta: float) -> str:
+        return f"{self._format_number(value)}{self._delta_text(delta)}"
+
+    def _delta_text(self, delta: float, *, suffix: str = "") -> str:
+        if delta == 0:
+            return ""
+        return f"（{self._format_number(delta, signed=True)}{suffix}）"
 
     def _tooltip_stat_lines(
         self,

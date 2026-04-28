@@ -75,11 +75,23 @@ class PresentationTest(unittest.TestCase):
         active_tooltip = active_detail["tooltip_view"]
         self.assertEqual(active_tooltip["name_text"], self.presenter.localizer.text("gem.active_fire_bolt.name"))
         self.assertNotIn("random_affixes", active_tooltip["sections"])
+        self.assertNotIn("current_targets", active_tooltip["sections"])
+        self.assertNotIn("rules", active_tooltip["sections"])
+        self.assertEqual(
+            [tag["id"] for tag in active_tooltip["tags"]],
+            ["gem", "spell", "fire", "projectile"],
+        )
+        self.assertNotIn(self.presenter.localizer.text("tag.active_skill_gem.name"), active_tooltip["subtitle_text"])
+        self.assertNotIn(self.presenter.localizer.text("tag.loot_gem.name"), active_tooltip["subtitle_text"])
+        self.assertNotIn(self.presenter.localizer.text("tag.gem_type_1.name"), active_tooltip["subtitle_text"])
+        self.assertEqual(active_tooltip["sections"]["description"]["lines"], [active_detail["description_text"]])
         self.assertEqual(
             active_tooltip["sections"]["stats"]["lines"][0]["label_text"],
             self.presenter.localizer.text("ui.tooltip.level"),
         )
-        self.assertIn("第 1 行第 1 列", active_tooltip["sections"]["rules"]["lines"][0])
+        self.assertTrue(active_tooltip["sections"]["recent_dps"]["lines"])
+        self.assertTrue(active_tooltip["sections"]["bonuses"]["lines"])
+        self.assertNotIn("同行", "；".join(active_tooltip["sections"]["bonuses"]["lines"]))
 
         support_detail = self.presenter.gem_detail(support, board=self.board, final_skills=final_skills)
         self.assertEqual(support_detail["category_text"], self.presenter.localizer.text("tag.support_gem.name"))
