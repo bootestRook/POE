@@ -83,13 +83,60 @@ type FireBolt = {
 
 type Tooltip = {
   gem: Gem;
-  x: number;
-  y: number;
+  left: number;
+  top: number;
+  transform: string;
 };
 
-const MAP_WIDTH = 1600;
-const MAP_HEIGHT = 960;
+type FloatingOrigin =
+  | { kind: "board"; row: number; column: number }
+  | { kind: "bag"; slotIndex: number; instanceId: string };
+
+type FloatingGem = {
+  gem: Gem;
+  origin: FloatingOrigin;
+  x: number;
+  y: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+type DropTarget =
+  | { kind: "board"; row: number; column: number }
+  | { kind: "bag"; slotIndex: number }
+  | { kind: "invalid" };
+
+type TileType = "ground" | "blocked" | "object";
+
+type TilemapData = {
+  mapId: string;
+  width: number;
+  height: number;
+  tileSize: number;
+  tiles: TileType[][];
+  spawnPoint: {
+    tileX: number;
+    tileY: number;
+    x: number;
+    y: number;
+  };
+};
+
+const TILE_RENDER_BY_TYPE: Record<TileType, { className: string }> = {
+  ground: { className: "tile-ground" },
+  blocked: { className: "tile-blocked" },
+  object: { className: "tile-object-slot" }
+};
+
+const DEFAULT_TILEMAP = createDefaultTilemap(25, 15, 64);
+const MAP_WIDTH = DEFAULT_TILEMAP.width * DEFAULT_TILEMAP.tileSize;
+const MAP_HEIGHT = DEFAULT_TILEMAP.height * DEFAULT_TILEMAP.tileSize;
 const PLAYER_SPEED = 250;
+const FLOATING_GEM_OFFSET = { x: 18, y: 18 };
+const INVENTORY_SLOT_COUNT = 60;
+const INVENTORY_COLUMNS = 12;
+const TOOLTIP_WIDTH = 410;
+const TOOLTIP_SCREEN_PADDING = 8;
 
 async function requestState(path: string, body?: unknown): Promise<AppState> {
   const response = await fetch(path, {
@@ -107,7 +154,7 @@ export function App() {
   const [bagOpen, setBagOpen] = useState(false);
   const [notice, setNotice] = useState("正在载入。");
   const [playing, setPlaying] = useState(false);
-  const [player, setPlayer] = useState({ x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2, hp: 510, maxHp: 510 });
+  const [player, setPlayer] = useState({ x: DEFAULT_TILEMAP.spawnPoint.x, y: DEFAULT_TILEMAP.spawnPoint.y, hp: 510, maxHp: 510 });
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [texts, setTexts] = useState<FloatingText[]>([]);
   const [bolts, setBolts] = useState<FireBolt[]>([]);
@@ -115,10 +162,12 @@ export function App() {
   const [elapsed, setElapsed] = useState(0);
   const [combatLogs, setCombatLogs] = useState<string[]>([]);
   const [hoveredGemId, setHoveredGemId] = useState<string | null>(null);
+  const [hoveredBagSlot, setHoveredBagSlot] = useState<number | null>(null);
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
-  const [draggingGemId, setDraggingGemId] = useState<string | null>(null);
+  const [floatingGem, setFloatingGem] = useState<FloatingGem | null>(null);
+  const [inventorySlots, setInventorySlots] = useState<(string | null)[]>(() => Array(INVENTORY_SLOT_COUNT).fill(null));
   const keys = useRef(new Set<string>());
-  const draggingGemIdRef = useRef<string | null>(null);
+  const floatingGemRef = useRef<FloatingGem | null>(null);
   const lastFrame = useRef<number | null>(null);
   const nextEnemyId = useRef(1);
   const nextTextId = useRef(1);
@@ -136,18 +185,39 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    function onMouseUp(event: MouseEvent) {
-      const instanceId = draggingGemIdRef.current;
-      if (!instanceId) return;
-      draggingGemIdRef.current = null;
-      setDraggingGemId(null);
-      const element = document.elementFromPoint(event.clientX, event.clientY);
-      const cell = element?.closest("[data-board-row][data-board-column]") as HTMLElement | null;
-      if (!cell) return;
-      void dropGemOnCell(instanceId, Number(cell.dataset.boardRow), Number(cell.dataset.boardColumn));
+    if (!state) return;
+    setInventorySlots((current) => reconcileInventorySlots(current, state));
+  }, [state]);
+
+  useEffect(() => {
+    floatingGemRef.current = floatingGem;
+  }, [floatingGem]);
+
+  useEffect(() => {
+    function onMouseMove(event: globalThis.MouseEvent) {
+      const current = floatingGemRef.current;
+      if (!current) return;
+      setFloatingGem({ ...current, x: event.clientX + current.offsetX, y: event.clientY + current.offsetY });
     }
-    window.addEventListener("mouseup", onMouseUp);
-    return () => window.removeEventListener("mouseup", onMouseUp);
+
+    async function onMouseDown(event: globalThis.MouseEvent) {
+      const current = floatingGemRef.current;
+      if (!current) return;
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const element = document.elementFromPoint(event.clientX, event.clientY);
+      const target = resolveDropTarget(element);
+      const placed = await placeFloatingGem(current, target);
+      if (placed) {
+        clearFloatingGem();
+      }
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mousedown", onMouseDown);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mousedown", onMouseDown);
+    };
   }, [state]);
 
   useEffect(() => {
@@ -278,19 +348,52 @@ export function App() {
     return survivors;
   }
 
-  async function dropGemOnCell(instanceId: string, row: number, column: number) {
-    if (!state) return;
+  async function placeFloatingGem(current: FloatingGem, target: DropTarget): Promise<boolean> {
+    if (target.kind === "invalid") return false;
+    if (isDropBackToOrigin(current, target)) return true;
+    if (target.kind === "bag") return await placeGemInBag(current, target.slotIndex);
+    return await dropGemOnCell(current.gem.instance_id, target.row, target.column);
+  }
+
+  async function placeGemInBag(current: FloatingGem, slotIndex: number): Promise<boolean> {
+    if (!state) return false;
+    const instanceId = current.gem.instance_id;
+    const dragged = state.inventory.find((gem) => gem.instance_id === instanceId);
+    if (!dragged) {
+      setNotice("没有找到这颗宝石。");
+      return false;
+    }
+    if (isInventorySlotOccupied(inventorySlots, slotIndex, instanceId)) return false;
+    if (!dragged.board_position) {
+      setInventorySlots((slots) => moveGemToInventorySlot(slots, instanceId, slotIndex));
+      return true;
+    }
+
+    try {
+      const nextState = await requestState("/api/unmount", { instance_id: instanceId });
+      setState(nextState);
+      setInventorySlots((slots) => moveGemToInventorySlot(slots, instanceId, slotIndex));
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "操作失败。");
+      return false;
+    }
+  }
+
+  async function dropGemOnCell(instanceId: string, row: number, column: number): Promise<boolean> {
+    if (!state) return false;
     const target = state.board.cells[row]?.[column]?.gem;
     if (target && target.instance_id !== instanceId) {
       setNotice("该格已有宝石。");
-      return;
+      return false;
     }
     const dragged = state.inventory.find((gem) => gem.instance_id === instanceId);
     if (!dragged) {
       setNotice("没有找到这颗宝石。");
-      return;
+      return false;
     }
-    if (dragged.board_position?.row === row && dragged.board_position.column === column) return;
+    if (dragged.board_position?.row === row && dragged.board_position.column === column) return false;
+    if (!canPlaceGemOnBoard(state, dragged, row, column)) return false;
 
     try {
       if (dragged.board_position) {
@@ -298,10 +401,18 @@ export function App() {
       }
       const nextState = await requestState("/api/mount", { instance_id: instanceId, row, column });
       setState(nextState);
+      setInventorySlots((slots) => removeGemFromInventorySlots(slots, instanceId));
       setNotice(`已将${dragged.name_text}放入第${row + 1}行第${column + 1}列。`);
+      return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "操作失败。");
+      return false;
     }
+  }
+
+  function clearFloatingGem() {
+    floatingGemRef.current = null;
+    setFloatingGem(null);
   }
 
   async function unmountGem(instanceId: string) {
@@ -338,20 +449,32 @@ export function App() {
     void runServerCombat();
   }
 
-  function beginDrag(event: DragEvent, gem: Gem) {
-    event.dataTransfer.setData("text/plain", gem.instance_id);
-    event.dataTransfer.effectAllowed = "move";
+  function beginDrag(event: DragEvent) {
+    event.preventDefault();
   }
 
-  function beginPointerDrag(event: MouseEvent, gem: Gem) {
+  function beginPointerDrag(event: MouseEvent, gem: Gem, origin: FloatingOrigin) {
     if (event.button !== 0) return;
-    draggingGemIdRef.current = gem.instance_id;
-    setDraggingGemId(gem.instance_id);
+    if (floatingGemRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const nextFloatingGem: FloatingGem = {
+      gem,
+      origin,
+      x: event.clientX + FLOATING_GEM_OFFSET.x,
+      y: event.clientY + FLOATING_GEM_OFFSET.y,
+      offsetX: FLOATING_GEM_OFFSET.x,
+      offsetY: FLOATING_GEM_OFFSET.y
+    };
+    setTooltip(null);
+    setHoveredGemId(null);
+    floatingGemRef.current = nextFloatingGem;
+    setFloatingGem(nextFloatingGem);
   }
 
-  function onGemHover(event: MouseEvent, gem: Gem) {
+  function onGemHover(event: MouseEvent, gem: Gem, source: "board" | "inventory", slotIndex?: number) {
     setHoveredGemId(gem.instance_id);
-    setTooltip({ gem, x: event.clientX, y: event.clientY });
+    setTooltip({ gem, ...resolveTooltipPosition(event.currentTarget as HTMLElement, source, slotIndex) });
   }
 
   const linkedGemIds = useLinkedGemIds(state, hoveredGemId);
@@ -360,14 +483,23 @@ export function App() {
     for (const gem of state?.inventory ?? []) result.set(gem.instance_id, gem);
     return result;
   }, [state]);
+  const legalDropCells = useLegalDropCells(state, floatingGem?.gem ?? null);
+  const bagSlots = inventorySlots.map((instanceId) => (instanceId ? fullGemById.get(instanceId) ?? null : null));
 
   if (!state) return <main className="game-screen loading">{notice}</main>;
 
   return (
     <main className="game-screen">
       <section className="map-layer" aria-label="可玩地图">
-        <div className="terrain" style={{ transform: `translate(${-player.x + 800}px, ${-player.y + 480}px)` }}>
-          <MapTiles />
+        <div
+          className="terrain"
+          style={{
+            width: MAP_WIDTH,
+            height: MAP_HEIGHT,
+            transform: `translate(calc(50vw - ${player.x}px), calc(50vh - ${player.y}px))`
+          }}
+        >
+          <MapTiles tilemap={DEFAULT_TILEMAP} />
           {enemies.map((enemy) => (
             <div key={enemy.id} className="enemy" style={{ left: enemy.x, top: enemy.y }}>
               <span style={{ width: `${Math.max(0, enemy.hp / enemy.maxHp) * 100}%` }} />
@@ -424,6 +556,8 @@ export function App() {
                     fullGem={cell.gem ? fullGemById.get(cell.gem.instance_id) ?? cell.gem : null}
                     hoveredGemId={hoveredGemId}
                     linkedGemIds={linkedGemIds}
+                    floatingGemId={floatingGem?.gem.instance_id ?? null}
+                    legalDropCells={legalDropCells}
                     onDropGem={dropGemOnCell}
                     onDragGem={beginDrag}
                     onPointerDragGem={beginPointerDrag}
@@ -439,33 +573,48 @@ export function App() {
             </section>
 
             <section className="bag-panel">
-              <div className="bag-grid">
-                {state.inventory.filter((gem) => !gem.board_position).map((gem) => (
-                  <button
-                    key={gem.instance_id}
-                    className={hoveredGemId === gem.instance_id ? "bag-cell hover-self" : "bag-cell"}
-                    draggable
-                    onDragStart={(event) => beginDrag(event, gem)}
-                    onMouseDown={(event) => beginPointerDrag(event, gem)}
-                    onMouseEnter={(event) => onGemHover(event, gem)}
-                    onMouseMove={(event) => onGemHover(event, gem)}
-                    onMouseLeave={() => {
-                      setHoveredGemId(null);
-                      setTooltip(null);
-                    }}
-                  >
-                    <GemOrb gem={gem} />
-                  </button>
-                ))}
-                {Array.from({ length: Math.max(0, 60 - state.inventory.filter((gem) => !gem.board_position).length) }).map((_, index) => (
-                  <div key={`empty-${index}`} className="bag-empty-cell" />
+              <div className="bag-grid" data-bag-drop-target="true">
+                {bagSlots.map((gem, slotIndex) => (
+                  gem ? (
+                    <button
+                      key={`bag-${slotIndex}`}
+                      className={bagCellClass(slotIndex, hoveredBagSlot, gem, hoveredGemId, floatingGem)}
+                      data-bag-drop-target="true"
+                      data-bag-slot-index={slotIndex}
+                      draggable={false}
+                      onDragStart={beginDrag}
+                      onMouseDown={(event) => beginPointerDrag(event, gem, { kind: "bag", slotIndex, instanceId: gem.instance_id })}
+                      onMouseEnter={(event) => {
+                        setHoveredBagSlot(slotIndex);
+                        onGemHover(event, gem, "inventory", slotIndex);
+                      }}
+                      onMouseMove={(event) => onGemHover(event, gem, "inventory", slotIndex)}
+                      onMouseLeave={() => {
+                        setHoveredBagSlot(null);
+                        setHoveredGemId(null);
+                        setTooltip(null);
+                      }}
+                    >
+                      {isFloatingOrigin(floatingGem, { kind: "bag", slotIndex, instanceId: gem.instance_id }) ? <GemGhost /> : <GemOrb gem={gem} />}
+                    </button>
+                  ) : (
+                    <div
+                      key={`bag-${slotIndex}`}
+                      className={bagEmptyCellClass(slotIndex, hoveredBagSlot)}
+                      data-bag-drop-target="true"
+                      data-bag-slot-index={slotIndex}
+                      onMouseEnter={() => setHoveredBagSlot(slotIndex)}
+                      onMouseLeave={() => setHoveredBagSlot(null)}
+                    />
+                  )
                 ))}
               </div>
             </section>
           </section>
 
-          {tooltip && <GemTooltip tooltip={tooltip} />}
-          {draggingGemId && <div className="drag-hint">拖到数独盘格子后松开</div>}
+          {tooltip && !floatingGem && <GemTooltip tooltip={tooltip} />}
+          {floatingGem && <FloatingGemView floatingGem={floatingGem} />}
+          {floatingGem && <div className="drag-hint">拖到数独盘格子后松开</div>}
         </section>
       )}
     </main>
@@ -477,6 +626,8 @@ function BoardCell({
   fullGem,
   hoveredGemId,
   linkedGemIds,
+  floatingGemId,
+  legalDropCells,
   onDropGem,
   onDragGem,
   onPointerDragGem,
@@ -488,18 +639,23 @@ function BoardCell({
   fullGem: Gem | null;
   hoveredGemId: string | null;
   linkedGemIds: Set<string>;
-  onDropGem: (instanceId: string, row: number, column: number) => void;
-  onDragGem: (event: DragEvent, gem: Gem) => void;
-  onPointerDragGem: (event: MouseEvent, gem: Gem) => void;
-  onHoverGem: (event: MouseEvent, gem: Gem) => void;
+  floatingGemId: string | null;
+  legalDropCells: Set<string>;
+  onDropGem: (instanceId: string, row: number, column: number) => Promise<boolean>;
+  onDragGem: (event: DragEvent) => void;
+  onPointerDragGem: (event: MouseEvent, gem: Gem, origin: FloatingOrigin) => void;
+  onHoverGem: (event: MouseEvent, gem: Gem, source: "board" | "inventory", slotIndex?: number) => void;
   onLeaveGem: () => void;
   onUnmountGem: (instanceId: string) => void;
 }) {
   const gem = fullGem;
+  const origin: FloatingOrigin = { kind: "board", row: cell.row, column: cell.column };
+  const isGhost = Boolean(gem && floatingGemId === gem.instance_id);
   const hoverClass = gem ? boardHoverClass(gem.instance_id, hoveredGemId, linkedGemIds) : "";
+  const legalClass = legalDropCells.has(cellKey(cell.row, cell.column)) ? "legal-drop-cell" : "";
   return (
     <button
-      className={`board-cell ${hoverClass}`}
+      className={`board-cell ${hoverClass} ${legalClass}`}
       data-board-row={cell.row}
       data-board-column={cell.column}
       onDragOver={(event) => event.preventDefault()}
@@ -508,22 +664,63 @@ function BoardCell({
         const instanceId = event.dataTransfer.getData("text/plain");
         if (instanceId) onDropGem(instanceId, cell.row, cell.column);
       }}
-      onDoubleClick={() => gem && onUnmountGem(gem.instance_id)}
+      onDoubleClick={() => gem && !isGhost && onUnmountGem(gem.instance_id)}
     >
-      {gem ? (
+      {gem && !isGhost ? (
         <span
-          draggable
-          onDragStart={(event) => onDragGem(event, gem)}
-          onMouseDown={(event) => onPointerDragGem(event, gem)}
-          onMouseEnter={(event) => onHoverGem(event, gem)}
-          onMouseMove={(event) => onHoverGem(event, gem)}
+          draggable={false}
+          onDragStart={onDragGem}
+          onMouseDown={(event) => onPointerDragGem(event, gem, origin)}
+          onMouseEnter={(event) => onHoverGem(event, gem, "board")}
+          onMouseMove={(event) => onHoverGem(event, gem, "board")}
           onMouseLeave={onLeaveGem}
         >
           <GemOrb gem={gem} />
         </span>
+      ) : isGhost ? (
+        <GemGhost />
       ) : null}
     </button>
   );
+}
+
+function FloatingGemView({ floatingGem }: { floatingGem: FloatingGem }) {
+  return (
+    <div className="floating-gem" style={{ left: floatingGem.x, top: floatingGem.y }}>
+      <GemOrb gem={floatingGem.gem} />
+    </div>
+  );
+}
+
+function GemGhost() {
+  return <span className="gem-ghost" />;
+}
+
+function useLegalDropCells(state: AppState | null, floatingGem: Gem | null) {
+  return useMemo(() => {
+    const result = new Set<string>();
+    if (!state || !floatingGem) return result;
+
+    const floatingGemType = gemTypeKey(floatingGem);
+    for (const row of state.board.cells) {
+      for (const cell of row) {
+        const target = cell.gem;
+        if (target && target.instance_id !== floatingGem.instance_id) continue;
+
+        const hasConflict = state.board.cells.some((otherRow) =>
+          otherRow.some((otherCell) => {
+            const otherGem = otherCell.gem;
+            if (!otherGem || otherGem.instance_id === floatingGem.instance_id) return false;
+            if (gemTypeKey(otherGem) !== floatingGemType) return false;
+            return otherCell.row === cell.row || otherCell.column === cell.column || otherCell.box === cell.box;
+          })
+        );
+        if (!hasConflict) result.add(cellKey(cell.row, cell.column));
+      }
+    }
+
+    return result;
+  }, [state, floatingGem]);
 }
 
 function useLinkedGemIds(state: AppState | null, hoveredGemId: string | null) {
@@ -549,27 +746,211 @@ function boardHoverClass(instanceId: string, hoveredGemId: string | null, linked
   return "hover-dim";
 }
 
-function MapTiles() {
+function bagCellClass(slotIndex: number, hoveredBagSlot: number | null, gem: Gem, hoveredGemId: string | null, floatingGem: FloatingGem | null) {
+  const classes = ["bag-cell"];
+  if (hoveredBagSlot === slotIndex) classes.push("bag-slot-hover");
+  if (hoveredGemId === gem.instance_id) classes.push("hover-self");
+  if (isFloatingOrigin(floatingGem, { kind: "bag", slotIndex, instanceId: gem.instance_id })) classes.push("has-ghost");
+  return classes.join(" ");
+}
+
+function bagEmptyCellClass(slotIndex: number, hoveredBagSlot: number | null) {
+  const classes = ["bag-empty-cell"];
+  if (hoveredBagSlot === slotIndex) classes.push("bag-slot-hover");
+  return classes.join(" ");
+}
+
+function resolveTooltipPosition(anchor: HTMLElement, source: "board" | "inventory", slotIndex?: number): Omit<Tooltip, "gem"> {
+  if (source === "board") return getBoardTooltipPosition(anchor);
+  return getInventoryTooltipPosition(anchor, slotIndex ?? 0);
+}
+
+function getBoardTooltipPosition(anchor: HTMLElement): Omit<Tooltip, "gem"> {
+  const cell = anchor.closest("[data-board-row][data-board-column]") as HTMLElement | null;
+  const board = anchor.closest(".board-grid") as HTMLElement | null;
+  const cellRect = (cell ?? anchor).getBoundingClientRect();
+  const boardRect = (board ?? anchor).getBoundingClientRect();
+
+  return {
+    left: clampTooltipLeft(boardRect.left - 5 - TOOLTIP_WIDTH),
+    top: clampTooltipTop(cellRect.top + cellRect.height / 2),
+    transform: "translateY(-50%)"
+  };
+}
+
+function getInventoryTooltipPosition(anchor: HTMLElement, slotIndex: number): Omit<Tooltip, "gem"> {
+  const rect = anchor.getBoundingClientRect();
+  const columnIndex = slotIndex % INVENTORY_COLUMNS;
+  if (columnIndex >= INVENTORY_COLUMNS - 4) {
+    return {
+      left: clampTooltipLeft(rect.left - 2 - TOOLTIP_WIDTH),
+      top: clampTooltipTop(rect.top + rect.height / 2),
+      transform: "translateY(-50%)"
+    };
+  }
+
+  return {
+    left: clampTooltipLeft(rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2),
+    top: Math.max(TOOLTIP_SCREEN_PADDING, rect.top - 2),
+    transform: "translateY(-100%)"
+  };
+}
+
+function clampTooltipLeft(left: number) {
+  return Math.max(TOOLTIP_SCREEN_PADDING, Math.min(left, window.innerWidth - TOOLTIP_WIDTH - TOOLTIP_SCREEN_PADDING));
+}
+
+function clampTooltipTop(top: number) {
+  return Math.max(TOOLTIP_SCREEN_PADDING, Math.min(top, window.innerHeight - TOOLTIP_SCREEN_PADDING));
+}
+
+function isFloatingOrigin(floatingGem: FloatingGem | null, origin: FloatingOrigin) {
+  if (!floatingGem) return false;
+  const current = floatingGem.origin;
+  if (current.kind !== origin.kind) return false;
+  if (current.kind === "bag" && origin.kind === "bag") return current.slotIndex === origin.slotIndex && current.instanceId === origin.instanceId;
+  if (current.kind === "board" && origin.kind === "board") return current.row === origin.row && current.column === origin.column;
+  return false;
+}
+
+function resolveDropTarget(element: Element | null): DropTarget {
+  const boardCell = element?.closest("[data-board-row][data-board-column]") as HTMLElement | null;
+  if (boardCell) {
+    return {
+      kind: "board",
+      row: Number(boardCell.dataset.boardRow),
+      column: Number(boardCell.dataset.boardColumn)
+    };
+  }
+
+  const bagCell = element?.closest("[data-bag-slot-index]") as HTMLElement | null;
+  if (bagCell) return { kind: "bag", slotIndex: Number(bagCell.dataset.bagSlotIndex) };
+  return { kind: "invalid" };
+}
+
+function isDropBackToOrigin(floatingGem: FloatingGem, target: DropTarget) {
+  const origin = floatingGem.origin;
+  if (origin.kind === "bag") return target.kind === "bag" && origin.slotIndex === target.slotIndex;
+  return target.kind === "board" && origin.row === target.row && origin.column === target.column;
+}
+
+function reconcileInventorySlots(current: (string | null)[], state: AppState) {
+  const unmountedIds = new Set(state.inventory.filter((gem) => !gem.board_position).map((gem) => gem.instance_id));
+  const next = Array(INVENTORY_SLOT_COUNT).fill(null) as (string | null)[];
+  const used = new Set<string>();
+
+  current.slice(0, INVENTORY_SLOT_COUNT).forEach((instanceId, index) => {
+    if (instanceId && unmountedIds.has(instanceId) && !used.has(instanceId)) {
+      next[index] = instanceId;
+      used.add(instanceId);
+    }
+  });
+
+  for (const gem of state.inventory) {
+    if (gem.board_position || used.has(gem.instance_id)) continue;
+    const emptyIndex = next.findIndex((instanceId) => instanceId === null);
+    if (emptyIndex >= 0) {
+      next[emptyIndex] = gem.instance_id;
+      used.add(gem.instance_id);
+    }
+  }
+
+  return next;
+}
+
+function isInventorySlotOccupied(slots: (string | null)[], slotIndex: number, instanceId: string) {
+  const occupyingId = slots[slotIndex];
+  return Boolean(occupyingId && occupyingId !== instanceId);
+}
+
+function moveGemToInventorySlot(slots: (string | null)[], instanceId: string, slotIndex: number) {
+  if (isInventorySlotOccupied(slots, slotIndex, instanceId)) return slots;
+  const next = slots.slice(0, INVENTORY_SLOT_COUNT);
+  while (next.length < INVENTORY_SLOT_COUNT) next.push(null);
+  for (let index = 0; index < next.length; index += 1) {
+    if (next[index] === instanceId) next[index] = null;
+  }
+  next[slotIndex] = instanceId;
+  return next;
+}
+
+function removeGemFromInventorySlots(slots: (string | null)[], instanceId: string) {
+  return slots.map((slotInstanceId) => (slotInstanceId === instanceId ? null : slotInstanceId));
+}
+
+function canPlaceGemOnBoard(state: AppState, gem: Gem, row: number, column: number) {
+  const target = state.board.cells[row]?.[column];
+  if (!target) return false;
+  if (target.gem && target.gem.instance_id !== gem.instance_id) return false;
+
+  const gemType = gemTypeKey(gem);
+  return !state.board.cells.some((boardRow) =>
+    boardRow.some((cell) => {
+      const otherGem = cell.gem;
+      if (!otherGem || otherGem.instance_id === gem.instance_id) return false;
+      if (gemTypeKey(otherGem) !== gemType) return false;
+      return cell.row === row || cell.column === column || cell.box === target.box;
+    })
+  );
+}
+
+function cellKey(row: number, column: number) {
+  return `${row}-${column}`;
+}
+
+function gemTypeKey(gem: Gem) {
+  return gem.gem_type.identity_text || gem.gem_type.display_text;
+}
+
+function createDefaultTilemap(width: number, height: number, tileSize: number): TilemapData {
+  const spawnTileX = Math.floor(width / 2);
+  const spawnTileY = Math.floor(height / 2);
+  const tiles: TileType[][] = Array.from({ length: height }, (_, y) =>
+    Array.from({ length: width }, (_, x) => (x === 0 || y === 0 || x === width - 1 || y === height - 1 ? "blocked" : "ground"))
+  );
+
+  return {
+    mapId: "v1-clean-tilemap",
+    width,
+    height,
+    tileSize,
+    tiles,
+    spawnPoint: {
+      tileX: spawnTileX,
+      tileY: spawnTileY,
+      x: spawnTileX * tileSize + tileSize / 2,
+      y: spawnTileY * tileSize + tileSize / 2
+    }
+  };
+}
+
+function MapTiles({ tilemap }: { tilemap: TilemapData }) {
   return (
     <>
-      <div className="road road-main" />
-      <div className="road road-cross" />
-      <div className="arena" />
-      {[
-        [150, 80], [1240, 80], [180, 640], [1280, 610], [980, 180], [420, 190]
-      ].map(([x, y], index) => <div key={index} className="house" style={{ left: x, top: y }} />)}
-      {[
-        [80, 90], [120, 135], [1380, 160], [1470, 220], [1120, 680], [220, 740]
-      ].map(([x, y], index) => <div key={index} className="tree" style={{ left: x, top: y }} />)}
+      {tilemap.tiles.flatMap((row, y) =>
+        row.map((tile, x) => (
+          <div
+            key={`${x}-${y}`}
+            className={`map-tile ${TILE_RENDER_BY_TYPE[tile].className}`}
+            data-tile-type={tile}
+            style={{
+              left: x * tilemap.tileSize,
+              top: y * tilemap.tileSize,
+              width: tilemap.tileSize,
+              height: tilemap.tileSize
+            }}
+          />
+        ))
+      )}
     </>
   );
 }
 
 function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
-  const { gem, x, y } = tooltip;
+  const { gem, left, top, transform } = tooltip;
   const targets = (gem.current_effective_targets ?? []).map((target) => target.name_text).join("、") || "当前没有生效对象";
   return (
-    <div className="gem-tooltip" style={{ left: Math.min(x + 18, window.innerWidth - 430), top: Math.min(y + 18, window.innerHeight - 360) }}>
+    <div className="gem-tooltip" style={{ left, top, transform }}>
       <div className="tooltip-title">
         <GemOrb gem={gem} />
         <div>

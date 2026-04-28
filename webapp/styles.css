@@ -45,73 +45,27 @@ button {
 
 .terrain {
   position: absolute;
-  width: 1600px;
-  height: 960px;
   transform-origin: 0 0;
-  background:
-    radial-gradient(circle at 28% 70%, rgba(255, 205, 120, 0.22), transparent 16%),
-    radial-gradient(circle at 78% 24%, rgba(255, 205, 120, 0.18), transparent 14%),
-    linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25% 75%, rgba(255, 255, 255, 0.035) 75%),
-    #2d3a20;
-  background-size: auto, auto, 34px 34px, auto;
+  background: #2d3a20;
 }
 
-.road {
+.map-tile {
   position: absolute;
-  background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25% 75%, rgba(255, 255, 255, 0.025) 75%),
-    #39271f;
-  background-size: 22px 22px;
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.045);
 }
 
-.road-main {
-  left: -100px;
-  top: 380px;
-  width: 1800px;
-  height: 260px;
+.tile-ground {
+  background: #2f3c22;
 }
 
-.road-cross {
-  left: 700px;
-  top: -80px;
-  width: 180px;
-  height: 1120px;
+.tile-blocked {
+  background: #1f2818;
 }
 
-.arena {
-  position: absolute;
-  left: 540px;
-  top: 310px;
-  width: 520px;
-  height: 340px;
-  background:
-    linear-gradient(#4a4a4a 2px, transparent 2px),
-    linear-gradient(90deg, #4a4a4a 2px, transparent 2px),
-    #777;
-  background-size: 32px 32px;
-  border: 2px solid #545454;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-}
-
-.house {
-  position: absolute;
-  width: 190px;
-  height: 125px;
-  border: 4px solid #5b2e1a;
-  background:
-    linear-gradient(135deg, #c09238 0 49%, #6b351d 50% 53%, #d4ad5c 54%),
-    linear-gradient(#703421, #402018);
-  box-shadow: 0 16px 24px rgba(0, 0, 0, 0.44);
-}
-
-.tree {
-  position: absolute;
-  width: 74px;
-  height: 86px;
-  border-radius: 42px 42px 22px 22px;
-  background: radial-gradient(circle, #7f8c38, #4b5a25 70%, #2b2f16);
-  box-shadow: 0 20px 0 -12px #3d2c1c;
+.tile-object-slot {
+  background: #344128;
+  outline: 1px dashed rgba(230, 214, 150, 0.35);
+  outline-offset: -8px;
 }
 
 .player,
@@ -386,6 +340,26 @@ h3 {
   filter: grayscale(0.85);
 }
 
+.legal-drop-cell {
+  background: #2d2a18;
+  box-shadow: inset 0 0 0 3px rgba(255, 225, 126, 0.72);
+}
+
+.gem-ghost {
+  width: calc(var(--slot-size) * 0.58);
+  height: calc(var(--slot-size) * 0.58);
+  border: 2px dashed rgba(255, 235, 170, 0.62);
+  border-radius: 50%;
+  background: rgba(255, 235, 170, 0.08);
+}
+
+.floating-gem {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.48));
+}
+
 .bag-grid {
   display: grid;
   grid-template-columns: repeat(12, var(--slot-size));
@@ -399,6 +373,10 @@ h3 {
 .bag-cell,
 .bag-empty-cell {
   background: #252345;
+}
+
+.bag-slot-hover {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.34);
 }
 
 .bag-empty-cell {
@@ -439,6 +417,8 @@ h3 {
   position: fixed;
   z-index: 90;
   width: 410px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
   padding: 12px;
   border: 2px solid #a6a400;
   border-radius: 6px;
