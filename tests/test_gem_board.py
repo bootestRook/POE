@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from liufang.config import load_board_rules, load_gem_definitions
 from liufang.gem_board import SudokuGemBoard
-from liufang.inventory import GemInventory
+from liufang.inventory import GemInstance, GemInventory
 
 
 class SudokuGemBoardTest(unittest.TestCase):
@@ -22,6 +22,18 @@ class SudokuGemBoardTest(unittest.TestCase):
 
     def add(self, instance_id: str, base_gem_id: str) -> None:
         self.inventory.add_instance(instance_id, base_gem_id)
+
+    def add_as_type(self, instance_id: str, base_gem_id: str, gem_type: str) -> None:
+        definition = self.definitions[base_gem_id]
+        tags = frozenset(tag for tag in definition.tags if not tag.startswith("gem_type_")) | {gem_type}
+        self.inventory.add_existing_instance(
+            GemInstance(
+                instance_id=instance_id,
+                base_gem_id=base_gem_id,
+                gem_type=gem_type,
+                tags=tags,
+            )
+        )
 
     def test_mount_unmount_updates_occupancy(self) -> None:
         self.add("gem_1", "active_fire_bolt")
@@ -77,6 +89,23 @@ class SudokuGemBoardTest(unittest.TestCase):
         validation = self.board.validate()
         keys = {issue.error_key for issue in validation.issues}
         self.assertIn("board.duplicate_gem_type.column", keys)
+
+    def test_different_gem_types_use_distinct_color_groups(self) -> None:
+        self.add_as_type("type_6", "support_lightning_mastery", "gem_type_6")
+        self.add_as_type("type_8", "support_elemental_level", "gem_type_8")
+        self.add_as_type("type_7", "support_wide_effect", "gem_type_7")
+        self.add_as_type("type_9", "support_row_conduit", "gem_type_9")
+
+        self.board.mount_gem("type_6", 0, 0)
+        self.board.mount_gem("type_8", 0, 3)
+        self.board.mount_gem("type_7", 1, 1)
+        self.board.mount_gem("type_9", 4, 1)
+
+        validation = self.board.validate()
+        duplicate_keys = {issue.error_key for issue in validation.issues}
+        self.assertNotIn("board.duplicate_gem_type.row", duplicate_keys)
+        self.assertNotIn("board.duplicate_gem_type.column", duplicate_keys)
+        self.assertNotIn("board.duplicate_gem_type.box", duplicate_keys)
 
     def test_relations_and_highlights_include_row_column_box_and_adjacent(self) -> None:
         self.add("active_a", "active_fire_bolt")

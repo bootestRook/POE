@@ -14,17 +14,25 @@ type Gem = {
 };
 
 type TooltipView = {
+  variant?: "active" | "support";
   icon_text: string;
+  icon_color_key?: string;
+  icon_sprite?: string;
   name_text: string;
   subtitle_text: string;
   type_identity_text: string;
   tags: TooltipTagView[];
+  summary_lines?: TooltipRichLine[];
   sections: {
     description: { title_text: string; lines: string[] };
     stats: { title_text: string; lines: TooltipStatLine[] };
     random_affixes?: { title_text: string; lines: TooltipAffixLine[]; empty_text: string };
     recent_dps?: { title_text: string; lines: TooltipStatLine[] };
     bonuses?: { title_text: string; lines: string[] };
+    base_skill_level?: { lines: string[] };
+    conditions?: { rich_lines: TooltipRichLine[] };
+    support_rules?: { rich_lines: TooltipRichLine[] };
+    base_bonuses?: { rich_lines: TooltipRichLine[] };
     current_targets?: { title_text: string; lines: TooltipTargetLine[] };
     rules?: { title_text: string; lines: string[] };
   };
@@ -51,6 +59,13 @@ type TooltipTargetLine = {
   status_text: string;
 };
 
+type TooltipTextSegment = {
+  text: string;
+  tone?: string;
+};
+
+type TooltipRichLine = TooltipTextSegment[];
+
 type Cell = {
   row: number;
   column: number;
@@ -67,11 +82,14 @@ type SkillPreview = {
   area_multiplier: number;
   speed_multiplier: number;
   applied_modifiers: {
+    source_instance_id: string;
     source_name_text: string;
+    target_instance_id: string;
     stat: { text: string };
     value: number;
     relation_text: string;
     reason_text: string;
+    applied: boolean;
   }[];
 };
 
@@ -153,6 +171,19 @@ type PlacementPrompt = {
   y: number;
 };
 
+type SupportPreview = {
+  source: { row: number; column: number; instanceId: string };
+  targets: { row: number; column: number; instanceId: string }[];
+  color: string;
+};
+
+type SupportLine = {
+  id: string;
+  source: { row: number; column: number };
+  target: { row: number; column: number };
+  color: string;
+};
+
 type TileType = "ground" | "blocked" | "object";
 
 type TilemapData = {
@@ -214,6 +245,7 @@ export function App() {
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   const [floatingGem, setFloatingGem] = useState<FloatingGem | null>(null);
   const [placementPrompt, setPlacementPrompt] = useState<PlacementPrompt | null>(null);
+  const [showPersistentSupportLines, setShowPersistentSupportLines] = useState(true);
   const [inventorySlots, setInventorySlots] = useState<(string | null)[]>(() => Array(INVENTORY_SLOT_COUNT).fill(null));
   const keys = useRef(new Set<string>());
   const floatingGemRef = useRef<FloatingGem | null>(null);
@@ -564,7 +596,11 @@ export function App() {
     for (const gem of state?.inventory ?? []) result.set(gem.instance_id, gem);
     return result;
   }, [state]);
+  const hoveredBoardGemId = hoveredGemId && fullGemById.get(hoveredGemId)?.board_position ? hoveredGemId : null;
   const legalDropCells = useLegalDropCells(state, floatingGem && isGemItem(floatingGem.gem) ? floatingGem.gem : null);
+  const supportPreview = useSupportPreview(state, fullGemById, hoveredGemId, floatingGem);
+  const persistentSupportLines = useSupportLines(state, fullGemById);
+  const activeTargetLines = useActiveTargetLines(persistentSupportLines, fullGemById, hoveredGemId, floatingGem);
   const bagSlots = inventorySlots.map((instanceId) => (instanceId ? fullGemById.get(instanceId) ?? null : null));
 
   if (!state) return <main className="game-screen loading">{notice}</main>;
@@ -635,8 +671,9 @@ export function App() {
                     key={`${cell.row}-${cell.column}`}
                     cell={cell}
                     fullGem={cell.gem ? fullGemById.get(cell.gem.instance_id) ?? cell.gem : null}
-                    hoveredGemId={hoveredGemId}
+                    hoveredGemId={hoveredBoardGemId}
                     linkedGemIds={linkedGemIds}
+                    supportPreview={supportPreview}
                     floatingGemId={floatingGem?.gem.instance_id ?? null}
                     legalDropCells={legalDropCells}
                     hoveredBoardCell={hoveredBoardCell}
@@ -652,7 +689,20 @@ export function App() {
                     onUnmountGem={unmountGem}
                   />
                 ))}
+                {supportPreview
+                  ? supportPreview.targets.length > 0 && <SupportPreviewLines preview={supportPreview} />
+                  : activeTargetLines
+                    ? activeTargetLines.length > 0 && <SupportLines lines={activeTargetLines} className="support-hover-lines" />
+                  : showPersistentSupportLines && persistentSupportLines.length > 0 && <SupportLines lines={persistentSupportLines} />}
               </div>
+              <label className="support-line-toggle">
+                <input
+                  type="checkbox"
+                  checked={showPersistentSupportLines}
+                  onChange={(event) => setShowPersistentSupportLines(event.currentTarget.checked)}
+                />
+                <span>常驻显示连线</span>
+              </label>
             </section>
 
             <section className="bag-panel">
@@ -714,6 +764,7 @@ function BoardCell({
   fullGem,
   hoveredGemId,
   linkedGemIds,
+  supportPreview,
   floatingGemId,
   legalDropCells,
   hoveredBoardCell,
@@ -729,6 +780,7 @@ function BoardCell({
   fullGem: Gem | null;
   hoveredGemId: string | null;
   linkedGemIds: Set<string>;
+  supportPreview: SupportPreview | null;
   floatingGemId: string | null;
   legalDropCells: Set<string>;
   hoveredBoardCell: string | null;
@@ -743,7 +795,8 @@ function BoardCell({
   const gem = fullGem;
   const origin: FloatingOrigin = { kind: "board", row: cell.row, column: cell.column };
   const isGhost = Boolean(gem && floatingGemId === gem.instance_id);
-  const hoverClass = gem ? boardHoverClass(gem.instance_id, hoveredGemId, linkedGemIds) : "";
+  const previewClass = supportPreview ? boardSupportPreviewClass(cell, supportPreview) : "";
+  const hoverClass = previewClass || (gem ? boardHoverClass(gem.instance_id, hoveredGemId, linkedGemIds) : "");
   const legalClass = legalDropCells.has(cellKey(cell.row, cell.column)) ? "legal-drop-cell" : "";
   const currentCellKey = cellKey(cell.row, cell.column);
   const boardHoverClassName = hoveredBoardCell === currentCellKey ? "board-slot-hover" : "";
@@ -792,6 +845,37 @@ function GemGhost() {
   return <span className="gem-ghost" />;
 }
 
+function SupportPreviewLines({ preview }: { preview: SupportPreview }) {
+  return (
+    <SupportLines
+      className="support-hover-lines"
+      lines={preview.targets.map((target) => ({
+        id: target.instanceId,
+        source: preview.source,
+        target,
+        color: preview.color
+      }))}
+    />
+  );
+}
+
+function SupportLines({ lines, className = "" }: { lines: SupportLine[]; className?: string }) {
+  return (
+    <svg className={`support-preview-lines ${className}`} viewBox="0 0 9 9" aria-hidden="true">
+      {lines.map((line) => (
+        <line
+          key={line.id}
+          x1={line.source.column + 0.5}
+          y1={line.source.row + 0.5}
+          x2={line.target.column + 0.5}
+          y2={line.target.row + 0.5}
+          style={{ stroke: line.color }}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function useLegalDropCells(state: AppState | null, floatingGem: Gem | null) {
   return useMemo(() => {
     const result = new Set<string>();
@@ -835,11 +919,88 @@ function useLinkedGemIds(state: AppState | null, hoveredGemId: string | null) {
   }, [state, hoveredGemId]);
 }
 
+function useSupportPreview(state: AppState | null, fullGemById: Map<string, Gem>, hoveredGemId: string | null, floatingGem: FloatingGem | null) {
+  return useMemo<SupportPreview | null>(() => {
+    if (!state || !hoveredGemId || floatingGem) return null;
+    const sourceGem = fullGemById.get(hoveredGemId);
+    if (!sourceGem || !sourceGem.board_position || !isSupportGem(sourceGem)) return null;
+
+    const targetIds = new Set<string>();
+    for (const skill of state.skill_preview) {
+      for (const modifier of skill.applied_modifiers) {
+        if (modifier.applied && modifier.source_instance_id === sourceGem.instance_id && modifier.target_instance_id) {
+          targetIds.add(modifier.target_instance_id);
+        }
+      }
+    }
+
+    const targets = state.board.cells.flat()
+      .map((cell) => {
+        if (!cell.gem || !targetIds.has(cell.gem.instance_id)) return null;
+        const gem = fullGemById.get(cell.gem.instance_id) ?? cell.gem;
+        if (!isActiveGem(gem)) return null;
+        return { row: cell.row, column: cell.column, instanceId: gem.instance_id };
+      })
+      .filter((target): target is { row: number; column: number; instanceId: string } => Boolean(target));
+
+    return {
+      source: {
+        row: sourceGem.board_position.row,
+        column: sourceGem.board_position.column,
+        instanceId: sourceGem.instance_id
+      },
+      targets,
+      color: gemColorValue(sourceGem)
+    };
+  }, [state, fullGemById, hoveredGemId, floatingGem]);
+}
+
+function useSupportLines(state: AppState | null, fullGemById: Map<string, Gem>) {
+  return useMemo<SupportLine[]>(() => {
+    if (!state) return [];
+    const result = new Map<string, SupportLine>();
+    for (const skill of state.skill_preview) {
+      for (const modifier of skill.applied_modifiers) {
+        if (!modifier.applied || !modifier.source_instance_id || !modifier.target_instance_id) continue;
+        const sourceGem = fullGemById.get(modifier.source_instance_id);
+        const targetGem = fullGemById.get(modifier.target_instance_id);
+        if (!sourceGem?.board_position || !targetGem?.board_position) continue;
+        if (!isSupportGem(sourceGem) || !isActiveGem(targetGem)) continue;
+        const key = `${sourceGem.instance_id}-${targetGem.instance_id}`;
+        if (result.has(key)) continue;
+        result.set(key, {
+          id: key,
+          source: sourceGem.board_position,
+          target: targetGem.board_position,
+          color: gemColorValue(sourceGem)
+        });
+      }
+    }
+    return [...result.values()];
+  }, [state, fullGemById]);
+}
+
+function useActiveTargetLines(lines: SupportLine[], fullGemById: Map<string, Gem>, hoveredGemId: string | null, floatingGem: FloatingGem | null) {
+  return useMemo<SupportLine[] | null>(() => {
+    if (!hoveredGemId || floatingGem) return null;
+    const hoveredGem = fullGemById.get(hoveredGemId);
+    if (!hoveredGem?.board_position || !isActiveGem(hoveredGem)) return null;
+    return lines.filter((line) => line.target.row === hoveredGem.board_position?.row && line.target.column === hoveredGem.board_position.column);
+  }, [lines, fullGemById, hoveredGemId, floatingGem]);
+}
+
 function boardHoverClass(instanceId: string, hoveredGemId: string | null, linkedGemIds: Set<string>) {
   if (!hoveredGemId) return "";
   if (instanceId === hoveredGemId) return "hover-self";
   if (linkedGemIds.has(instanceId)) return "hover-linked";
   return "hover-dim";
+}
+
+function boardSupportPreviewClass(cell: Cell, preview: SupportPreview) {
+  const instanceId = cell.gem?.instance_id ?? "";
+  if (instanceId === preview.source.instanceId) return "support-preview-source";
+  if (preview.targets.some((target) => target.instanceId === instanceId)) return "support-preview-target";
+  return "support-preview-dim";
 }
 
 function bagCellClass(slotIndex: number, hoveredBagSlot: number | null, gem: Gem, hoveredGemId: string | null, floatingGem: FloatingGem | null) {
@@ -1002,6 +1163,14 @@ function isGemItem(item: Gem) {
   return item.item_kind !== "ordinary" && item.tags.some((tag) => tag.id === "gem");
 }
 
+function isActiveGem(item: Gem) {
+  return item.tags.some((tag) => tag.id === "active_skill_gem");
+}
+
+function isSupportGem(item: Gem) {
+  return item.tags.some((tag) => tag.id === "support_gem");
+}
+
 function cellKey(row: number, column: number) {
   return `${row}-${column}`;
 }
@@ -1058,27 +1227,31 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
   const { gem, left, top, transform } = tooltip;
   const view = buildGemTooltipViewModel(gem);
   if (!view) return null;
+  if (view.variant === "support") {
+    return <SupportGemTooltip gem={gem} view={view} left={left} top={top} transform={transform} />;
+  }
+  const isActiveTooltip = view.variant === "active";
   const sections = view.sections;
   return (
-    <div className="gem-tooltip" style={{ left, top, transform }}>
+    <div className={`gem-tooltip ${isActiveTooltip ? "active-tooltip" : ""}`} style={{ left, top, transform }}>
       <div className="tooltip-header">
         <GemOrb gem={gem} />
         <div className="tooltip-heading">
-          <h3>{view.name_text}</h3>
-          <p>{view.subtitle_text}</p>
+          <h3 className={isActiveTooltip ? "tooltip-tone-title" : undefined}>{view.name_text}</h3>
+          {isActiveTooltip ? <RichText line={highlightTooltipText(view.subtitle_text)} /> : <p>{view.subtitle_text}</p>}
         </div>
       </div>
       {view.type_identity_text && <p className="tooltip-identity">{view.type_identity_text}</p>}
-      <div className="tooltip-tag-list">{view.tags.map((tag) => <TooltipTag key={`${tag.id ?? tag.text}-${tag.text}`} tag={tag} />)}</div>
+      {!isActiveTooltip && <div className="tooltip-tag-list">{view.tags.map((tag) => <TooltipTag key={`${tag.id ?? tag.text}-${tag.text}`} tag={tag} />)}</div>}
       <TooltipSection title={sections.description.title_text}>
-        {sections.description.lines.map((line) => <p key={line}>{line}</p>)}
+        {sections.description.lines.map((line) => isActiveTooltip ? <RichText key={line} line={highlightTooltipText(line)} /> : <p key={line}>{line}</p>)}
       </TooltipSection>
       {sections.stats.lines.length > 0 && <TooltipSection title={sections.stats.title_text}>
         <dl className="tooltip-stat-list">
           {sections.stats.lines.map((line) => (
             <div key={`${line.label_text}-${line.value_text}`} className="tooltip-stat-line">
-              <dt>{line.label_text}：</dt>
-              <dd>{line.value_text}</dd>
+              <dt className={isActiveTooltip ? "tooltip-tone-body" : undefined}>{line.label_text}：</dt>
+              <dd className={isActiveTooltip ? "tooltip-tone-body" : undefined}>{line.value_text}</dd>
             </div>
           ))}
         </dl>
@@ -1088,8 +1261,8 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
           <dl className="tooltip-stat-list">
             {sections.recent_dps.lines.map((line) => (
               <div key={`${line.label_text}-${line.value_text}`} className="tooltip-stat-line">
-                <dt>{line.label_text}：</dt>
-                <dd>{line.value_text}</dd>
+                <dt className={isActiveTooltip ? "tooltip-tone-body" : undefined}>{line.label_text}：</dt>
+                <dd className={isActiveTooltip ? activeDpsToneClass(line.value_text) : undefined}>{line.value_text}</dd>
               </div>
             ))}
           </dl>
@@ -1097,7 +1270,12 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
       )}
       {sections.bonuses && sections.bonuses.lines.length > 0 && (
         <TooltipSection title={sections.bonuses.title_text}>
-          {sections.bonuses.lines.map((line, index) => <p key={`${index}-${line}`} className="tooltip-bonus-line">{line}</p>)}
+          {sections.bonuses.lines.map((line, index) => <p key={`${index}-${line}`} className={`tooltip-bonus-line ${isActiveTooltip ? "tooltip-tone-rule" : ""}`}>{line}</p>)}
+        </TooltipSection>
+      )}
+      {isActiveTooltip && sections.base_skill_level && sections.base_skill_level.lines.length > 0 && (
+        <TooltipSection title="">
+          {sections.base_skill_level.lines.map((line) => <p key={line} className="tooltip-tone-bonus-positive">{line}</p>)}
         </TooltipSection>
       )}
       {sections.random_affixes && sections.random_affixes.lines.length > 0 && (
@@ -1119,10 +1297,104 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
         ))}
       </TooltipSection>}
       {sections.rules && sections.rules.lines.length > 0 && <TooltipSection title={sections.rules.title_text}>
-        {sections.rules.lines.map((line) => <p key={line}>{line}</p>)}
+        {sections.rules.lines.map((line) => <p key={line} className={isActiveTooltip ? "tooltip-tone-bonus-positive" : undefined}>{line}</p>)}
       </TooltipSection>}
     </div>
   );
+}
+
+function SupportGemTooltip({ gem, view, left, top, transform }: { gem: Gem; view: TooltipView; left: number; top: number; transform: string }) {
+  const sections = view.sections;
+  return (
+    <div className="gem-tooltip support-tooltip" style={{ left, top, transform }}>
+      <div className="tooltip-header">
+        <GemOrb gem={gem} />
+        <div className="tooltip-heading">
+          <h3 className="support-tooltip-name">{view.name_text}</h3>
+          {(view.summary_lines ?? []).map((line, index) => <RichText key={index} line={line} className="support-tooltip-summary" />)}
+        </div>
+      </div>
+      <TooltipSection title={sections.description.title_text}>
+        {(sections.description as { rich_lines?: TooltipRichLine[] }).rich_lines?.map((line, index) => <RichText key={index} line={line} />)}
+      </TooltipSection>
+      {sections.conditions && sections.conditions.rich_lines.length > 0 && (
+        <TooltipSection title="">
+          {sections.conditions.rich_lines.map((line, index) => <RichText key={index} line={line} />)}
+        </TooltipSection>
+      )}
+      {sections.support_rules && sections.support_rules.rich_lines.length > 0 && (
+        <TooltipSection title="">
+          {sections.support_rules.rich_lines.map((line, index) => <RichText key={index} line={line} />)}
+        </TooltipSection>
+      )}
+      {sections.base_bonuses && sections.base_bonuses.rich_lines.length > 0 && (
+        <TooltipSection title="">
+          {sections.base_bonuses.rich_lines.map((line, index) => <RichText key={index} line={line} />)}
+        </TooltipSection>
+      )}
+    </div>
+  );
+}
+
+function RichText({ line, className = "" }: { line: TooltipRichLine; className?: string }) {
+  return (
+    <p className={`tooltip-rich-line ${className}`}>
+      {line.map((segment, index) => (
+        <span key={`${index}-${segment.text}`} className={segment.tone ? `tooltip-tone-${segment.tone}` : undefined}>
+          {segment.text}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+const tooltipHighlightTones: Record<string, string> = {
+  "红色": "color-red",
+  "蓝色": "color-blue",
+  "绿色": "color-green",
+  "粉色": "color-pink",
+  "黄色": "color-yellow",
+  "白色": "color-white",
+  "黑色": "color-black",
+  "青色": "color-cyan",
+  "橙色": "color-orange",
+  "火焰": "damage-fire",
+  "冰霜": "damage-cold",
+  "闪电": "damage-lightning",
+  "物理": "damage-physical",
+  "混沌": "damage-chaos"
+};
+
+const tooltipHighlightTerms = Object.keys(tooltipHighlightTones).sort((left, right) => right.length - left.length);
+
+function highlightTooltipText(text: string): TooltipRichLine {
+  const segments: TooltipRichLine = [];
+  let index = 0;
+  while (index < text.length) {
+    const term = tooltipHighlightTerms.find((candidate) => text.startsWith(candidate, index));
+    if (term) {
+      segments.push({ text: term, tone: tooltipHighlightTones[term] });
+      index += term.length;
+      continue;
+    }
+    const nextIndex = tooltipHighlightTerms.reduce((next, candidate) => {
+      const found = text.indexOf(candidate, index + 1);
+      return found >= 0 ? Math.min(next, found) : next;
+    }, text.length);
+    segments.push({ text: text.slice(index, nextIndex), tone: "body" });
+    index = nextIndex;
+  }
+  return segments;
+}
+
+function activeDpsToneClass(valueText: string) {
+  if (valueText.includes("↘") || valueText.includes("-")) {
+    return "tooltip-tone-color-red";
+  }
+  if (valueText.includes("↗") || valueText.includes("+")) {
+    return "tooltip-tone-color-green";
+  }
+  return "tooltip-tone-body";
 }
 
 function buildGemTooltipViewModel(gem: Gem) {
@@ -1142,8 +1414,48 @@ function TooltipSection({ children }: { title: string; children: ReactNode }) {
 }
 
 function GemOrb({ gem }: { gem: Gem }) {
-  const className = !isGemItem(gem) ? "item-orb" : gem.tags.some((tag) => tag.id === "active_skill_gem") ? "active-orb" : "support-orb";
-  return <span className={`gem-orb ${className}`}>{gem.tooltip_view?.icon_text ?? gem.name_text.slice(0, 1)}</span>;
+  const sprite = gem.tooltip_view?.icon_sprite;
+  const className = !isGemItem(gem)
+    ? "item-orb"
+    : `gem-orb-color-${gem.tooltip_view?.icon_color_key ?? gemColorKey(gem)}`;
+  const style = sprite ? ({ "--gem-icon-sprite": `url(${sprite})` } as React.CSSProperties) : undefined;
+  return (
+    <span className={`gem-orb ${className} ${sprite ? "gem-orb-sprite" : ""}`} style={style}>
+      {sprite ? <span className="gem-orb-label">{gem.tooltip_view?.icon_text ?? gem.name_text.slice(0, 1)}</span> : gem.tooltip_view?.icon_text ?? gem.name_text.slice(0, 1)}
+    </span>
+  );
+}
+
+function gemColorKey(gem: Gem) {
+  const gemType = gem.gem_type?.id ?? gem.tags.find((tag) => tag.id?.startsWith("gem_type_"))?.id ?? "";
+  const number = Number(gemType.split("_").pop());
+  const colorByType: Record<number, string> = {
+    1: "red",
+    2: "blue",
+    3: "green",
+    4: "pink",
+    5: "yellow",
+    6: "white",
+    7: "black",
+    8: "cyan",
+    9: "orange"
+  };
+  return colorByType[number] ?? "white";
+}
+
+function gemColorValue(gem: Gem) {
+  const colors: Record<string, string> = {
+    red: "#FF4D4D",
+    blue: "#4DA3FF",
+    green: "#5CDB7A",
+    pink: "#FF5FD2",
+    yellow: "#FFD84D",
+    white: "#D8D8D8",
+    black: "#B08CFF",
+    cyan: "#4DDFFF",
+    orange: "#FF9A3D"
+  };
+  return colors[gem.tooltip_view?.icon_color_key ?? gemColorKey(gem)] ?? "#A8A6FF";
 }
 
 function FireBoltView({ bolt }: { bolt: FireBolt }) {

@@ -118,10 +118,61 @@ class V1WebAppApi:
             "active_fire_bolt",
             rarity="magic",
         )
-        self.inventory.add_instance("web_support_fire_mastery", "support_fire_mastery")
-        self.inventory.add_instance("web_support_fast_cast", "support_fast_cast")
+        seed_gems = [
+            ("web_seed_g1_fire_bolt", "active_fire_bolt", "gem_type_1", "magic", 1),
+            ("web_seed_g1_ice_shards", "active_ice_shards", "gem_type_1", "normal", 1),
+            ("web_seed_g1_puncture", "active_puncture", "gem_type_1", "normal", 2),
+            ("web_seed_g2_fast_attack", "support_fast_attack", "gem_type_2", "normal", 1),
+            ("web_seed_g2_precision", "support_precision", "gem_type_2", "normal", 1),
+            ("web_seed_g2_extra_projectile", "support_extra_projectile", "gem_type_2", "normal", 2),
+            ("web_seed_g3_fast_cast", "support_fast_cast", "gem_type_3", "normal", 1),
+            ("web_seed_g3_skill_haste", "support_skill_haste", "gem_type_3", "normal", 1),
+            ("web_seed_g3_cooldown_focus", "support_cooldown_focus", "gem_type_3", "normal", 2),
+            ("web_seed_g4_overcharge", "support_overcharge", "gem_type_4", "normal", 1),
+            ("web_seed_g4_overkill", "support_overkill", "gem_type_4", "normal", 1),
+            ("web_seed_g4_critical_burst", "support_critical_burst", "gem_type_4", "normal", 2),
+            ("web_seed_g5_physical_mastery", "support_physical_mastery", "gem_type_5", "normal", 1),
+            ("web_seed_g5_fire_mastery", "support_fire_mastery", "gem_type_5", "normal", 1),
+            ("web_seed_g5_cold_mastery", "support_cold_mastery", "gem_type_5", "normal", 2),
+            ("web_seed_g6_lightning_mastery", "support_lightning_mastery", "gem_type_6", "normal", 1),
+            ("web_seed_g6_area_magnify", "support_area_magnify", "gem_type_6", "normal", 1),
+            ("web_seed_g6_projectile_speed", "support_projectile_speed", "gem_type_6", "normal", 2),
+            ("web_seed_g7_wide_effect", "support_wide_effect", "gem_type_7", "normal", 1),
+            ("web_seed_g7_heavy_impact", "support_heavy_impact", "gem_type_7", "normal", 1),
+            ("web_seed_g7_stable_output", "support_stable_output", "gem_type_7", "normal", 2),
+            ("web_seed_g8_elemental_level", "support_elemental_level", "gem_type_8", "normal", 1),
+            ("web_seed_g8_attack_spell_level", "support_attack_spell_level", "gem_type_8", "normal", 1),
+            ("web_seed_g8_elemental_level_plus", "support_elemental_level", "gem_type_8", "normal", 2),
+            ("web_seed_g9_row_conduit", "support_row_conduit", "gem_type_9", "normal", 1),
+            ("web_seed_g9_column_conduit", "support_column_conduit", "gem_type_9", "normal", 1),
+            ("web_seed_g9_box_conduit", "support_box_conduit", "gem_type_9", "normal", 2),
+        ]
+        for instance_id, base_gem_id, gem_type, rarity, level in seed_gems:
+            self._add_seed_gem(instance_id, base_gem_id, gem_type, rarity=rarity, level=level)
         self.board.mount_gem(active.instance_id, 0, 0)
         self.logs.append("已准备初始宝石和数独盘。")
+
+    def _add_seed_gem(
+        self,
+        instance_id: str,
+        base_gem_id: str,
+        gem_type: str,
+        *,
+        rarity: str,
+        level: int,
+    ) -> GemInstance:
+        definition = self.definitions[base_gem_id]
+        tags = frozenset(tag for tag in definition.tags if not tag.startswith("gem_type_")) | {gem_type}
+        return self.inventory.add_existing_instance(
+            GemInstance(
+                instance_id=instance_id,
+                base_gem_id=base_gem_id,
+                gem_type=gem_type,
+                tags=tags,
+                rarity=rarity,
+                level=level,
+            )
+        )
 
     def _final_skills_or_error(self) -> tuple[tuple[FinalSkillInstance, ...], str | None]:
         try:
@@ -177,6 +228,8 @@ class V1WebAppApi:
             "board_relations": [],
             "tooltip_view": {
                 "icon_text": name_text[:1],
+                "icon_color_key": "",
+                "icon_sprite": "",
                 "name_text": name_text,
                 "subtitle_text": f"{category_text} 路 {self.presenter.localizer.text('rarity.normal.name')}",
                 "type_identity_text": description_text,

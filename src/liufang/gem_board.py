@@ -173,14 +173,14 @@ class SudokuGemBoard:
                 ("column", position.column),
                 ("box", box_index),
             ]:
-                groups.setdefault((scope, value, instance.gem_type), []).append(instance)
+                groups.setdefault((scope, value, self._gem_color_key(instance.gem_type)), []).append(instance)
 
         key_by_scope = {
             "row": ("board.duplicate_gem_type.row", "同一行不能出现重复 gem_type"),
             "column": ("board.duplicate_gem_type.column", "同一列不能出现重复 gem_type"),
             "box": ("board.duplicate_gem_type.box", "同一 3x3 宫不能出现重复 gem_type"),
         }
-        for (scope, _value, _gem_type), instances in groups.items():
+        for (scope, _value, _gem_color), instances in groups.items():
             if len(instances) < 2:
                 continue
             error_key, message = key_by_scope[scope]
@@ -192,6 +192,19 @@ class SudokuGemBoard:
                     positions=tuple(instance.board_position for instance in instances if instance.board_position),
                 )
             )
+
+    def _gem_color_key(self, gem_type: str) -> str:
+        return {
+            "gem_type_1": "red",
+            "gem_type_2": "blue",
+            "gem_type_3": "green",
+            "gem_type_4": "pink",
+            "gem_type_5": "yellow",
+            "gem_type_6": "white",
+            "gem_type_7": "black",
+            "gem_type_8": "cyan",
+            "gem_type_9": "orange",
+        }.get(gem_type, gem_type)
 
     def _mounted_by_instance_id(self) -> dict[str, GemInstance]:
         mounted: dict[str, GemInstance] = {}

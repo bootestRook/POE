@@ -103,9 +103,32 @@ class PresentationTest(unittest.TestCase):
             support_detail["current_effective_targets"][0]["name_text"],
             self.presenter.localizer.text("gem.active_fire_bolt.name"),
         )
+        support_tooltip = support_detail["tooltip_view"]
+        self.assertEqual(support_tooltip["variant"], "support")
+        self.assertEqual(support_tooltip["tags"], [])
         self.assertEqual(
-            support_detail["tooltip_view"]["sections"]["current_targets"]["lines"][0]["name_text"],
-            self.presenter.localizer.text("gem.active_fire_bolt.name"),
+            "".join(segment["text"] for segment in support_tooltip["summary_lines"][0]),
+            "黄色、宝石",
+        )
+        self.assertNotIn("current_targets", support_tooltip["sections"])
+        self.assertNotIn("rules", support_tooltip["sections"])
+        self.assertNotIn("stats", support_tooltip["sections"])
+        self.assertNotIn("random_affixes", support_tooltip["sections"])
+        self.assertEqual(
+            "".join(segment["text"] for segment in support_tooltip["sections"]["conditions"]["rich_lines"][0]),
+            "辅助：火焰 宝石",
+        )
+        self.assertEqual(
+            "".join(segment["text"] for segment in support_tooltip["sections"]["conditions"]["rich_lines"][1]),
+            "连接：行、列、宫格",
+        )
+        self.assertEqual(
+            "".join(segment["text"] for segment in support_tooltip["sections"]["support_rules"]["rich_lines"][0]),
+            "同颜色宝石不能位于同一行、列或宫格",
+        )
+        self.assertEqual(
+            "".join(segment["text"] for segment in support_tooltip["sections"]["base_bonuses"]["rich_lines"][0]),
+            "火焰伤害提高 18%",
         )
 
     def test_board_view_includes_grid_boxes_prompts_highlights_influence_and_skill_preview(self) -> None:

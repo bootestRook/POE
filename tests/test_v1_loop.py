@@ -47,6 +47,23 @@ class V1LoopTest(unittest.TestCase):
         self.assertNotIn("gem", {tag["id"] for tag in test_item["tags"]})
         self.assertEqual(state["ui_text"]["only_gems_on_board"], api.presenter.localizer.text("ui.inventory.only_gems_on_board"))
 
+    def test_web_seed_inventory_has_three_gems_per_gem_type(self) -> None:
+        api = V1WebAppApi(ROOT / "configs")
+        seeded_gems = [
+            instance
+            for instance in api.inventory.sort_instances("acquired_order")
+            if instance.instance_id.startswith("web_seed_g")
+        ]
+
+        self.assertEqual(len(seeded_gems), 27)
+        for index in range(1, 10):
+            gems = [instance for instance in seeded_gems if instance.gem_type == f"gem_type_{index}"]
+            self.assertEqual(len(gems), 3)
+            self.assertGreater(len({(instance.base_gem_id, instance.level, instance.rarity) for instance in gems}), 1)
+        self.assertTrue(
+            all(instance.rarity == "normal" for instance in seeded_gems if "support_gem" in instance.tags)
+        )
+
     def calculator(self) -> SkillEffectCalculator:
         return SkillEffectCalculator(
             board=self.board,

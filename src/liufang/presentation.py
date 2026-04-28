@@ -192,6 +192,7 @@ class PresentationService:
             "number": int(number),
             "display_text": self.localizer.text(f"gem_type.{number}.name"),
             "identity_text": self.localizer.text(f"ui.gem_type.{number}.identity"),
+            "color_key": self._gem_color_key(int(number)),
         }
 
     def _gem_category_text(self, definition: GemDefinition) -> str:
@@ -269,6 +270,8 @@ class PresentationService:
         )
         if instance.is_active_skill:
             return self._active_skill_tooltip_view(instance, detail, final_skill)
+        if "support_gem" in instance.tags:
+            return self._support_gem_tooltip_view(instance, detail)
 
         tags = self._unique_tooltip_tags(
             [
@@ -279,6 +282,8 @@ class PresentationService:
         )
         return {
             "icon_text": detail["name_text"][:1],
+            "icon_color_key": detail["gem_type"]["color_key"],
+            "icon_sprite": "",
             "name_text": detail["name_text"],
             "subtitle_text": f"{detail['category_text']} · {detail['rarity_text']} · {detail['gem_type']['display_text']}",
             "type_identity_text": detail["gem_type"]["identity_text"],
@@ -303,6 +308,60 @@ class PresentationService:
             },
         }
 
+    def _support_gem_tooltip_view(
+        self,
+        instance: GemInstance,
+        detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "variant": "support",
+            "icon_text": detail["name_text"][:1],
+            "icon_color_key": detail["gem_type"]["color_key"],
+            "icon_sprite": "",
+            "name_text": detail["name_text"],
+            "subtitle_text": "",
+            "type_identity_text": "",
+            "tags": [],
+            "summary_lines": [
+                self._join_segments(
+                    [
+                        *self._gem_color_segments(detail["gem_type"]["number"]),
+                        {"text": "、", "tone": "muted"},
+                        {"text": self.localizer.text("tag.gem.name"), "tone": "muted"},
+                    ]
+                )
+            ],
+            "sections": {
+                "description": {
+                    "rich_lines": [self._highlight_terms(detail["description_text"])],
+                },
+                "conditions": {
+                    "rich_lines": [
+                        self._join_segments(
+                            [
+                                {"text": self.localizer.text("ui.tooltip.support.target_prefix"), "tone": "label"},
+                                *self._support_target_segments(detail["can_affect"]),
+                            ]
+                        ),
+                        self._join_segments(
+                            [
+                                {"text": self.localizer.text("ui.tooltip.support.connection_prefix"), "tone": "label"},
+                                {"text": self.localizer.text("ui.tooltip.support.connections"), "tone": "muted"},
+                            ]
+                        ),
+                    ],
+                },
+                "support_rules": {
+                    "rich_lines": [
+                        [{"text": self.localizer.text("ui.tooltip.support.sudoku_rule"), "tone": "rule"}]
+                    ],
+                },
+                "base_bonuses": {
+                    "rich_lines": self._support_bonus_lines(detail["base_effect"]),
+                },
+            },
+        }
+
     def _active_skill_tooltip_view(
         self,
         instance: GemInstance,
@@ -323,17 +382,28 @@ class PresentationService:
                 "title_text": self.localizer.text("ui.tooltip.section.recent_dps"),
                 "lines": self._active_tooltip_dps_lines(final_skill),
             },
+            "base_skill_level": {
+                "lines": [
+                    self.localizer.format(
+                        "ui.tooltip.base_skill_level",
+                        level=instance.level,
+                    )
+                ],
+            },
         }
         bonus_lines = self._active_tooltip_bonus_lines(final_skill)
-        if bonus_lines:
-            sections["bonuses"] = {
-                "title_text": self.localizer.text("ui.tooltip.section.current_bonus"),
-                "lines": bonus_lines,
-            }
+        bonus_lines.append(self.localizer.text("ui.tooltip.support.sudoku_rule"))
+        sections["bonuses"] = {
+            "title_text": self.localizer.text("ui.tooltip.section.current_bonus"),
+            "lines": bonus_lines,
+        }
         return {
+            "variant": "active",
             "icon_text": detail["name_text"][:1],
+            "icon_color_key": detail["gem_type"]["color_key"],
+            "icon_sprite": "",
             "name_text": detail["name_text"],
-            "subtitle_text": "、".join(tag["text"] for tag in tags),
+            "subtitle_text": self._active_tooltip_subtitle_text(detail, tags),
             "type_identity_text": "",
             "tags": tags,
             "sections": sections,
@@ -349,6 +419,120 @@ class PresentationService:
             seen.add(text)
             result.append(tag)
         return result
+
+    def _active_tooltip_subtitle_text(self, detail: dict[str, Any], tags: list[dict[str, str]]) -> str:
+        color_text = self.localizer.text(f"ui.gem_color.{self._gem_color_key(detail['gem_type']['number'])}")
+        return "、".join([color_text, *(tag["text"] for tag in tags)])
+
+    def _join_segments(self, segments: list[dict[str, str]]) -> list[dict[str, str]]:
+        return [segment for segment in segments if segment["text"]]
+
+    def _gem_color_segments(self, gem_type_number: int) -> list[dict[str, str]]:
+        color_key = self._gem_color_key(gem_type_number)
+        return [
+            {
+                "text": self.localizer.text(f"ui.gem_color.{color_key}"),
+                "tone": f"color-{color_key}",
+            }
+        ]
+
+    def _gem_color_key(self, gem_type_number: int) -> str:
+        return {
+            1: "red",
+            2: "blue",
+            3: "green",
+            4: "pink",
+            5: "yellow",
+            6: "white",
+            7: "black",
+            8: "cyan",
+            9: "orange",
+        }.get(gem_type_number, "white")
+
+    def _support_target_segments(self, can_affect: dict[str, Any]) -> list[dict[str, str]]:
+        tags = can_affect["tags_any"] or can_affect["tags_all"]
+        if not tags:
+            return [{"text": self.localizer.text("tag.gem.name"), "tone": "muted"}]
+        segments: list[dict[str, str]] = []
+        for index, tag in enumerate(tags):
+            if index:
+                segments.append({"text": "、", "tone": "muted"})
+            segments.extend(self._tag_target_segments(tag))
+        if not any(segment["text"] == self.localizer.text("tag.gem.name") for segment in segments):
+            segments.append({"text": " ", "tone": "muted"})
+            segments.append({"text": self.localizer.text("tag.gem.name"), "tone": "muted"})
+        return segments
+
+    def _tag_target_segments(self, tag: dict[str, str]) -> list[dict[str, str]]:
+        tag_id = tag["id"]
+        if tag_id == "active_skill_gem":
+            return [{"text": self.localizer.text("tag.gem.name"), "tone": "muted"}]
+        if tag_id.startswith("gem_type_"):
+            number = int(tag_id.rsplit("_", 1)[-1])
+            return self._gem_color_segments(number)
+        return self._highlight_terms(tag["text"])
+
+    def _support_bonus_lines(self, base_effect: dict[str, Any]) -> list[list[dict[str, str]]]:
+        lines: list[list[dict[str, str]]] = []
+        for modifier in base_effect.get("modifiers", []):
+            value = modifier["value"]
+            if value is None or value == 0:
+                continue
+            tone = "bonus-positive" if value > 0 else "bonus-negative"
+            lines.append(
+                [
+                    {
+                        "text": f"{modifier['stat']['text']} {self._format_support_bonus_value(modifier['stat']['id'], value)}",
+                        "tone": tone,
+                    }
+                ]
+            )
+        return lines
+
+    def _format_support_bonus_value(self, stat: str, value: float) -> str:
+        if stat == "conduit_multiplier":
+            return f"×{self._format_number(value)}"
+        if stat.endswith("_percent"):
+            return self._format_number(value) + "%"
+        return self._format_number(value)
+
+    def _highlight_terms(self, text: str) -> list[dict[str, str]]:
+        terms = [
+            ("红色", "color-red"),
+            ("蓝色", "color-blue"),
+            ("绿色", "color-green"),
+            ("粉色", "color-pink"),
+            ("黄色", "color-yellow"),
+            ("白色", "color-white"),
+            ("黑色", "color-black"),
+            ("青色", "color-cyan"),
+            ("橙色", "color-orange"),
+            ("火焰", "damage-fire"),
+            ("冰霜", "damage-cold"),
+            ("闪电", "damage-lightning"),
+            ("物理", "damage-physical"),
+            ("混沌", "damage-chaos"),
+            ("宝石", "muted"),
+        ]
+        segments: list[dict[str, str]] = []
+        index = 0
+        while index < len(text):
+            match = next(
+                ((term, tone) for term, tone in terms if text.startswith(term, index)),
+                None,
+            )
+            if match is None:
+                next_index = min(
+                    [text.find(term, index + 1) for term, _tone in terms if text.find(term, index + 1) >= 0]
+                    or [len(text)]
+                )
+                segments.append({"text": text[index:next_index], "tone": "body"})
+                index = next_index
+                continue
+            term, tone = match
+            segments.append({"text": term, "tone": tone})
+            index += len(term)
+        return segments
 
     def _active_tooltip_tags(self, tags: list[dict[str, str]]) -> list[dict[str, str]]:
         hidden = {"active_skill_gem", "loot_gem"}
