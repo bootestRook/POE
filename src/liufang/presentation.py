@@ -32,6 +32,9 @@ class Localizer:
             return value
         return f"未配置文案：{key}"
 
+    def format(self, key: str, **values: Any) -> str:
+        return self.text(key).format(**values)
+
 
 @dataclass
 class PresentationService:
@@ -60,7 +63,7 @@ class PresentationService:
         final_skills: tuple[FinalSkillInstance, ...] = (),
     ) -> dict[str, Any]:
         definition = self.definitions[instance.base_gem_id]
-        return {
+        detail = {
             "instance_id": instance.instance_id,
             "name_text": self.localizer.text(definition.name_key),
             "description_text": self.localizer.text(definition.description_key),
@@ -72,12 +75,12 @@ class PresentationService:
             "board_position": self._position_view(instance.board_position),
             "tags": [self._tag_view(tag) for tag in sorted(instance.tags)],
             "base_effect": self._base_effect_view(definition),
-            "random_affixes": [self._affix_roll_view(roll) for roll in instance.random_affixes],
-            "implicit_affixes": [self._affix_roll_view(roll) for roll in instance.implicit_affixes],
             "can_affect": self._apply_filter_view(definition),
             "current_effective_targets": self._current_effective_targets(instance, final_skills),
             "board_relations": self._relations_for_instance(instance, board) if board is not None else [],
         }
+        detail["tooltip_view"] = self._gem_tooltip_view(instance, detail, final_skills)
+        return detail
 
     def board_view(
         self,
@@ -253,6 +256,163 @@ class PresentationService:
             "tags_all": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_all)],
             "tags_none": [self._tag_view(tag) for tag in sorted(definition.apply_filter_tags_none)],
         }
+
+    def _gem_tooltip_view(
+        self,
+        instance: GemInstance,
+        detail: dict[str, Any],
+        final_skills: tuple[FinalSkillInstance, ...],
+    ) -> dict[str, Any]:
+        final_skill = next(
+            (skill for skill in final_skills if skill.active_gem_instance_id == instance.instance_id),
+            None,
+        )
+        tags = self._unique_tooltip_tags(
+            [
+                {"id": "category", "text": detail["category_text"], "tone": "category"},
+                {"id": detail["gem_type"]["id"], "text": detail["gem_type"]["display_text"], "tone": "type"},
+                *detail["tags"],
+            ]
+        )
+        return {
+            "icon_text": detail["name_text"][:1],
+            "name_text": detail["name_text"],
+            "subtitle_text": f"{detail['category_text']} · {detail['rarity_text']} · {detail['gem_type']['display_text']}",
+            "type_identity_text": detail["gem_type"]["identity_text"],
+            "tags": tags,
+            "sections": {
+                "description": {
+                    "title_text": self.localizer.text("ui.tooltip.section.description"),
+                    "lines": [detail["description_text"], detail["can_affect"]["summary_text"]],
+                },
+                "stats": {
+                    "title_text": self.localizer.text("ui.tooltip.section.stats"),
+                    "lines": self._tooltip_stat_lines(instance, detail, final_skill),
+                },
+                "current_targets": {
+                    "title_text": self.localizer.text("ui.tooltip.section.current_targets"),
+                    "lines": self._tooltip_target_lines(detail["current_effective_targets"]),
+                },
+                "rules": {
+                    "title_text": self.localizer.text("ui.tooltip.section.rules"),
+                    "lines": self._tooltip_rule_lines(detail),
+                },
+            },
+        }
+
+    def _unique_tooltip_tags(self, tags: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        seen: set[str] = set()
+        result: list[dict[str, Any]] = []
+        for tag in tags:
+            text = tag["text"]
+            if text in seen:
+                continue
+            seen.add(text)
+            result.append(tag)
+        return result
+
+    def _tooltip_stat_lines(
+        self,
+        instance: GemInstance,
+        detail: dict[str, Any],
+        final_skill: FinalSkillInstance | None,
+    ) -> list[dict[str, str]]:
+        lines = [
+            {
+                "label_text": self.localizer.text("ui.tooltip.level"),
+                "value_text": str(instance.level),
+            }
+        ]
+        base_effect = detail["base_effect"]
+        if "base_damage" in base_effect:
+            lines.extend(
+                [
+                    {
+                        "label_text": self.localizer.text("ui.skill.base_damage"),
+                        "value_text": self._format_number(base_effect["base_damage"]),
+                    },
+                    {
+                        "label_text": self.localizer.text("ui.skill.base_cooldown_ms"),
+                        "value_text": self._format_number(base_effect["base_cooldown_ms"]),
+                    },
+                    {
+                        "label_text": self.localizer.text("ui.tooltip.damage_type"),
+                        "value_text": base_effect["damage_type_text"],
+                    },
+                ]
+            )
+            if final_skill is not None:
+                lines.extend(
+                    [
+                        {
+                            "label_text": self.localizer.text("ui.skill.final_damage"),
+                            "value_text": self._format_number(final_skill.final_damage),
+                        },
+                        {
+                            "label_text": self.localizer.text("ui.skill.final_cooldown_ms"),
+                            "value_text": self._format_number(final_skill.final_cooldown_ms),
+                        },
+                        {
+                            "label_text": self.localizer.text("ui.skill.projectile_count"),
+                            "value_text": self._format_number(final_skill.projectile_count),
+                        },
+                        {
+                            "label_text": self.localizer.text("ui.skill.area_multiplier"),
+                            "value_text": self._format_number(final_skill.area_multiplier),
+                        },
+                        {
+                            "label_text": self.localizer.text("ui.skill.speed_multiplier"),
+                            "value_text": self._format_number(final_skill.speed_multiplier),
+                        },
+                    ]
+                )
+            return lines
+
+        for modifier in base_effect.get("modifiers", []):
+            lines.append(
+                {
+                    "label_text": f"{modifier['stat']['text']}（{modifier['layer_text']}）",
+                    "value_text": self._format_number(modifier["value"], signed=True),
+                }
+            )
+        return lines
+
+    def _tooltip_target_lines(self, targets: list[dict[str, str]]) -> list[dict[str, str]]:
+        return [
+            {
+                "name_text": target["name_text"],
+                "status_text": target["status_text"],
+            }
+            for target in targets
+        ]
+
+    def _tooltip_rule_lines(self, detail: dict[str, Any]) -> list[str]:
+        position = detail["board_position"]
+        lines = [
+            self.localizer.format(
+                "ui.tooltip.position.placed",
+                row=position["row"] + 1,
+                column=position["column"] + 1,
+            )
+            if position
+            else self.localizer.text("ui.tooltip.position.unplaced")
+        ]
+        lines.extend(
+            self.localizer.format(
+                "ui.tooltip.relation",
+                relation=relation["relation_text"],
+                source=relation["source"]["name_text"],
+                target=relation["target"]["name_text"],
+            )
+            for relation in detail["board_relations"]
+        )
+        return lines
+
+    def _format_number(self, value: int | float, *, signed: bool = False) -> str:
+        number = f"{value:g}" if isinstance(value, float) else str(value)
+        if signed and value > 0:
+            return f"+{number}"
+        return number
 
     def _current_effective_targets(
         self,

@@ -24,6 +24,7 @@ from liufang.inventory import GemInventory
 from liufang.loot import LootRuntime
 from liufang.presentation import PresentationService
 from liufang.skill_effects import SkillEffectCalculator
+from liufang.web_api import V1WebAppApi
 
 
 class V1LoopTest(unittest.TestCase):
@@ -34,6 +35,17 @@ class V1LoopTest(unittest.TestCase):
         self.inventory = GemInventory(self.definitions)
         self.board = SudokuGemBoard(load_board_rules(self.config_root), self.inventory)
         self.presenter = PresentationService.from_configs(self.config_root)
+
+    def test_web_state_includes_non_gem_test_item(self) -> None:
+        api = V1WebAppApi(ROOT / "configs")
+        state = api.state()
+
+        test_item = next(item for item in state["inventory"] if item["instance_id"] == "web_test_whetstone")
+
+        self.assertEqual(test_item["item_kind"], "ordinary")
+        self.assertIsNone(test_item["board_position"])
+        self.assertNotIn("gem", {tag["id"] for tag in test_item["tags"]})
+        self.assertEqual(state["ui_text"]["only_gems_on_board"], api.presenter.localizer.text("ui.inventory.only_gems_on_board"))
 
     def calculator(self) -> SkillEffectCalculator:
         return SkillEffectCalculator(

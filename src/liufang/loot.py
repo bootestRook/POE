@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .affixes import AffixGenerator
 from .config import GemDefinition, load_toml
-from .inventory import AffixRoll, GemInstance, GemInventory
+from .inventory import GemInstance, GemInventory
 
 
 class LootGenerationError(ValueError):
@@ -67,18 +67,12 @@ class LootRuntime:
         base_gem_id = self._choose_base_gem_id()
         rarity = self._weighted_key(self._rarity_weights)
         definition = self._definitions[base_gem_id]
-        rolls = self._affix_generator.generate_for_gem(definition, rarity)
-        prefix_affixes = tuple(roll for roll in rolls if roll.gen == "prefix")
-        suffix_affixes = tuple(roll for roll in rolls if roll.gen == "suffix")
         instance = GemInstance(
             instance_id=self._next_instance_id(),
             base_gem_id=base_gem_id,
             gem_type=definition.gem_type,
             rarity=rarity,
             level=1,
-            prefix_affixes=prefix_affixes,
-            suffix_affixes=suffix_affixes,
-            implicit_affixes=(),
             locked=False,
             tags=definition.tags,
             board_position=None,

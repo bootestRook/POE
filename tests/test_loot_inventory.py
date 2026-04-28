@@ -61,7 +61,7 @@ class LootInventoryTest(unittest.TestCase):
         self.assertEqual(raised.exception.error_key, "affix.error.candidate_shortage")
         self.assertEqual(raised.exception.message, "可用词缀候选不足")
 
-    def test_drop_generation_creates_instance_not_base_definition(self) -> None:
+    def test_drop_generation_creates_instance_without_random_affixes(self) -> None:
         loot = LootRuntime.from_configs(
             self.config_root,
             self.definitions,
@@ -74,7 +74,8 @@ class LootInventoryTest(unittest.TestCase):
         self.assertTrue(instance.instance_id.startswith("gem_inst_"))
         self.assertIn(instance.base_gem_id, self.definitions)
         self.assertEqual(instance.rarity, "rare")
-        self.assertEqual(len(instance.random_affixes), 2)
+        self.assertEqual(instance.random_affixes, ())
+        self.assertEqual(instance.implicit_affixes, ())
         self.assertIsNone(instance.board_position)
         self.assertFalse(hasattr(instance, "skill_template"))
 
@@ -104,7 +105,7 @@ class LootInventoryTest(unittest.TestCase):
             sorted([first.instance_id, "manual_magic"], key=lambda value: inventory.require(value).base_gem_id),
         )
 
-    def test_board_mount_unmount_preserves_affixes_and_locked_state(self) -> None:
+    def test_board_mount_unmount_preserves_empty_affixes_and_locked_state(self) -> None:
         inventory = GemInventory(self.definitions)
         loot = LootRuntime.from_configs(
             self.config_root,
@@ -115,14 +116,14 @@ class LootInventoryTest(unittest.TestCase):
         )
         instance = loot.pickup(loot.generate_drop(), inventory)
         inventory.set_locked(instance.instance_id, True)
-        before_affixes = instance.random_affixes
         board = SudokuGemBoard(load_board_rules(self.config_root), inventory)
 
         board.mount_gem(instance.instance_id, 0, 0)
         board.unmount_gem(instance.instance_id)
 
         stored = inventory.require(instance.instance_id)
-        self.assertEqual(stored.random_affixes, before_affixes)
+        self.assertEqual(stored.random_affixes, ())
+        self.assertEqual(stored.implicit_affixes, ())
         self.assertTrue(stored.locked)
         self.assertIsNone(stored.board_position)
 

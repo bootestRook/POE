@@ -20,7 +20,7 @@ from liufang.config import (
     load_skill_templates,
 )
 from liufang.gem_board import SudokuGemBoard
-from liufang.inventory import AffixRoll, GemInventory
+from liufang.inventory import GemInventory
 from liufang.loot import LootRuntime
 from liufang.presentation import PresentationService
 from liufang.skill_effects import SkillEffectCalculator
@@ -59,9 +59,6 @@ class PresentationTest(unittest.TestCase):
             "active",
             "active_fire_bolt",
             rarity="magic",
-            prefix_affixes=(
-                AffixRoll("affix_damage_percent_t1", "damage_add_percent", 10, "prefix", "damage_scaling"),
-            ),
         )
         support = self.inventory.add_instance("support", "support_fire_mastery")
         self.board.mount_gem(active.instance_id, 0, 0)
@@ -72,12 +69,17 @@ class PresentationTest(unittest.TestCase):
         self.assertEqual(active_detail["name_text"], self.presenter.localizer.text("gem.active_fire_bolt.name"))
         self.assertEqual(active_detail["category_text"], self.presenter.localizer.text("tag.active_skill_gem.name"))
         self.assertEqual(active_detail["gem_type"]["number"], 1)
-        self.assertEqual(len(active_detail["random_affixes"]), 1)
-        self.assertEqual(
-            active_detail["random_affixes"][0]["name_text"],
-            self.presenter.localizer.text("affix.damage_percent.t1.name"),
-        )
+        self.assertNotIn("random_affixes", active_detail)
+        self.assertNotIn("implicit_affixes", active_detail)
         self.assertTrue(active_detail["current_effective_targets"])
+        active_tooltip = active_detail["tooltip_view"]
+        self.assertEqual(active_tooltip["name_text"], self.presenter.localizer.text("gem.active_fire_bolt.name"))
+        self.assertNotIn("random_affixes", active_tooltip["sections"])
+        self.assertEqual(
+            active_tooltip["sections"]["stats"]["lines"][0]["label_text"],
+            self.presenter.localizer.text("ui.tooltip.level"),
+        )
+        self.assertIn("第 1 行第 1 列", active_tooltip["sections"]["rules"]["lines"][0])
 
         support_detail = self.presenter.gem_detail(support, board=self.board, final_skills=final_skills)
         self.assertEqual(support_detail["category_text"], self.presenter.localizer.text("tag.support_gem.name"))
@@ -87,6 +89,10 @@ class PresentationTest(unittest.TestCase):
         )
         self.assertEqual(
             support_detail["current_effective_targets"][0]["name_text"],
+            self.presenter.localizer.text("gem.active_fire_bolt.name"),
+        )
+        self.assertEqual(
+            support_detail["tooltip_view"]["sections"]["current_targets"]["lines"][0]["name_text"],
             self.presenter.localizer.text("gem.active_fire_bolt.name"),
         )
 

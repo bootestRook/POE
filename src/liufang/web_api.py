@@ -18,7 +18,7 @@ from .config import (
     load_skill_templates,
 )
 from .gem_board import SudokuGemBoard
-from .inventory import AffixRoll, GemInventory, GemInstance
+from .inventory import GemInventory, GemInstance
 from .loot import LootRuntime
 from .presentation import PresentationService
 from .skill_effects import FinalSkillInstance, SkillEffectCalculator, SkillEffectError
@@ -49,6 +49,7 @@ class V1WebAppApi:
             self.presenter.gem_detail(instance, board=self.board, final_skills=final_skills)
             for instance in self.inventory.sort_instances("acquired_order")
         ]
+        inventory.append(self._test_item_detail())
         drops = []
         if self.combat_session is not None:
             drops = [self.presenter.drop_prompt(drop) for drop in self.combat_session.dropped_gems]
@@ -60,6 +61,9 @@ class V1WebAppApi:
             "combat": self.presenter.combat_hud(self.combat_session) if self.combat_session else None,
             "drops": drops,
             "logs": list(self.logs),
+            "ui_text": {
+                "only_gems_on_board": self.presenter.localizer.text("ui.inventory.only_gems_on_board"),
+            },
         }
 
     def mount(self, instance_id: str, row: int, column: int) -> dict[str, Any]:
@@ -113,9 +117,6 @@ class V1WebAppApi:
             "web_active_fire_bolt",
             "active_fire_bolt",
             rarity="magic",
-            prefix_affixes=(
-                AffixRoll("affix_damage_percent_t1", "damage_add_percent", 10, "prefix", "damage_scaling"),
-            ),
         )
         self.inventory.add_instance("web_support_fire_mastery", "support_fire_mastery")
         self.inventory.add_instance("web_support_fast_cast", "support_fast_cast")
@@ -153,6 +154,47 @@ class V1WebAppApi:
 
     def _gem_name(self, instance: GemInstance) -> str:
         return self.presenter.localizer.text(self.definitions[instance.base_gem_id].name_key)
+
+    def _test_item_detail(self) -> dict[str, Any]:
+        name_text = self.presenter.localizer.text("item.test_whetstone.name")
+        description_text = self.presenter.localizer.text("item.test_whetstone.description")
+        category_text = self.presenter.localizer.text("item.category.normal_item")
+        return {
+            "instance_id": "web_test_whetstone",
+            "item_kind": "ordinary",
+            "name_text": name_text,
+            "description_text": description_text,
+            "category_text": category_text,
+            "gem_type": {"id": "", "display_text": category_text, "identity_text": description_text},
+            "rarity_text": self.presenter.localizer.text("rarity.normal.name"),
+            "level": 1,
+            "locked": False,
+            "board_position": None,
+            "tags": [{"id": "test_item", "text": self.presenter.localizer.text("tag.test_item.name")}],
+            "base_effect": {},
+            "can_affect": {"summary_text": description_text, "tags_any": [], "tags_all": [], "tags_none": []},
+            "current_effective_targets": [],
+            "board_relations": [],
+            "tooltip_view": {
+                "icon_text": name_text[:1],
+                "name_text": name_text,
+                "subtitle_text": f"{category_text} 路 {self.presenter.localizer.text('rarity.normal.name')}",
+                "type_identity_text": description_text,
+                "tags": [{"id": "test_item", "text": self.presenter.localizer.text("tag.test_item.name"), "tone": "category"}],
+                "sections": {
+                    "description": {
+                        "title_text": self.presenter.localizer.text("ui.tooltip.section.description"),
+                        "lines": [description_text],
+                    },
+                    "stats": {"title_text": self.presenter.localizer.text("ui.tooltip.section.stats"), "lines": []},
+                    "current_targets": {"title_text": self.presenter.localizer.text("ui.tooltip.section.current_targets"), "lines": []},
+                    "rules": {
+                        "title_text": self.presenter.localizer.text("ui.tooltip.section.rules"),
+                        "lines": [self.presenter.localizer.text("ui.inventory.only_gems_on_board")],
+                    },
+                },
+            },
+        }
 
 
 def encode_json(data: Any) -> bytes:

@@ -1,22 +1,52 @@
-import { DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 type Gem = {
   instance_id: string;
+  item_kind?: "gem" | "ordinary";
   name_text: string;
   category_text: string;
   rarity_text: string;
   gem_type: { display_text: string; identity_text: string };
-  tags: { text: string }[];
-  random_affixes: Affix[];
+  tags: { id?: string; text: string }[];
   current_effective_targets: { name_text: string }[];
   board_position: { row: number; column: number } | null;
+  tooltip_view?: TooltipView;
 };
 
-type Affix = {
+type TooltipView = {
+  icon_text: string;
   name_text: string;
-  gen_text: string;
-  stat: { text: string };
-  value: number;
+  subtitle_text: string;
+  type_identity_text: string;
+  tags: TooltipTagView[];
+  sections: {
+    description: { title_text: string; lines: string[] };
+    stats: { title_text: string; lines: TooltipStatLine[] };
+    random_affixes?: { title_text: string; lines: TooltipAffixLine[]; empty_text: string };
+    current_targets: { title_text: string; lines: TooltipTargetLine[] };
+    rules: { title_text: string; lines: string[] };
+  };
+};
+
+type TooltipTagView = {
+  id?: string;
+  text: string;
+  tone?: string;
+};
+
+type TooltipStatLine = {
+  label_text: string;
+  value_text: string;
+};
+
+type TooltipAffixLine = {
+  title_text: string;
+  detail_text: string;
+};
+
+type TooltipTargetLine = {
+  name_text: string;
+  status_text: string;
 };
 
 type Cell = {
@@ -54,6 +84,9 @@ type AppState = {
   skill_error: string | null;
   drops: { drop_id: string; name_text: string; rarity_text: string; picked_up: boolean; status_text: string }[];
   logs: string[];
+  ui_text?: {
+    only_gems_on_board?: string;
+  };
 };
 
 type Enemy = {
@@ -105,6 +138,18 @@ type DropTarget =
   | { kind: "board"; row: number; column: number }
   | { kind: "bag"; slotIndex: number }
   | { kind: "invalid" };
+
+type PlacementResult =
+  | { type: "place" }
+  | { type: "swap"; nextFloatingItem: Gem; origin: FloatingOrigin }
+  | { type: "reject"; reason?: "only_gems_on_board" };
+
+type PlacementPrompt = {
+  id: number;
+  text: string;
+  x: number;
+  y: number;
+};
 
 type TileType = "ground" | "blocked" | "object";
 
@@ -162,9 +207,11 @@ export function App() {
   const [elapsed, setElapsed] = useState(0);
   const [combatLogs, setCombatLogs] = useState<string[]>([]);
   const [hoveredGemId, setHoveredGemId] = useState<string | null>(null);
+  const [hoveredBoardCell, setHoveredBoardCell] = useState<string | null>(null);
   const [hoveredBagSlot, setHoveredBagSlot] = useState<number | null>(null);
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   const [floatingGem, setFloatingGem] = useState<FloatingGem | null>(null);
+  const [placementPrompt, setPlacementPrompt] = useState<PlacementPrompt | null>(null);
   const [inventorySlots, setInventorySlots] = useState<(string | null)[]>(() => Array(INVENTORY_SLOT_COUNT).fill(null));
   const keys = useRef(new Set<string>());
   const floatingGemRef = useRef<FloatingGem | null>(null);
@@ -172,6 +219,7 @@ export function App() {
   const nextEnemyId = useRef(1);
   const nextTextId = useRef(1);
   const nextBoltId = useRef(1);
+  const nextPromptId = useRef(1);
   const attackTimer = useRef(0);
   const spawnTimer = useRef(0);
 
@@ -186,8 +234,8 @@ export function App() {
 
   useEffect(() => {
     if (!state) return;
-    setInventorySlots((current) => reconcileInventorySlots(current, state));
-  }, [state]);
+    setInventorySlots((current) => reconcileInventorySlots(current, state, floatingGemRef.current?.gem.instance_id ?? null));
+  }, [state, floatingGem?.gem.instance_id]);
 
   useEffect(() => {
     floatingGemRef.current = floatingGem;
@@ -207,9 +255,11 @@ export function App() {
       event.preventDefault();
       const element = document.elementFromPoint(event.clientX, event.clientY);
       const target = resolveDropTarget(element);
-      const placed = await placeFloatingGem(current, target);
-      if (placed) {
+      const result = await placeFloatingItem(current, target, event);
+      if (result.type === "place") {
         clearFloatingGem();
+      } else if (result.type === "swap") {
+        setFloatingItem(result.nextFloatingItem, result.origin, event.clientX, event.clientY, current.offsetX, current.offsetY);
       }
     }
     window.addEventListener("mousemove", onMouseMove);
@@ -218,7 +268,7 @@ export function App() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [state]);
+  }, [state, inventorySlots]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -348,71 +398,109 @@ export function App() {
     return survivors;
   }
 
-  async function placeFloatingGem(current: FloatingGem, target: DropTarget): Promise<boolean> {
-    if (target.kind === "invalid") return false;
-    if (isDropBackToOrigin(current, target)) return true;
-    if (target.kind === "bag") return await placeGemInBag(current, target.slotIndex);
-    return await dropGemOnCell(current.gem.instance_id, target.row, target.column);
+  async function placeFloatingItem(current: FloatingGem, target: DropTarget, event: globalThis.MouseEvent): Promise<PlacementResult> {
+    if (target.kind === "invalid") return { type: "reject" };
+    if (isDropBackToOrigin(current, target, state, inventorySlots)) return { type: "place" };
+    if (target.kind === "bag") return await placeItemInBag(current, target.slotIndex);
+    return await placeItemOnBoard(current, target.row, target.column, event);
   }
 
-  async function placeGemInBag(current: FloatingGem, slotIndex: number): Promise<boolean> {
-    if (!state) return false;
+  async function placeItemInBag(current: FloatingGem, slotIndex: number): Promise<PlacementResult> {
+    if (!state) return { type: "reject" };
     const instanceId = current.gem.instance_id;
-    const dragged = state.inventory.find((gem) => gem.instance_id === instanceId);
+    const dragged = inventoryItemById(state, instanceId);
     if (!dragged) {
       setNotice("没有找到这颗宝石。");
-      return false;
+      return { type: "reject" };
     }
-    if (isInventorySlotOccupied(inventorySlots, slotIndex, instanceId)) return false;
+    const targetItem = inventoryItemById(state, inventorySlots[slotIndex]);
     if (!dragged.board_position) {
-      setInventorySlots((slots) => moveGemToInventorySlot(slots, instanceId, slotIndex));
-      return true;
+      setInventorySlots((slots) => moveItemToInventorySlot(slots, instanceId, slotIndex));
+      return targetItem ? { type: "swap", nextFloatingItem: targetItem, origin: { kind: "bag", slotIndex, instanceId: targetItem.instance_id } } : { type: "place" };
     }
 
     try {
       const nextState = await requestState("/api/unmount", { instance_id: instanceId });
       setState(nextState);
-      setInventorySlots((slots) => moveGemToInventorySlot(slots, instanceId, slotIndex));
-      return true;
+      setInventorySlots((slots) => moveItemToInventorySlot(slots, instanceId, slotIndex));
+      return targetItem ? { type: "swap", nextFloatingItem: targetItem, origin: { kind: "bag", slotIndex, instanceId: targetItem.instance_id } } : { type: "place" };
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "操作失败。");
-      return false;
+      return { type: "reject" };
     }
   }
 
-  async function dropGemOnCell(instanceId: string, row: number, column: number): Promise<boolean> {
-    if (!state) return false;
-    const target = state.board.cells[row]?.[column]?.gem;
-    if (target && target.instance_id !== instanceId) {
-      setNotice("该格已有宝石。");
-      return false;
+  async function placeItemOnBoard(current: FloatingGem, row: number, column: number, event: globalThis.MouseEvent): Promise<PlacementResult> {
+    if (!state) return { type: "reject" };
+    const instanceId = current.gem.instance_id;
+    if (!isGemItem(current.gem)) {
+      showPlacementPrompt(state.ui_text?.only_gems_on_board ?? "", event.clientX, event.clientY);
+      return { type: "reject", reason: "only_gems_on_board" };
     }
-    const dragged = state.inventory.find((gem) => gem.instance_id === instanceId);
+    const target = state.board.cells[row]?.[column]?.gem;
+    const targetItem = inventoryItemById(state, target?.instance_id);
+    const dragged = inventoryItemById(state, instanceId);
     if (!dragged) {
       setNotice("没有找到这颗宝石。");
-      return false;
+      return { type: "reject" };
     }
-    if (dragged.board_position?.row === row && dragged.board_position.column === column) return false;
-    if (!canPlaceGemOnBoard(state, dragged, row, column)) return false;
+    if (dragged.board_position?.row === row && dragged.board_position.column === column) return { type: "place" };
+    if (!canPlaceGemOnBoard(state, dragged, row, column, new Set([instanceId, targetItem?.instance_id ?? ""]))) return { type: "reject" };
 
     try {
       if (dragged.board_position) {
         await requestState("/api/unmount", { instance_id: instanceId });
       }
+      if (targetItem) {
+        await requestState("/api/unmount", { instance_id: targetItem.instance_id });
+      }
       const nextState = await requestState("/api/mount", { instance_id: instanceId, row, column });
       setState(nextState);
-      setInventorySlots((slots) => removeGemFromInventorySlots(slots, instanceId));
+      setInventorySlots((slots) => removeItemsFromInventorySlots(slots, [instanceId, targetItem?.instance_id ?? ""]));
       setNotice(`已将${dragged.name_text}放入第${row + 1}行第${column + 1}列。`);
-      return true;
+      return targetItem ? { type: "swap", nextFloatingItem: targetItem, origin: { kind: "board", row, column } } : { type: "place" };
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "操作失败。");
-      return false;
+      return { type: "reject" };
     }
+  }
+
+  async function dropGemOnCell(instanceId: string, row: number, column: number): Promise<boolean> {
+    const item = state ? inventoryItemById(state, instanceId) : null;
+    if (!item) return false;
+    const result = await placeItemOnBoard(
+      { gem: item, origin: { kind: "board", row, column }, x: 0, y: 0, offsetX: FLOATING_GEM_OFFSET.x, offsetY: FLOATING_GEM_OFFSET.y },
+      row,
+      column,
+      { clientX: 0, clientY: 0 } as globalThis.MouseEvent
+    );
+    return result.type !== "reject";
   }
 
   function clearFloatingGem() {
     floatingGemRef.current = null;
     setFloatingGem(null);
+  }
+
+  function setFloatingItem(item: Gem, origin: FloatingOrigin, x: number, y: number, offsetX = FLOATING_GEM_OFFSET.x, offsetY = FLOATING_GEM_OFFSET.y) {
+    const nextFloatingGem: FloatingGem = {
+      gem: item,
+      origin,
+      x: x + offsetX,
+      y: y + offsetY,
+      offsetX,
+      offsetY
+    };
+    floatingGemRef.current = nextFloatingGem;
+    setFloatingGem(nextFloatingGem);
+  }
+
+  function showPlacementPrompt(text: string, x: number, y: number) {
+    const id = nextPromptId.current++;
+    setPlacementPrompt({ id, text, x, y });
+    window.setTimeout(() => {
+      setPlacementPrompt((current) => (current?.id === id ? null : current));
+    }, 900);
   }
 
   async function unmountGem(instanceId: string) {
@@ -458,18 +546,9 @@ export function App() {
     if (floatingGemRef.current) return;
     event.preventDefault();
     event.stopPropagation();
-    const nextFloatingGem: FloatingGem = {
-      gem,
-      origin,
-      x: event.clientX + FLOATING_GEM_OFFSET.x,
-      y: event.clientY + FLOATING_GEM_OFFSET.y,
-      offsetX: FLOATING_GEM_OFFSET.x,
-      offsetY: FLOATING_GEM_OFFSET.y
-    };
     setTooltip(null);
     setHoveredGemId(null);
-    floatingGemRef.current = nextFloatingGem;
-    setFloatingGem(nextFloatingGem);
+    setFloatingItem(gem, origin, event.clientX, event.clientY);
   }
 
   function onGemHover(event: MouseEvent, gem: Gem, source: "board" | "inventory", slotIndex?: number) {
@@ -483,7 +562,7 @@ export function App() {
     for (const gem of state?.inventory ?? []) result.set(gem.instance_id, gem);
     return result;
   }, [state]);
-  const legalDropCells = useLegalDropCells(state, floatingGem?.gem ?? null);
+  const legalDropCells = useLegalDropCells(state, floatingGem && isGemItem(floatingGem.gem) ? floatingGem.gem : null);
   const bagSlots = inventorySlots.map((instanceId) => (instanceId ? fullGemById.get(instanceId) ?? null : null));
 
   if (!state) return <main className="game-screen loading">{notice}</main>;
@@ -558,6 +637,8 @@ export function App() {
                     linkedGemIds={linkedGemIds}
                     floatingGemId={floatingGem?.gem.instance_id ?? null}
                     legalDropCells={legalDropCells}
+                    hoveredBoardCell={hoveredBoardCell}
+                    onHoverCell={setHoveredBoardCell}
                     onDropGem={dropGemOnCell}
                     onDragGem={beginDrag}
                     onPointerDragGem={beginPointerDrag}
@@ -615,6 +696,11 @@ export function App() {
           {tooltip && !floatingGem && <GemTooltip tooltip={tooltip} />}
           {floatingGem && <FloatingGemView floatingGem={floatingGem} />}
           {floatingGem && <div className="drag-hint">拖到数独盘格子后松开</div>}
+          {placementPrompt && (
+            <div className="placement-prompt" style={{ left: placementPrompt.x, top: placementPrompt.y }}>
+              {placementPrompt.text}
+            </div>
+          )}
         </section>
       )}
     </main>
@@ -628,6 +714,8 @@ function BoardCell({
   linkedGemIds,
   floatingGemId,
   legalDropCells,
+  hoveredBoardCell,
+  onHoverCell,
   onDropGem,
   onDragGem,
   onPointerDragGem,
@@ -641,6 +729,8 @@ function BoardCell({
   linkedGemIds: Set<string>;
   floatingGemId: string | null;
   legalDropCells: Set<string>;
+  hoveredBoardCell: string | null;
+  onHoverCell: (cellKey: string | null) => void;
   onDropGem: (instanceId: string, row: number, column: number) => Promise<boolean>;
   onDragGem: (event: DragEvent) => void;
   onPointerDragGem: (event: MouseEvent, gem: Gem, origin: FloatingOrigin) => void;
@@ -653,11 +743,15 @@ function BoardCell({
   const isGhost = Boolean(gem && floatingGemId === gem.instance_id);
   const hoverClass = gem ? boardHoverClass(gem.instance_id, hoveredGemId, linkedGemIds) : "";
   const legalClass = legalDropCells.has(cellKey(cell.row, cell.column)) ? "legal-drop-cell" : "";
+  const currentCellKey = cellKey(cell.row, cell.column);
+  const boardHoverClassName = hoveredBoardCell === currentCellKey ? "board-slot-hover" : "";
   return (
     <button
-      className={`board-cell ${hoverClass} ${legalClass}`}
+      className={`board-cell ${hoverClass} ${legalClass} ${boardHoverClassName}`}
       data-board-row={cell.row}
       data-board-column={cell.column}
+      onMouseEnter={() => onHoverCell(currentCellKey)}
+      onMouseLeave={() => onHoverCell(null)}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
@@ -705,12 +799,12 @@ function useLegalDropCells(state: AppState | null, floatingGem: Gem | null) {
     for (const row of state.board.cells) {
       for (const cell of row) {
         const target = cell.gem;
-        if (target && target.instance_id !== floatingGem.instance_id) continue;
+        const ignoredInstanceIds = new Set([floatingGem.instance_id, target?.instance_id ?? ""]);
 
         const hasConflict = state.board.cells.some((otherRow) =>
           otherRow.some((otherCell) => {
             const otherGem = otherCell.gem;
-            if (!otherGem || otherGem.instance_id === floatingGem.instance_id) return false;
+            if (!otherGem || ignoredInstanceIds.has(otherGem.instance_id)) return false;
             if (gemTypeKey(otherGem) !== floatingGemType) return false;
             return otherCell.row === cell.row || otherCell.column === cell.column || otherCell.box === cell.box;
           })
@@ -828,26 +922,33 @@ function resolveDropTarget(element: Element | null): DropTarget {
   return { kind: "invalid" };
 }
 
-function isDropBackToOrigin(floatingGem: FloatingGem, target: DropTarget) {
+function isDropBackToOrigin(floatingGem: FloatingGem, target: DropTarget, state: AppState | null, inventorySlots: (string | null)[]) {
   const origin = floatingGem.origin;
-  if (origin.kind === "bag") return target.kind === "bag" && origin.slotIndex === target.slotIndex;
-  return target.kind === "board" && origin.row === target.row && origin.column === target.column;
+  if (origin.kind === "bag") {
+    return target.kind === "bag" && origin.slotIndex === target.slotIndex && inventorySlots[target.slotIndex] === floatingGem.gem.instance_id;
+  }
+  return (
+    target.kind === "board" &&
+    origin.row === target.row &&
+    origin.column === target.column &&
+    state?.board.cells[target.row]?.[target.column]?.gem?.instance_id === floatingGem.gem.instance_id
+  );
 }
 
-function reconcileInventorySlots(current: (string | null)[], state: AppState) {
+function reconcileInventorySlots(current: (string | null)[], state: AppState, floatingItemId: string | null) {
   const unmountedIds = new Set(state.inventory.filter((gem) => !gem.board_position).map((gem) => gem.instance_id));
   const next = Array(INVENTORY_SLOT_COUNT).fill(null) as (string | null)[];
   const used = new Set<string>();
 
   current.slice(0, INVENTORY_SLOT_COUNT).forEach((instanceId, index) => {
-    if (instanceId && unmountedIds.has(instanceId) && !used.has(instanceId)) {
+    if (instanceId && instanceId !== floatingItemId && unmountedIds.has(instanceId) && !used.has(instanceId)) {
       next[index] = instanceId;
       used.add(instanceId);
     }
   });
 
   for (const gem of state.inventory) {
-    if (gem.board_position || used.has(gem.instance_id)) continue;
+    if (gem.board_position || gem.instance_id === floatingItemId || used.has(gem.instance_id)) continue;
     const emptyIndex = next.findIndex((instanceId) => instanceId === null);
     if (emptyIndex >= 0) {
       next[emptyIndex] = gem.instance_id;
@@ -858,13 +959,7 @@ function reconcileInventorySlots(current: (string | null)[], state: AppState) {
   return next;
 }
 
-function isInventorySlotOccupied(slots: (string | null)[], slotIndex: number, instanceId: string) {
-  const occupyingId = slots[slotIndex];
-  return Boolean(occupyingId && occupyingId !== instanceId);
-}
-
-function moveGemToInventorySlot(slots: (string | null)[], instanceId: string, slotIndex: number) {
-  if (isInventorySlotOccupied(slots, slotIndex, instanceId)) return slots;
+function moveItemToInventorySlot(slots: (string | null)[], instanceId: string, slotIndex: number) {
   const next = slots.slice(0, INVENTORY_SLOT_COUNT);
   while (next.length < INVENTORY_SLOT_COUNT) next.push(null);
   for (let index = 0; index < next.length; index += 1) {
@@ -874,24 +969,34 @@ function moveGemToInventorySlot(slots: (string | null)[], instanceId: string, sl
   return next;
 }
 
-function removeGemFromInventorySlots(slots: (string | null)[], instanceId: string) {
-  return slots.map((slotInstanceId) => (slotInstanceId === instanceId ? null : slotInstanceId));
+function removeItemsFromInventorySlots(slots: (string | null)[], instanceIds: string[]) {
+  const idSet = new Set(instanceIds.filter(Boolean));
+  return slots.map((slotInstanceId) => (slotInstanceId && idSet.has(slotInstanceId) ? null : slotInstanceId));
 }
 
-function canPlaceGemOnBoard(state: AppState, gem: Gem, row: number, column: number) {
+function canPlaceGemOnBoard(state: AppState, gem: Gem, row: number, column: number, ignoredInstanceIds = new Set<string>()) {
   const target = state.board.cells[row]?.[column];
   if (!target) return false;
-  if (target.gem && target.gem.instance_id !== gem.instance_id) return false;
+  if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
 
   const gemType = gemTypeKey(gem);
   return !state.board.cells.some((boardRow) =>
     boardRow.some((cell) => {
       const otherGem = cell.gem;
-      if (!otherGem || otherGem.instance_id === gem.instance_id) return false;
+      if (!otherGem || otherGem.instance_id === gem.instance_id || ignoredInstanceIds.has(otherGem.instance_id)) return false;
       if (gemTypeKey(otherGem) !== gemType) return false;
       return cell.row === row || cell.column === column || cell.box === target.box;
     })
   );
+}
+
+function inventoryItemById(state: AppState, instanceId: string | null | undefined) {
+  if (!instanceId) return null;
+  return state.inventory.find((item) => item.instance_id === instanceId) ?? null;
+}
+
+function isGemItem(item: Gem) {
+  return item.item_kind !== "ordinary" && item.tags.some((tag) => tag.id === "gem");
 }
 
 function cellKey(row: number, column: number) {
@@ -948,35 +1053,78 @@ function MapTiles({ tilemap }: { tilemap: TilemapData }) {
 
 function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
   const { gem, left, top, transform } = tooltip;
-  const targets = (gem.current_effective_targets ?? []).map((target) => target.name_text).join("、") || "当前没有生效对象";
+  const view = buildGemTooltipViewModel(gem);
+  if (!view) return null;
+  const sections = view.sections;
   return (
     <div className="gem-tooltip" style={{ left, top, transform }}>
-      <div className="tooltip-title">
+      <div className="tooltip-header">
         <GemOrb gem={gem} />
-        <div>
-          <h3>{gem.name_text}</h3>
-          <p>{gem.category_text}，{gem.rarity_text}，{gem.gem_type.display_text}</p>
+        <div className="tooltip-heading">
+          <h3>{view.name_text}</h3>
+          <p>{view.subtitle_text}</p>
         </div>
       </div>
-      <p>{gem.gem_type.identity_text}</p>
-      <div className="tag-list">{(gem.tags ?? []).map((tag) => <span key={tag.text}>{tag.text}</span>)}</div>
-      <div className="tooltip-section">
-        <strong>随机词缀</strong>
-        {(gem.random_affixes ?? []).length === 0 ? <p>无</p> : gem.random_affixes.map((affix) => (
-          <p key={`${affix.name_text}-${affix.stat.text}`}>{affix.gen_text} {affix.name_text}：{affix.stat.text} {affix.value}</p>
+      <p className="tooltip-identity">{view.type_identity_text}</p>
+      <div className="tooltip-tag-list">{view.tags.map((tag) => <TooltipTag key={`${tag.id ?? tag.text}-${tag.text}`} tag={tag} />)}</div>
+      <TooltipSection title={sections.description.title_text}>
+        {sections.description.lines.map((line) => <p key={line}>{line}</p>)}
+      </TooltipSection>
+      <TooltipSection title={sections.stats.title_text}>
+        <dl className="tooltip-stat-list">
+          {sections.stats.lines.map((line) => (
+            <div key={`${line.label_text}-${line.value_text}`} className="tooltip-stat-line">
+              <dt>{line.label_text}</dt>
+              <dd>{line.value_text}</dd>
+            </div>
+          ))}
+        </dl>
+      </TooltipSection>
+      {sections.random_affixes && sections.random_affixes.lines.length > 0 && (
+        <TooltipSection title={sections.random_affixes.title_text}>
+          {sections.random_affixes.lines.map((line) => (
+            <p key={`${line.title_text}-${line.detail_text}`} className="tooltip-affix-line">
+              <span>{line.title_text}</span>
+              <strong>{line.detail_text}</strong>
+            </p>
+          ))}
+        </TooltipSection>
+      )}
+      <TooltipSection title={sections.current_targets.title_text}>
+        {sections.current_targets.lines.map((line) => (
+          <p key={`${line.name_text}-${line.status_text}`} className="tooltip-target-line">
+            <span>{line.name_text}</span>
+            <strong>{line.status_text}</strong>
+          </p>
         ))}
-      </div>
-      <div className="tooltip-section">
-        <strong>当前实际生效对象</strong>
-        <p>{targets}</p>
-      </div>
+      </TooltipSection>
+      <TooltipSection title={sections.rules.title_text}>
+        {sections.rules.lines.map((line) => <p key={line}>{line}</p>)}
+      </TooltipSection>
     </div>
   );
 }
 
+function buildGemTooltipViewModel(gem: Gem) {
+  return gem.tooltip_view;
+}
+
+function TooltipTag({ tag }: { tag: TooltipTagView }) {
+  return <span className={`tooltip-tag ${tag.tone ? `tooltip-tag-${tag.tone}` : ""}`}>{tag.text}</span>;
+}
+
+function TooltipSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="tooltip-section">
+      <h4>{title}</h4>
+      <div className="tooltip-section-content">{children}</div>
+    </section>
+  );
+}
+
 function GemOrb({ gem }: { gem: Gem }) {
-  const className = gem.category_text.includes("主动") ? "active-orb" : "support-orb";
-  return <span className={`gem-orb ${className}`}>{gem.name_text.slice(0, 1)}</span>;
+  const className = !isGemItem(gem) ? "item-orb" : gem.tags.some((tag) => tag.id === "active_skill_gem") ? "active-orb" : "support-orb";
+  return <span className={`gem-orb ${className}`}>{gem.tooltip_view?.icon_text ?? gem.name_text.slice(0, 1)}</span>;
 }
 
 function FireBoltView({ bolt }: { bolt: FireBolt }) {

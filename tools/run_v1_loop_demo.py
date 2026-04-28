@@ -19,7 +19,7 @@ from liufang.config import (
     load_skill_templates,
 )
 from liufang.gem_board import SudokuGemBoard
-from liufang.inventory import AffixRoll, GemInventory
+from liufang.inventory import GemInventory
 from liufang.loot import LootRuntime
 from liufang.presentation import PresentationService
 from liufang.skill_effects import SkillEffectCalculator
@@ -57,13 +57,6 @@ def print_gem_detail(title: str, detail: dict) -> None:
     print(f"类型：{detail['category_text']} / {detail['gem_type']['display_text']} / {detail['gem_type']['identity_text']}")
     print("标签：" + "、".join(tag["text"] for tag in detail["tags"]))
     print(f"稀有度：{detail['rarity_text']}")
-    affixes = detail["random_affixes"] + detail["implicit_affixes"]
-    if affixes:
-        print("词缀：")
-        for affix in affixes:
-            print(f"  - {affix['gen_text']} {affix['name_text']}：{affix['stat']['text']} {affix['value']}")
-    else:
-        print("词缀：无")
     targets = [target["name_text"] for target in detail["current_effective_targets"]]
     print("当前生效对象：" + "、".join(targets))
 
@@ -107,15 +100,12 @@ def main() -> int:
     print("========================================")
     print("V1 正式最小循环控制台展示")
     print("========================================")
-    print("流程：看词缀 -> 调盘面 -> 技能表现变化 -> 战斗刷宝石 -> 拾取 -> 再调盘面")
+    print("流程：看基础信息 -> 调盘面 -> 技能表现变化 -> 战斗刷宝石 -> 拾取 -> 再调盘面")
 
     active = inventory.add_instance(
         "demo_active_fire_bolt",
         "active_fire_bolt",
         rarity="magic",
-        prefix_affixes=(
-            AffixRoll("affix_damage_percent_t1", "damage_add_percent", 10, "prefix", "damage_scaling"),
-        ),
     )
     board.mount_gem(active.instance_id, 0, 0)
 

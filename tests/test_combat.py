@@ -135,7 +135,8 @@ class CombatTest(unittest.TestCase):
         stored = self.inventory.require(dropped.gem_instance.instance_id)
         self.assertEqual(stored.base_gem_id, dropped.gem_instance.base_gem_id)
         self.assertEqual(stored.rarity, dropped.gem_instance.rarity)
-        self.assertEqual(stored.random_affixes, dropped.gem_instance.random_affixes)
+        self.assertEqual(stored.random_affixes, ())
+        self.assertEqual(dropped.gem_instance.random_affixes, ())
         self.assertEqual(stored.locked, dropped.gem_instance.locked)
         self.assertEqual(stored.board_position, dropped.gem_instance.board_position)
 
