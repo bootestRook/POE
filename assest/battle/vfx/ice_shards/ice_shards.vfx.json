@@ -1,0 +1,50 @@
+{
+  "projectileLoop": {
+    "image": "ice_shards_projectile_loop.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 4,
+    "rows": 4,
+    "frameCount": 16,
+    "fps": 18,
+    "anchorX": 0.5,
+    "anchorY": 0.55,
+    "blendMode": "screen"
+  },
+  "trailFrost": {
+    "image": "ice_shards_trail_frost.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "columns": 4,
+    "rows": 2,
+    "frameCount": 8,
+    "fps": 14,
+    "anchorX": 0.5,
+    "anchorY": 0.5,
+    "blendMode": "screen"
+  },
+  "impactBurst": {
+    "image": "ice_shards_impact_burst.png",
+    "frameWidth": 160,
+    "frameHeight": 160,
+    "columns": 4,
+    "rows": 4,
+    "frameCount": 16,
+    "fps": 24,
+    "anchorX": 0.5,
+    "anchorY": 0.62,
+    "blendMode": "screen"
+  },
+  "crystalSparks": {
+    "image": "ice_shards_crystal_sparks.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "columns": 4,
+    "rows": 2,
+    "frameCount": 8,
+    "fps": 20,
+    "anchorX": 0.5,
+    "anchorY": 0.5,
+    "blendMode": "screen"
+  }
+}
