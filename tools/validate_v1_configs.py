@@ -296,6 +296,7 @@ REQUIRED_SUPPORT_GEMS = {
     "skill_level": {
         "support_elemental_level",
         "support_attack_spell_level",
+        "support_projectile_level",
     },
     "board_conduit": {
         "support_row_conduit",

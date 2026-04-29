@@ -238,6 +238,12 @@ value = 10
 layer = "additive"
 
 [[support_base_modifiers]]
+support_id = "support_projectile_level"
+stat = "projectile_speed_add_percent"
+value = 18
+layer = "additive"
+
+[[support_base_modifiers]]
 support_id = "support_fire_bolt_fork"
 stat = "damage_add_percent"
 value = 0

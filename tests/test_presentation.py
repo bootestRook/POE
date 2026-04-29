@@ -69,6 +69,9 @@ class PresentationTest(unittest.TestCase):
 
         active_detail = self.presenter.gem_detail(active, board=self.board, final_skills=final_skills)
         self.assertEqual(active_detail["name_text"], self.presenter.localizer.text("gem.active_fire_bolt.name"))
+        self.assertEqual(active_detail["description_text"], "发射一枚火球，命中敌人造成火焰伤害。")
+        self.assertNotIn("验证", active_detail["description_text"])
+        self.assertNotIn("标签", active_detail["description_text"])
         self.assertEqual(active_detail["category_text"], self.presenter.localizer.text("tag.active_skill_gem.name"))
         self.assertEqual(active_detail["gem_kind"], "active_skill")
         self.assertEqual(active_detail["sudoku_digit"], 1)
@@ -98,6 +101,8 @@ class PresentationTest(unittest.TestCase):
         self.assertNotIn("同行", "；".join(active_tooltip["sections"]["bonuses"]["lines"]))
 
         support_detail = self.presenter.gem_detail(support, board=self.board, final_skills=final_skills)
+        self.assertEqual(support_detail["description_text"], "使火焰技能的伤害提高 18%。")
+        self.assertNotIn("标签", support_detail["description_text"])
         self.assertEqual(support_detail["category_text"], self.presenter.localizer.text("tag.support_gem.name"))
         self.assertEqual(support_detail["gem_kind"], "support")
         self.assertEqual(support_detail["sudoku_digit"], 5)
@@ -140,6 +145,7 @@ class PresentationTest(unittest.TestCase):
         )
 
         passive_detail = self.presenter.gem_detail(passive, board=self.board, final_skills=final_skills)
+        self.assertEqual(passive_detail["description_text"], "使火焰技能的伤害提高 10%。")
         self.assertEqual(passive_detail["category_text"], self.presenter.localizer.text("tag.passive_skill_gem.name"))
         self.assertEqual(passive_detail["gem_kind"], "passive_skill")
         self.assertEqual(passive_detail["sudoku_digit"], 2)

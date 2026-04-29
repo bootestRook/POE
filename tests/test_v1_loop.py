@@ -47,7 +47,7 @@ class V1LoopTest(unittest.TestCase):
         self.assertNotIn("gem", {tag["id"] for tag in test_item["tags"]})
         self.assertEqual(state["ui_text"]["only_gems_on_board"], api.presenter.localizer.text("ui.inventory.only_gems_on_board"))
 
-    def test_web_seed_inventory_has_nine_gem_kinds_with_three_copies_each(self) -> None:
+    def test_web_seed_inventory_uses_requested_gem_mix(self) -> None:
         api = V1WebAppApi(ROOT / "configs")
         seeded_gems = [
             instance
@@ -55,17 +55,52 @@ class V1LoopTest(unittest.TestCase):
             if instance.instance_id.startswith("web_seed_")
         ]
 
-        counts_by_base_id: dict[str, int] = {}
+        active_gems = [instance for instance in seeded_gems if instance.gem_kind == "active_skill"]
+        passive_gems = [instance for instance in seeded_gems if instance.gem_kind == "passive_skill"]
+        support_gems = [instance for instance in seeded_gems if instance.gem_kind == "support"]
+        support_counts_by_category: dict[str, int] = {}
+        support_base_ids_by_category: dict[str, set[str]] = {}
         for instance in seeded_gems:
-            counts_by_base_id[instance.base_gem_id] = counts_by_base_id.get(instance.base_gem_id, 0) + 1
+            definition = api.definitions[instance.base_gem_id]
+            if definition.is_support:
+                support_counts_by_category[definition.category] = support_counts_by_category.get(definition.category, 0) + 1
+                support_base_ids_by_category.setdefault(definition.category, set()).add(instance.base_gem_id)
 
-        self.assertEqual(len(seeded_gems), 27)
-        self.assertEqual(len(counts_by_base_id), 9)
-        self.assertTrue(all(count == 3 for count in counts_by_base_id.values()))
+        self.assertEqual(
+            {instance.base_gem_id for instance in active_gems},
+            {
+                "active_fire_bolt",
+                "active_ice_shards",
+                "active_lightning_chain",
+                "active_frost_nova",
+                "active_puncture",
+                "active_penetrating_shot",
+                "active_lava_orb",
+                "active_fungal_petards",
+            },
+        )
+        self.assertEqual(len(active_gems), 8)
+        self.assertEqual(len(passive_gems), 3)
+        self.assertEqual({instance.base_gem_id for instance in passive_gems}, {
+            "passive_fire_focus",
+            "passive_vitality",
+            "passive_swift_gathering",
+        })
+        self.assertEqual(set(support_counts_by_category), {
+            "general_skill_modifier",
+            "damage_type_enhancer",
+            "projectile_area_specialist",
+            "risk_reward",
+            "skill_level",
+            "board_conduit",
+            "skill_shape_modifier",
+        })
+        self.assertTrue(all(count == 3 for count in support_counts_by_category.values()))
+        self.assertTrue(all(len(base_ids) == 3 for base_ids in support_base_ids_by_category.values()))
         self.assertEqual({instance.gem_kind for instance in seeded_gems}, {"active_skill", "passive_skill", "support"})
         self.assertTrue(all(instance.board_position is None for instance in seeded_gems))
         self.assertFalse(api.board.view().cells)
-        self.assertIn("已准备 9 种初始宝石，每种 3 颗。", api.logs)
+        self.assertIn("已准备现有主动技能宝石各 1 颗、3 颗不同被动技能宝石，以及 7 类辅助宝石各 3 颗。", api.logs)
 
     def calculator(self) -> SkillEffectCalculator:
         return SkillEffectCalculator(

@@ -272,6 +272,19 @@ apply_filter.tags_any = ["attack", "spell"]
 effect_stats = ["damage_add_percent"]
 
 [[support_gems]]
+id = "support_projectile_level"
+name_key = "gem.support_projectile_level.name"
+description_key = "gem.support_projectile_level.description"
+category = "skill_level"
+gem_type = "gem_type_8"
+gem_kind = "support"
+sudoku_digit = 8
+tags = ["gem", "support_gem", "loot_gem", "gem_type_8", "support_level"]
+apply_filter.target_kinds = ["active_skill", "passive_skill"]
+apply_filter.tags_any = ["projectile"]
+effect_stats = ["projectile_speed_add_percent"]
+
+[[support_gems]]
 id = "support_row_conduit"
 name_key = "gem.support_row_conduit.name"
 description_key = "gem.support_row_conduit.description"

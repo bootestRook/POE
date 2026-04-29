@@ -66,7 +66,7 @@ class PresentationService:
         detail = {
             "instance_id": instance.instance_id,
             "name_text": self.localizer.text(definition.name_key),
-            "description_text": self.localizer.text(definition.description_key),
+            "description_text": self._gem_description_text(definition),
             "category_text": self._gem_category_text(definition),
             "gem_type": self._gem_type_view(instance.gem_type),
             "gem_kind": instance.gem_kind,
@@ -309,6 +309,57 @@ class PresentationService:
         if not shape_effect:
             return ""
         return self.localizer.text(f"shape_effect.{shape_effect}.name")
+
+    def _gem_description_text(self, definition: GemDefinition) -> str:
+        values: dict[str, Any] = {}
+        if definition.skill_template_id:
+            template = self.skill_templates.get(definition.skill_template_id)
+            if template:
+                for key, value in template.runtime_params.items():
+                    values[key] = self._format_number(value)
+                    values[f"{key}_text"] = self._count_text(value, self._counter_for_param(key))
+        for effect in definition.passive_effects:
+            values[effect.stat] = self._format_number(effect.value)
+            values[f"{effect.stat}_text"] = self._count_text(effect.value, self._counter_for_param(effect.stat))
+        for modifier in self.scaling_rules.support_base_modifiers:
+            if modifier.support_id != definition.base_gem_id:
+                continue
+            values[modifier.stat] = self._format_number(modifier.value)
+            values[f"{modifier.stat}_abs"] = self._format_number(abs(modifier.value))
+            values[f"{modifier.stat}_text"] = self._count_text(modifier.value, self._counter_for_param(modifier.stat))
+        for amplifier in self.scaling_rules.conduit_amplifiers:
+            if amplifier.support_id != definition.base_gem_id:
+                continue
+            values["conduit_multiplier"] = self._format_number(amplifier.multiplier)
+            values["conduit_bonus_percent"] = self._format_number((amplifier.multiplier - 1) * 100)
+        try:
+            return self.localizer.format(definition.description_key, **values)
+        except (KeyError, ValueError):
+            return self.localizer.text(definition.description_key)
+
+    def _counter_for_param(self, param: str) -> str:
+        if "projectile_count" in param:
+            return "枚"
+        return ""
+
+    def _count_text(self, value: Any, counter: str) -> str:
+        if not counter:
+            return self._format_number(value)
+        number = int(value) if isinstance(value, (int, float)) and float(value).is_integer() else value
+        text = {
+            0: "零",
+            1: "一",
+            2: "两",
+            3: "三",
+            4: "四",
+            5: "五",
+            6: "六",
+            7: "七",
+            8: "八",
+            9: "九",
+            10: "十",
+        }.get(number, self._format_number(value))
+        return f"{text}{counter}"
 
     def _apply_filter_view(self, definition: GemDefinition) -> dict[str, Any]:
         if definition.is_active_skill:

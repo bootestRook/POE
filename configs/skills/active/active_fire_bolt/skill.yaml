@@ -18,12 +18,13 @@ behavior:
   template: projectile
   params:
     projectile_count: 1
+    spread_angle_deg: 0
     projectile_speed: 520
     projectile_width: 56
     projectile_height: 40
     max_distance: 520
-    hit_policy: pierce
-    pierce_count: 3
+    hit_policy: first_hit
+    pierce_count: 0
     collision_radius: 18
     spawn_offset:
       x: 0

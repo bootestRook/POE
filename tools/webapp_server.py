@@ -43,6 +43,10 @@ class V1RequestHandler(BaseHTTPRequestHandler):
                 payload = self.api.pickup(str(body["drop_id"]))
             elif parsed.path == "/api/skill-editor/save":
                 payload = self.api.save_skill_package(str(body["skill_id"]), body["package"])
+            elif parsed.path == "/api/skill-editor/modifier-preview":
+                payload = self.api.preview_skill_modifier_stack(body)
+            elif parsed.path == "/api/skill-editor/test-arena/run":
+                payload = self.api.run_skill_test_arena(body)
             else:
                 self._send_json({"error": "未知接口。"}, status=404)
                 return

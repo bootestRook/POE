@@ -95,5 +95,37 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertIn("火焰伤害", floating_text.payload["text"])
 
 
+    def test_fire_bolt_projectile_multi_target_runtime_respects_pierce_and_projectile_count(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = dict(final_skill.runtime_params or {})
+        runtime_params["projectile_count"] = 2
+        runtime_params["hit_policy"] = "pierce"
+        runtime_params["pierce_count"] = 1
+        final_skill = final_skill.__class__(
+            **{**final_skill.__dict__, "projectile_count": 2, "runtime_params": runtime_params}
+        )
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(100, 0),
+            timestamp_ms=10,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 100, "y": 0}},
+                {"entity_id": "monster_2", "position": {"x": 160, "y": 0}},
+            ],
+        )
+
+        damage_events = [event for event in events if event.type == "damage"]
+        spawn_events = [event for event in events if event.type == "projectile_spawn"]
+        self.assertEqual(len(spawn_events), 2)
+        self.assertEqual(len(damage_events), 4)
+        self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2"})
+
+
 if __name__ == "__main__":
     unittest.main()

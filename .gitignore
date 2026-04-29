@@ -7,9 +7,11 @@ __pycache__/
 .ruff_cache/
 .coverage
 coverage/
-webapp-state.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 logs/*.log
 logs/*.err.log
+logs/
+tmp/
+reports/skill_tests/*.md
