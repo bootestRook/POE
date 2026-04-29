@@ -813,7 +813,7 @@ export function App() {
   return spriteTestMode ? <SpriteTestScene /> : <GameApp />;
 }
 
-const SPRITE_TEST_DIRECTIONS: UnitDirection[] = ["up", "down", "left", "right", "up_left", "up_right", "down_left", "down_right"];
+const SPRITE_TEST_DIRECTIONS: UnitDirection[] = ["left", "right"];
 const SPRITE_TEST_ACTIONS: UnitAnimationState[] = ["idle", "walk", "attack"];
 const SPRITE_TEST_SPEEDS = [0.25, 0.5, 1, 2];
 const SPRITE_TEST_DIRECTION_TEXT: Record<UnitDirection, string> = {
@@ -847,12 +847,12 @@ const SPRITE_TEST_DIRECTION_VECTOR: Record<UnitDirection, { x: number; y: number
   down_right: { x: 1, y: 1 }
 };
 const SPRITE_TEST_DIRECTION_FALLBACK: Record<UnitDirection, UnitDirection> = {
-  down: "down",
+  down: "right",
   down_right: "right",
   right: "right",
-  up_right: "up",
-  up: "up",
-  up_left: "up",
+  up_right: "right",
+  up: "right",
+  up_left: "left",
   left: "left",
   down_left: "left"
 };
@@ -875,7 +875,7 @@ type SpriteTestResolvedFrame = {
 function SpriteTestScene() {
   const [unitIndex, setUnitIndex] = useState(0);
   const [action, setAction] = useState<UnitAnimationState>("idle");
-  const [direction, setDirection] = useState<UnitDirection>("down");
+  const [direction, setDirection] = useState<UnitDirection>("right");
   const [playing, setPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -947,7 +947,7 @@ function SpriteTestScene() {
       <header className="sprite-test-header">
         <div>
           <h1>Sprites 动作测试场景</h1>
-          <p>独立 Debug 入口：/sprite-test，只读现有 sprites manifest，不进入正式游戏流程。</p>
+          <p>独立 Debug 入口：/sprite-test，只读现有 sprites manifest，不进入正式游戏流程；当前资源只测试左右方向。</p>
         </div>
         <a className="sprite-test-exit" href="/" aria-label="返回正式入口">返回正式入口</a>
       </header>
@@ -1063,7 +1063,7 @@ function SpriteIdleTestZone({
     <section className={`sprite-test-zone sprite-test-idle-zone ${showGrid ? "sprite-test-grid-on" : ""}`} aria-label="待机测试区">
       <div className="sprite-test-zone-title">
         <h2>待机测试区</h2>
-        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}，当前动作：待机</span>
+        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}，当前动作：待机，左右方向</span>
       </div>
       <div className="sprite-test-direction-stage">
         <SpriteTestSprite frame={frame} showCollision={showCollision} showAttachment={showAttachment} style={{ left: "50%", top: "72%" }} />
@@ -1115,7 +1115,7 @@ function SpriteWalkTestZone({
     <section className={`sprite-test-zone sprite-test-walk-zone ${showGrid ? "sprite-test-grid-on" : ""}`} aria-label="行走测试区">
       <div className="sprite-test-zone-title">
         <h2>行走测试区</h2>
-        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[walkDirection]}，当前动作：行走</span>
+        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[walkDirection]}，当前动作：行走，重点检查脚底锚点</span>
       </div>
       <div className="sprite-test-path-buttons">
         {SPRITE_TEST_PATHS.map((path) => (
@@ -1164,7 +1164,7 @@ function SpriteAttackTestZone({
     <section className={`sprite-test-zone sprite-test-attack-zone ${showGrid ? "sprite-test-grid-on" : ""}`} aria-label="攻击测试区">
       <div className="sprite-test-zone-title">
         <h2>攻击测试区</h2>
-        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}，当前动作：攻击</span>
+        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}，当前动作：攻击，左右目标</span>
       </div>
       <div className="sprite-test-attack-field">
         <SpriteTestSprite frame={frame.frame} showCollision={showCollision} showAttachment={showAttachment} style={{ left: "50%", top: "55%" }} />
@@ -1212,7 +1212,7 @@ function SpriteDirectionSamples({
   showAttachment: boolean;
 }) {
   return (
-    <div className="sprite-test-samples" aria-label={`8 方向 ${SPRITE_TEST_ACTION_TEXT[state]} 样例`}>
+    <div className="sprite-test-samples" aria-label={`左右方向 ${SPRITE_TEST_ACTION_TEXT[state]} 样例`}>
       {SPRITE_TEST_DIRECTIONS.map((direction) => {
         const resolved = resolveSpriteTestFrame(unitId, state, direction, elapsedMs, playbackSpeed, null);
         return (
@@ -1249,7 +1249,7 @@ function SpriteTestSprite({
         height: asset.frameHeight,
         "--unit-anchor-x": asset.anchorX,
         "--unit-anchor-y": asset.anchorY,
-        "--sprite-test-scale": scale,
+        "--sprite-test-scale": scale * asset.scale,
         ...style
       } as CSSProperties}
       data-animation-state={asset.state}
@@ -1278,9 +1278,11 @@ function resolveSpriteTestFrame(
 ): SpriteTestResolvedFrame {
   const exact = UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, direction));
   const stateFallback = UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, SPRITE_TEST_DIRECTION_FALLBACK[direction]))
-    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "down"));
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "left"));
   const idleFallback = UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", SPRITE_TEST_DIRECTION_FALLBACK[direction]))
-    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "down"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "left"))
     ?? UNIT_ANIMATION_ASSETS[0];
   const asset = exact ?? stateFallback ?? idleFallback;
   const hasAction = UNIT_ANIMATION_ASSETS.some((item) => item.unitId === unitId && item.state === state);
@@ -1342,7 +1344,7 @@ function pointOnSpriteTestPath(points: { x: number; y: number }[], progress: num
 function directionFromSpriteTestPath(points: { x: number; y: number }[], progress: number): UnitDirection {
   const now = pointOnSpriteTestPath(points, progress);
   const next = pointOnSpriteTestPath(points, (progress + 0.02) % 1);
-  return resolveDirection({ x: next.x - now.x, y: next.y - now.y }, "down");
+  return next.x - now.x < 0 ? "left" : "right";
 }
 
 function GameApp() {
@@ -4236,14 +4238,7 @@ function unitAnimationMotionStyle(frame: UnitAnimationFrame): CSSProperties {
   const signY = direction === "up" ? -1 : direction === "down" ? 1 : 0;
   const diagonalX = signX || (direction === "up" || direction === "down" ? 0.35 : 0);
   if (state === "walk") {
-    const step = frameIndex % 2 === 0 ? -1 : 1;
-    const lift = frameIndex % 3 === 1 ? -4 : 0;
-    const swayX = (signX || diagonalX) * step * 3;
-    const swayY = signY * step * 1.5 + lift;
-    const rotate = (signX || step) * step * 2.5;
-    return {
-      transform: `translate(${swayX}px, ${swayY}px) rotate(${rotate}deg) scale(${frameIndex % 2 === 0 ? 1.015 : 0.985}, ${frameIndex % 2 === 0 ? 0.985 : 1.015})`
-    };
+    return {};
   }
   const attackPhase = frame.animation.frameCount <= 1 ? 1 : frameIndex / (frame.animation.frameCount - 1);
   const lunge = Math.sin(attackPhase * Math.PI);
@@ -4268,7 +4263,7 @@ function battleUnitStyle(entity: { x: number; y: number }, frame: UnitAnimationF
     zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex,
     "--unit-anchor-x": asset.anchorX,
     "--unit-anchor-y": asset.anchorY,
-    "--unit-render-scale": UNIT_RENDER_SCALE
+    "--unit-render-scale": UNIT_RENDER_SCALE * asset.scale
   } as CSSProperties;
 }
 
@@ -4376,7 +4371,9 @@ function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
           {sections.stats.lines.map((line) => (
             <div key={`${line.label_text}-${line.value_text}`} className="tooltip-stat-line">
               <dt className={isActiveTooltip ? "tooltip-tone-body" : undefined}>{line.label_text}：</dt>
-              <dd className={isActiveTooltip ? "tooltip-tone-body" : undefined}>{line.value_text}</dd>
+              <dd className={isActiveTooltip ? "tooltip-tone-body" : undefined}>
+                {isActiveTooltip ? <RichText line={highlightTooltipText(line.value_text)} className="tooltip-stat-rich-value" /> : line.value_text}
+              </dd>
             </div>
           ))}
         </dl>

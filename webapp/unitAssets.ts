@@ -33,19 +33,17 @@ export type UnitAnimationManifest = {
   assets: Omit<UnitAnimationAsset, "src">[];
 };
 
-const unitAnimationUrls = import.meta.glob("../assest/battle/units/cropped/*.png", {
-  eager: true,
-  query: "?url",
-  import: "default"
-}) as Record<string, string>;
-const unitAnimationSheetUrls = import.meta.glob("../assest/battle/units/sheets/*.png", {
+const unitAnimationSheetUrls = import.meta.glob([
+  "../assest/battle/units/sheets/*_left.png",
+  "../assest/battle/units/sheets/*_right.png"
+], {
   eager: true,
   query: "?url",
   import: "default"
 }) as Record<string, string>;
 
 function assetUrl(path: string) {
-  return unitAnimationSheetUrls[`..${path}`] ?? unitAnimationUrls[`..${path}`] ?? path;
+  return unitAnimationSheetUrls[`..${path}`] ?? path;
 }
 
 const manifest = unitAnimationManifest as UnitAnimationManifest;
@@ -67,9 +65,10 @@ export function implementedUnitDirections() {
   return manifest.implementedDirections;
 }
 
-export function resolveUnitSprite(unitType: UnitVisualType, direction: UnitDirection = "down") {
+export function resolveUnitSprite(unitType: UnitVisualType, direction: UnitDirection = "right") {
   return UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitType, "idle", direction))
-    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitType, "idle", "down"))!;
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitType, "idle", "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitType, "idle", "left"))!;
 }
 
 export function selectEnemyUnitType(enemyId: number): UnitVisualType {

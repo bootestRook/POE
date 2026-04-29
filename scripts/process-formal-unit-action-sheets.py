@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +16,9 @@ MANIFEST_DIR = UNIT_ROOT / "manifests"
 FORMAL_CROPPED_DIR = CROPPED_DIR / "formal"
 
 DIRECTIONS_8 = ["down", "down_right", "right", "up_right", "up", "up_left", "left", "down_left"]
-DIRECTIONS_4 = ["down", "right", "up", "left"]
+DIRECTIONS_LR = ["left", "right"]
+FIXED_FRAME_SIZE = 128
+FIXED_FRAME_PADDING = 6
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,8 @@ class UnitSpec:
     raw_file: str
     states: tuple[str, ...]
     rows: tuple[tuple[str, str], ...]
+    source_rows: int
+    source_row_indices: tuple[int, ...]
     fps: dict[str, int]
     loop: dict[str, bool]
     anchor_x: float
@@ -38,42 +42,48 @@ class UnitSpec:
 UNITS = [
     UnitSpec(
         unit_id="player_adventurer",
-        raw_file="formal_player_whitehair_girl_actions_imagegen.png",
+        raw_file="formal_player_whitehair_girl_lr_right_source_imagegen.png",
         states=("idle", "walk"),
-        rows=tuple((state, direction) for state in ("idle", "walk") for direction in DIRECTIONS_4),
+        rows=(("idle", "right"), ("walk", "right")),
+        source_rows=4,
+        source_row_indices=(1, 3),
         fps={"idle": 4, "walk": 8},
         loop={"idle": True, "walk": True},
         anchor_x=0.5,
         anchor_y=0.955,
-        scale=1.0,
+        scale=1.5,
         frame_padding_x=18,
         frame_padding_y=18,
         max_body_height=172,
     ),
     UnitSpec(
         unit_id="enemy_imp",
-        raw_file="formal_enemy_imp_actions_imagegen.png",
+        raw_file="formal_enemy_imp_lr_right_source_imagegen.png",
         states=("idle", "walk", "attack"),
-        rows=tuple((state, direction) for state in ("idle", "walk", "attack") for direction in DIRECTIONS_4),
+        rows=(("idle", "right"), ("walk", "right"), ("attack", "right")),
+        source_rows=3,
+        source_row_indices=(0, 1, 2),
         fps={"idle": 4, "walk": 9, "attack": 10},
         loop={"idle": True, "walk": True, "attack": False},
         anchor_x=0.5,
         anchor_y=0.945,
-        scale=1.0,
+        scale=1.325,
         frame_padding_x=18,
         frame_padding_y=18,
         max_body_height=128,
     ),
     UnitSpec(
         unit_id="enemy_brute",
-        raw_file="formal_enemy_brute_actions_imagegen.png",
+        raw_file="formal_enemy_brute_lr_right_source_imagegen.png",
         states=("idle", "walk", "attack"),
-        rows=tuple((state, direction) for state in ("idle", "walk", "attack") for direction in DIRECTIONS_4),
+        rows=(("idle", "right"), ("walk", "right"), ("attack", "right")),
+        source_rows=3,
+        source_row_indices=(0, 1, 2),
         fps={"idle": 3, "walk": 7, "attack": 9},
         loop={"idle": True, "walk": True, "attack": False},
         anchor_x=0.5,
         anchor_y=0.965,
-        scale=1.0,
+        scale=2.075,
         frame_padding_x=24,
         frame_padding_y=24,
         max_body_height=224,
@@ -90,26 +100,6 @@ ID_PREFIX = {
     ("enemy_brute", "walk"): "enemy_brute_walk",
     ("enemy_brute", "attack"): "enemy_brute_attack",
 }
-
-SPLIT_STATE_RAW_FILES = {
-    "enemy_brute": {
-        "idle": "formal_enemy_brute_idle_imagegen.png",
-        "walk": "formal_enemy_brute_walk_imagegen.png",
-        "attack": "formal_enemy_brute_attack_imagegen.png",
-    }
-}
-
-STRIP_RAW_FILES = {
-    ("enemy_imp", "attack", "down"): "formal_enemy_imp_attack_down_strip_imagegen.png",
-    ("enemy_imp", "attack", "right"): "formal_enemy_imp_attack_right_strip_imagegen.png",
-    ("enemy_imp", "attack", "up"): "formal_enemy_imp_attack_up_strip_imagegen.png",
-    ("enemy_imp", "attack", "left"): "formal_enemy_imp_attack_left_strip_imagegen.png",
-    ("enemy_brute", "attack", "down"): "formal_enemy_brute_attack_down_strip_imagegen.png",
-    ("enemy_brute", "attack", "right"): "formal_enemy_brute_attack_right_strip_imagegen.png",
-    ("enemy_brute", "attack", "up"): "formal_enemy_brute_attack_up_strip_imagegen.png",
-    ("enemy_brute", "attack", "left"): "formal_enemy_brute_attack_left_strip_imagegen.png",
-}
-
 
 def chroma_to_alpha(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
@@ -304,8 +294,8 @@ def slice_sheet_components(image: Image.Image, rows: int, cols: int) -> list[lis
 
 
 def normalize_sheet(frames: list[Image.Image], padding_x: int, padding_y: int, anchor_x: float, anchor_y: float) -> tuple[Image.Image, int, int]:
-    frame_w = max(frame.width for frame in frames) + padding_x * 2
-    frame_h = max(frame.height for frame in frames) + padding_y * 2
+    frame_w = FIXED_FRAME_SIZE
+    frame_h = FIXED_FRAME_SIZE
     anchor_px = round(frame_w * anchor_x)
     anchor_py = round(frame_h * anchor_y)
     sheet = Image.new("RGBA", (frame_w * len(frames), frame_h), (0, 0, 0, 0))
@@ -314,6 +304,22 @@ def normalize_sheet(frames: list[Image.Image], padding_x: int, padding_y: int, a
         top = anchor_py - round(frame.height * anchor_y)
         sheet.alpha_composite(frame, (left, top))
     return sheet, frame_w, frame_h
+
+
+def fixed_frame_fit_ratio(frames: list[Image.Image]) -> float:
+    max_width = max((frame.width for frame in frames), default=1)
+    max_height = max((frame.height for frame in frames), default=1)
+    inner_size = FIXED_FRAME_SIZE - FIXED_FRAME_PADDING * 2
+    return min(inner_size / max(1, max_width), inner_size / max(1, max_height), 1)
+
+
+def scale_frames_with_ratio(frames: list[Image.Image], ratio: float) -> list[Image.Image]:
+    if ratio >= 0.999:
+        return frames
+    return [
+        frame.resize((max(1, round(frame.width * ratio)), max(1, round(frame.height * ratio))), Image.Resampling.LANCZOS)
+        for frame in frames
+    ]
 
 
 def scale_frames_to_body_height(frames: list[Image.Image], max_body_height: int) -> list[Image.Image]:
@@ -335,7 +341,7 @@ def scale_frames_to_body_height(frames: list[Image.Image], max_body_height: int)
 
 
 def write_contact_sheet(entries: list[dict[str, object]]) -> None:
-    samples = [entry for entry in entries if entry["direction"] in ("down", "right")]
+    samples = [entry for entry in entries if entry["direction"] in DIRECTIONS_LR]
     cell_w = max(int(entry["frameWidth"]) for entry in samples) + 52
     cell_h = max(int(entry["frameHeight"]) for entry in samples) + 48
     cols = 4
@@ -365,9 +371,10 @@ def append_animation_entry(
     direction: str,
     frames: list[Image.Image],
     source_raw: Path,
+    fit_ratio: float,
 ) -> None:
     asset_id = f"{ID_PREFIX[(unit.unit_id, state)]}_{direction}"
-    frames = scale_frames_to_body_height(frames, unit.max_body_height)
+    frames = scale_frames_with_ratio(scale_frames_to_body_height(frames, unit.max_body_height), fit_ratio)
     for frame_index, frame in enumerate(frames):
         frame.save(FORMAL_CROPPED_DIR / f"{asset_id}_f{frame_index:02d}.png")
     sheet, frame_w, frame_h = normalize_sheet(frames, unit.frame_padding_x, unit.frame_padding_y, unit.anchor_x, unit.anchor_y)
@@ -392,25 +399,11 @@ def append_animation_entry(
             "anchorY": unit.anchor_y,
             "scale": unit.scale,
             "fallbackState": "idle" if state != "idle" else None,
-            "fallbackDirection": "down",
+            "fallbackDirection": "right",
             "playbackRate": 1,
             "sourceRaw": f"/{source_raw.relative_to(ROOT).as_posix()}",
         }
     )
-
-
-def strip_override_frames(unit_id: str, state: str, direction: str) -> tuple[list[Image.Image], Path] | None:
-    raw_file = STRIP_RAW_FILES.get((unit_id, state, direction))
-    if not raw_file:
-        return None
-    source_raw = RAW_DIR / raw_file
-    if not source_raw.exists():
-        return None
-    raw = Image.open(source_raw).convert("RGBA")
-    try:
-        return slice_sheet_grid(raw, 1, 4)[0], source_raw
-    finally:
-        raw.close()
 
 
 def main() -> int:
@@ -420,31 +413,23 @@ def main() -> int:
     FORMAL_CROPPED_DIR.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, object]] = []
     for unit in UNITS:
-        split_raw_files = SPLIT_STATE_RAW_FILES.get(unit.unit_id)
-        if split_raw_files and all((RAW_DIR / raw_file).exists() for raw_file in split_raw_files.values()):
-            for state in unit.states:
-                source_raw = RAW_DIR / split_raw_files[state]
-                raw = Image.open(source_raw).convert("RGBA")
-                grid = slice_sheet_components(raw, 4, 4)
-                for direction_index, direction in enumerate(DIRECTIONS_4):
-                    override = strip_override_frames(unit.unit_id, state, direction)
-                    frames, frame_source = override if override else (grid[direction_index], source_raw)
-                    append_animation_entry(entries, unit, state, direction, frames, frame_source)
-                raw.close()
-            continue
-
         raw = Image.open(RAW_DIR / unit.raw_file).convert("RGBA")
-        grid = slice_sheet_components(raw, len(unit.rows), 4)
-        for row_index, (state, direction) in enumerate(unit.rows):
-            override = strip_override_frames(unit.unit_id, state, direction)
-            frames, frame_source = override if override else (grid[row_index], RAW_DIR / unit.raw_file)
-            append_animation_entry(entries, unit, state, direction, frames, frame_source)
+        grid = slice_sheet_grid(raw, unit.source_rows, 4)
+        source_rows = [grid[index] for index in unit.source_row_indices]
+        right_frame_sets = [frames for frames in source_rows]
+        left_frame_sets = [[ImageOps.mirror(frame) for frame in frames] for frames in right_frame_sets]
+        fit_ratio = fixed_frame_fit_ratio([frame for frames in [*right_frame_sets, *left_frame_sets] for frame in frames])
+        for row_index, (state, _direction) in enumerate(unit.rows):
+            right_frames = right_frame_sets[row_index]
+            append_animation_entry(entries, unit, state, "right", right_frames, RAW_DIR / unit.raw_file, fit_ratio)
+            left_frames = left_frame_sets[row_index]
+            append_animation_entry(entries, unit, state, "left", left_frames, RAW_DIR / unit.raw_file, fit_ratio)
         raw.close()
 
     manifest = {
         "source": "imagegen formal action sheets",
         "directions": DIRECTIONS_8,
-        "implementedDirections": DIRECTIONS_4,
+        "implementedDirections": DIRECTIONS_LR,
         "states": ["idle", "walk", "attack"],
         "assets": entries,
     }

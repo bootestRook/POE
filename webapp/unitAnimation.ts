@@ -26,13 +26,13 @@ export type UnitAnimationFrame = {
   playbackRate: number;
 };
 
-const EIGHT_TO_FOUR_DIRECTION: Record<UnitDirection, UnitDirection> = {
-  down: "down",
+const EIGHT_TO_HORIZONTAL_DIRECTION: Record<UnitDirection, UnitDirection> = {
+  down: "right",
   down_right: "right",
   right: "right",
-  up_right: "up",
-  up: "up",
-  up_left: "up",
+  up_right: "right",
+  up: "right",
+  up_left: "left",
   left: "left",
   down_left: "left"
 };
@@ -56,12 +56,19 @@ export function animationSpeedMultiplier(context: Pick<UnitAnimationContext, "ba
 }
 
 export function fallbackAnimation(unitId: UnitVisualType, state: UnitAnimationState, direction: UnitDirection): UnitAnimationAsset {
-  const implementedDirection = implementedUnitDirections().includes(direction) ? direction : EIGHT_TO_FOUR_DIRECTION[direction];
+  const implementedDirections = implementedUnitDirections();
+  const implementedDirection = implementedDirections.includes(direction)
+    ? direction
+    : implementedDirections.includes(EIGHT_TO_HORIZONTAL_DIRECTION[direction])
+      ? EIGHT_TO_HORIZONTAL_DIRECTION[direction]
+      : implementedDirections[0] ?? "right";
   return (
     UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, implementedDirection))
-    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "down"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "left"))
     ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", implementedDirection))
-    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "down"))!
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "left"))!
   );
 }
 
