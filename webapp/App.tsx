@@ -5,9 +5,18 @@ import { edgeAssetsForTile } from "./mapDecorators";
 import { createProceduralSceneProps } from "./propPlacement";
 import { BATTLE_PROP_ASSETS, SceneProp } from "./sceneProps";
 import { BattleTerrainTileKind, terrainAssetForTile, tileHash } from "./terrainAssets";
-import { resolveDirection, resolveUnitAnimation, UnitAnimationContext, UnitAnimationFrame } from "./unitAnimation";
-import { selectEnemyUnitType, UnitDirection, UnitVisualType } from "./unitAssets";
-import { FIRE_BOLT_VFX, VfxSpriteSheet } from "./vfxAssets";
+import { getAnimationFrame, resolveDirection, resolveUnitAnimation, UnitAnimationContext, UnitAnimationFrame } from "./unitAnimation";
+import {
+  selectEnemyUnitType,
+  UNIT_ANIMATION_ASSETS,
+  UNIT_ANIMATION_BY_KEY,
+  UnitAnimationAsset,
+  UnitAnimationState,
+  UnitDirection,
+  UnitVisualType,
+  unitAnimationKey
+} from "./unitAssets";
+import { FIRE_BOLT_VFX, ICE_SHARDS_VFX, VfxSpriteSheet } from "./vfxAssets";
 
 type Gem = {
   instance_id: string;
@@ -223,6 +232,198 @@ type SkillEditorOption = {
   text: string;
 };
 
+type SkillEditorModifierStat = {
+  stat: string;
+  stat_text: string;
+  value: number;
+  layer: string;
+  layer_text: string;
+  relation?: string;
+  relation_text?: string;
+};
+
+type SkillEditorTestModifier = {
+  id: string;
+  name_text: string;
+  description_text: string;
+  source_text: string;
+  category: string;
+  stats: SkillEditorModifierStat[];
+  filter_text: string;
+};
+
+type SkillEditorModifierStackView = {
+  panel_title_text: string;
+  available_title_text: string;
+  selected_title_text: string;
+  notice_text: string;
+  relation_label_text: string;
+  power_label_text: string;
+  apply_button_text: string;
+  clear_button_text: string;
+  relation_options: SkillEditorOption[];
+  power_limits: { min: number; max: number };
+  available_modifiers: SkillEditorTestModifier[];
+};
+
+type SkillEditorModifierPreview = {
+  skill_id: string;
+  skill_name_text: string;
+  relation: string;
+  relation_text: string;
+  source_power: number;
+  target_power: number;
+  conduit_power: number;
+  baseline: {
+    final_damage: number;
+    final_cooldown_ms: number;
+    projectile_count: number;
+    projectile_speed: number;
+  };
+  tested: {
+    final_damage: number;
+    final_cooldown_ms: number;
+    projectile_count: number;
+    projectile_speed: number;
+  };
+  applied_modifiers: SkillEditorPreviewModifier[];
+  unapplied_modifiers: SkillEditorPreviewModifier[];
+  writes_real_data: boolean;
+};
+
+type SkillTestArenaEnemy = {
+  enemy_id: string;
+  name_text: string;
+  position: { x: number; y: number };
+  max_life: number;
+  current_life: number;
+  is_alive: boolean;
+};
+
+type SkillTestArenaView = {
+  panel_title_text: string;
+  entry_button_text: string;
+  notice_text: string;
+  skills: {
+    id: string;
+    name_text: string;
+    testable: boolean;
+    status_text: string;
+  }[];
+  scenes: {
+    scene_id: string;
+    name_text: string;
+    enemies: SkillTestArenaEnemy[];
+  }[];
+};
+
+type SkillTestArenaEventSummary = {
+  event_id: string;
+  type: string;
+  type_text: string;
+  delay_ms: number;
+  duration_ms: number;
+  target_entity: string;
+  amount: number | null;
+  projectile_index?: number;
+};
+
+type SkillEventTimelineItem = {
+  event_id: string;
+  type: string;
+  type_text: string;
+  original_index: number;
+  timestamp_ms: number;
+  source_entity: string;
+  target_entity: string;
+  position: { x: number; y: number };
+  direction: { x: number; y: number };
+  delay_ms: number;
+  duration_ms: number;
+  amount: number | null;
+  damage_type: string;
+  skill_instance_id: string;
+  vfx_key: string;
+  sfx_key: string;
+  reason_key: string;
+  payload: Record<string, unknown>;
+  payload_text: string;
+};
+
+type SkillEventTimelineChecks = {
+  has_projectile_spawn: boolean;
+  has_damage: boolean;
+  has_hit_vfx: boolean;
+  has_floating_text: boolean;
+  damage_after_or_at_projectile_spawn: boolean;
+  flight_no_damage_passed: boolean;
+  basic_timing_passed: boolean;
+};
+
+type SkillTestArenaDamageResult = {
+  enemy_id: string;
+  name_text: string;
+  amount: number;
+  delay_ms: number;
+  projectile_index?: number;
+};
+
+type SkillTestArenaStage = {
+  stage_name_text: string;
+  monsters: SkillTestArenaEnemy[];
+  hit_targets: { enemy_id: string; name_text: string }[];
+  damage_results: SkillTestArenaDamageResult[];
+  applied_event_count: number;
+  event_summary: SkillTestArenaEventSummary[];
+  total_event_count: number;
+};
+
+type SkillTestArenaResult = {
+  skill_id: string;
+  skill_name_text: string;
+  scene_id: string;
+  scene_name_text: string;
+  modifier_stack_enabled: boolean;
+  modifier_relation_text: string;
+  source_power: number;
+  target_power: number;
+  conduit_power: number;
+  baseline: SkillEditorModifierPreview["baseline"];
+  tested: SkillEditorModifierPreview["tested"];
+  monsters: SkillTestArenaEnemy[];
+  initial_monsters: SkillTestArenaEnemy[];
+  hit_targets: { enemy_id: string; name_text: string }[];
+  damage_results: SkillTestArenaDamageResult[];
+  event_count: number;
+  event_counts: Record<string, number>;
+  has_projectile_spawn: boolean;
+  has_damage: boolean;
+  has_hit_vfx: boolean;
+  has_floating_text: boolean;
+  flight_no_damage_passed: boolean;
+  flight_duration_ms: number;
+  stages: SkillTestArenaStage[];
+  event_summary: SkillTestArenaEventSummary[];
+  event_timeline: SkillEventTimelineItem[];
+  timeline_supported_types: { type: string; text: string }[];
+  timeline_checks: SkillEventTimelineChecks;
+  writes_real_data: boolean;
+};
+
+type SkillEditorPreviewModifier = {
+  id: string;
+  name_text: string;
+  stat: SkillEditorModifierStat;
+  value: number;
+  layer: string;
+  layer_text: string;
+  relation: string;
+  relation_text: string;
+  reason_key: string;
+  reason_text: string;
+  applied: boolean;
+};
+
 type SkillEditorState = {
   title_text: string;
   subtitle_text: string;
@@ -238,12 +439,26 @@ type SkillEditorState = {
     target_policies: SkillEditorOption[];
     preview_fields: SkillEditorOption[];
   };
+  modifier_stack: SkillEditorModifierStackView;
+  test_arena: SkillTestArenaView;
 };
 
 type SkillEditorSaveResponse = {
   ok: boolean;
   message_text: string;
   state: AppState;
+};
+
+type SkillEditorModifierPreviewResponse = {
+  ok: boolean;
+  message_text: string;
+  preview: SkillEditorModifierPreview | null;
+};
+
+type SkillTestArenaResponse = {
+  ok: boolean;
+  message_text: string;
+  result: SkillTestArenaResult | null;
 };
 
 function initialSkillEditorOpen() {
@@ -255,6 +470,13 @@ function initialSkillEditorOpen() {
 
 function initialSkillEditorMode() {
   return initialSkillEditorOpen();
+}
+
+function initialSpriteTestMode() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const path = window.location.pathname.replace(/\/+$/, "");
+  return path === "/sprite-test" || params.get("mode") === "sprite-test";
 }
 
 type SkillEvent = {
@@ -358,6 +580,7 @@ type HitVfx = {
   duration: number;
   damageType: string;
   vfxKey: string;
+  skillTemplateId?: string;
 };
 
 type ScheduledSkillEvent = {
@@ -504,11 +727,20 @@ const FIRE_BOLT_FAKE_Z = 22;
 const FIRE_BOLT_TRAIL_LENGTH = 8;
 const FIRE_BOLT_IMPACT_DURATION_MS = 420;
 const FIRE_BOLT_PROJECTILE_FRAME_ROW = 0;
-const FIRE_BOLT_PROJECTILE_BASE_ANGLE = Math.PI / 4;
+const FIRE_BOLT_PROJECTILE_BASE_ANGLE_DEG = 37;
+const FIRE_BOLT_PROJECTILE_BASE_ANGLE = FIRE_BOLT_PROJECTILE_BASE_ANGLE_DEG * Math.PI / 180;
+const ICE_SHARDS_FAKE_Z = 24;
+const ICE_SHARDS_TRAIL_LENGTH = 8;
+const ICE_SHARDS_IMPACT_DURATION_MS = 420;
+const ICE_SHARDS_PROJECTILE_FRAME_ROW = 0;
+const ICE_SHARDS_PROJECTILE_BASE_ANGLE_DEG = 0;
+const ICE_SHARDS_PROJECTILE_BASE_ANGLE = ICE_SHARDS_PROJECTILE_BASE_ANGLE_DEG * Math.PI / 180;
 const ENEMY_ATTACK_VISUAL_RANGE = 76;
+const ENEMY_ATTACK_VISUAL_SCREEN_RANGE = 64;
 const ENEMY_ATTACK_VISUAL_DURATION_MS = 640;
 const ENEMY_ATTACK_VISUAL_COOLDOWN_MS = 520;
 const ENEMY_WALK_VISUAL_DEADZONE = 0.35;
+const UNIT_RENDER_SCALE = 0.5;
 const FLOATING_GEM_OFFSET = { x: 18, y: 18 };
 const INVENTORY_SLOT_COUNT = 60;
 const INVENTORY_COLUMNS = 12;
@@ -537,7 +769,583 @@ async function requestSkillEditorSave(skillId: string, draft: SkillPackageData):
   return payload;
 }
 
+async function requestSkillEditorModifierPreview(payload: {
+  skill_id: string;
+  modifier_ids: string[];
+  relation: string;
+  source_power: number;
+  target_power: number;
+  conduit_power: number;
+}): Promise<SkillEditorModifierPreviewResponse> {
+  const response = await fetch("/api/skill-editor/modifier-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "测试栈计算失败。");
+  return result;
+}
+
+async function requestSkillTestArenaRun(payload: {
+  skill_id: string;
+  scene_id: string;
+  package: SkillPackageData | null;
+  use_modifier_stack: boolean;
+  modifier_ids: string[];
+  relation: string;
+  source_power: number;
+  target_power: number;
+  conduit_power: number;
+}): Promise<SkillTestArenaResponse> {
+  const response = await fetch("/api/skill-editor/test-arena/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "技能测试场运行失败。");
+  return result;
+}
+
 export function App() {
+  const [spriteTestMode] = useState(() => initialSpriteTestMode());
+  return spriteTestMode ? <SpriteTestScene /> : <GameApp />;
+}
+
+const SPRITE_TEST_DIRECTIONS: UnitDirection[] = ["up", "down", "left", "right", "up_left", "up_right", "down_left", "down_right"];
+const SPRITE_TEST_ACTIONS: UnitAnimationState[] = ["idle", "walk", "attack"];
+const SPRITE_TEST_SPEEDS = [0.25, 0.5, 1, 2];
+const SPRITE_TEST_DIRECTION_TEXT: Record<UnitDirection, string> = {
+  up: "上",
+  down: "下",
+  left: "左",
+  right: "右",
+  up_left: "左上",
+  up_right: "右上",
+  down_left: "左下",
+  down_right: "右下"
+};
+const SPRITE_TEST_ACTION_TEXT: Record<UnitAnimationState, string> = {
+  idle: "待机",
+  walk: "行走",
+  attack: "攻击"
+};
+const SPRITE_TEST_RESOURCE_TEXT: Record<UnitVisualType, string> = {
+  player_adventurer: "玩家角色 sprite",
+  enemy_imp: "普通怪物 sprite",
+  enemy_brute: "精英怪物 sprite"
+};
+const SPRITE_TEST_DIRECTION_VECTOR: Record<UnitDirection, { x: number; y: number }> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+  up_left: { x: -1, y: -1 },
+  up_right: { x: 1, y: -1 },
+  down_left: { x: -1, y: 1 },
+  down_right: { x: 1, y: 1 }
+};
+const SPRITE_TEST_DIRECTION_FALLBACK: Record<UnitDirection, UnitDirection> = {
+  down: "down",
+  down_right: "right",
+  right: "right",
+  up_right: "up",
+  up: "up",
+  up_left: "up",
+  left: "left",
+  down_left: "left"
+};
+const SPRITE_TEST_UNITS = Array.from(new Set(UNIT_ANIMATION_ASSETS.map((asset) => asset.unitId))) as UnitVisualType[];
+const SPRITE_TEST_PATHS = [
+  { id: "horizontal", label: "横向直线", points: [{ x: 70, y: 150 }, { x: 440, y: 150 }] },
+  { id: "vertical", label: "纵向直线", points: [{ x: 250, y: 40 }, { x: 250, y: 270 }] },
+  { id: "diagonal", label: "斜向直线", points: [{ x: 90, y: 255 }, { x: 430, y: 55 }] },
+  { id: "turn", label: "折线路径", points: [{ x: 80, y: 70 }, { x: 220, y: 70 }, { x: 220, y: 230 }, { x: 430, y: 230 }] }
+];
+
+type SpriteTestResolvedFrame = {
+  frame: UnitAnimationFrame;
+  exact: boolean;
+  missingAction: boolean;
+  requestedAction: UnitAnimationState;
+  requestedDirection: UnitDirection;
+};
+
+function SpriteTestScene() {
+  const [unitIndex, setUnitIndex] = useState(0);
+  const [action, setAction] = useState<UnitAnimationState>("idle");
+  const [direction, setDirection] = useState<UnitDirection>("down");
+  const [playing, setPlaying] = useState(true);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [manualFrame, setManualFrame] = useState<number | null>(null);
+  const [showCollision, setShowCollision] = useState(false);
+  const [showAttachment, setShowAttachment] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [autoCycle, setAutoCycle] = useState(false);
+  const [screenshotMode, setScreenshotMode] = useState(false);
+  const [pathId, setPathId] = useState(SPRITE_TEST_PATHS[0].id);
+  const unitId = SPRITE_TEST_UNITS[unitIndex] ?? SPRITE_TEST_UNITS[0] ?? "player_adventurer";
+  const resolved = resolveSpriteTestFrame(unitId, action, direction, elapsedMs, playbackSpeed, manualFrame);
+  const currentAsset = resolved.frame.animation;
+  const currentFrame = resolved.frame.frameIndex;
+  const missingMessages = spriteTestMissingMessages(unitId, action, direction, resolved);
+  const walkPath = SPRITE_TEST_PATHS.find((path) => path.id === pathId) ?? SPRITE_TEST_PATHS[0];
+  const walkProgress = ((elapsedMs * playbackSpeed) % 3200) / 3200;
+  const walkPoint = pointOnSpriteTestPath(walkPath.points, walkProgress);
+  const walkDirection = directionFromSpriteTestPath(walkPath.points, walkProgress);
+
+  useEffect(() => {
+    if (!playing) return;
+    let frame = 0;
+    let previous = performance.now();
+    function tick(now: number) {
+      const dt = Math.min(80, now - previous);
+      previous = now;
+      setElapsedMs((value) => value + dt);
+      frame = requestAnimationFrame(tick);
+    }
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing]);
+
+  useEffect(() => {
+    if (!autoCycle) return;
+    const timer = window.setInterval(() => {
+      setDirection((current) => {
+        const index = SPRITE_TEST_DIRECTIONS.indexOf(current);
+        return SPRITE_TEST_DIRECTIONS[(index + 1) % SPRITE_TEST_DIRECTIONS.length];
+      });
+      setManualFrame(null);
+      setElapsedMs(0);
+    }, action === "attack" ? 900 : 1300);
+    return () => window.clearInterval(timer);
+  }, [action, autoCycle]);
+
+  function selectUnit(nextIndex: number) {
+    const count = Math.max(1, SPRITE_TEST_UNITS.length);
+    setUnitIndex((nextIndex + count) % count);
+    setManualFrame(null);
+    setElapsedMs(0);
+  }
+
+  function selectAction(nextAction: UnitAnimationState) {
+    setAction(nextAction);
+    setManualFrame(null);
+    setElapsedMs(0);
+  }
+
+  function stepFrame() {
+    const frameCount = Math.max(1, currentAsset.frameCount);
+    setPlaying(false);
+    setManualFrame((value) => ((value ?? currentFrame) + 1) % frameCount);
+  }
+
+  return (
+    <main className={`sprite-test-screen ${screenshotMode ? "sprite-test-screen-shot" : ""}`} data-mode="sprite-test">
+      <header className="sprite-test-header">
+        <div>
+          <h1>Sprites 动作测试场景</h1>
+          <p>独立 Debug 入口：/sprite-test，只读现有 sprites manifest，不进入正式游戏流程。</p>
+        </div>
+        <a className="sprite-test-exit" href="/" aria-label="返回正式入口">返回正式入口</a>
+      </header>
+
+      <section className="sprite-test-control-panel" aria-label="测试控制面板">
+        <div className="sprite-test-control-status">
+          <span>当前资源：{SPRITE_TEST_RESOURCE_TEXT[unitId] ?? unitId}</span>
+          <span>当前动作：{SPRITE_TEST_ACTION_TEXT[action]}</span>
+          <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}</span>
+          <span>播放状态：{playing ? "播放" : "暂停"}</span>
+          <span>播放速度：{playbackSpeed}x</span>
+          <span>当前帧：{currentFrame + 1} / {currentAsset.frameCount}</span>
+          <span>资源路径：{spriteTestAssetPath(currentAsset)}</span>
+          <span>碰撞框显示：{showCollision ? "开" : "关"}</span>
+          <span>挂点显示：{showAttachment ? "开" : "关"}</span>
+          <span>网格显示：{showGrid ? "开" : "关"}</span>
+        </div>
+        <div className="sprite-test-controls">
+          <button type="button" onClick={() => selectUnit(unitIndex - 1)}>上一个资源</button>
+          <button type="button" onClick={() => selectUnit(unitIndex + 1)}>下一个资源</button>
+          <select value={unitId} aria-label="资源测试对象" onChange={(event) => selectUnit(SPRITE_TEST_UNITS.indexOf(event.target.value as UnitVisualType))}>
+            {SPRITE_TEST_UNITS.map((item) => <option key={item} value={item}>{SPRITE_TEST_RESOURCE_TEXT[item] ?? item}</option>)}
+          </select>
+          <button type="button" onClick={() => selectAction(nextSpriteTestAction(action))}>切换动作</button>
+          <button type="button" onClick={() => setDirection(nextSpriteTestDirection(direction))}>切换方向</button>
+          <button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? "暂停" : "播放"}</button>
+          <button type="button" onClick={stepFrame}>单帧前进</button>
+          <button type="button" onClick={() => { setElapsedMs(0); setManualFrame(null); }}>重置位置</button>
+          <button type="button" onClick={() => setScreenshotMode((value) => !value)}>截图模式</button>
+        </div>
+        <div className="sprite-test-toggles">
+          <label><input type="checkbox" checked={autoCycle} onChange={(event) => setAutoCycle(event.target.checked)} /> 轮播方向</label>
+          <label><input type="checkbox" checked={showCollision} onChange={(event) => setShowCollision(event.target.checked)} /> 碰撞框显示</label>
+          <label><input type="checkbox" checked={showAttachment} onChange={(event) => setShowAttachment(event.target.checked)} /> 挂点显示</label>
+          <label><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)} /> 网格显示</label>
+          <label>
+            播放速度：
+            <select value={playbackSpeed} onChange={(event) => setPlaybackSpeed(Number(event.target.value))}>
+              {SPRITE_TEST_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="sprite-test-warnings" aria-live="polite">
+          {missingMessages.length === 0 ? <span>资源状态：当前动作与方向可直接播放。</span> : missingMessages.map((message) => <span key={message}>{message}</span>)}
+        </div>
+      </section>
+
+      <section className="sprite-test-zones" aria-label="Sprites 动作测试区">
+        <SpriteIdleTestZone
+          unitId={unitId}
+          direction={direction}
+          frame={resolved.frame}
+          elapsedMs={elapsedMs}
+          playbackSpeed={playbackSpeed}
+          showCollision={showCollision}
+          showAttachment={showAttachment}
+          showGrid={showGrid}
+          onDirection={setDirection}
+        />
+        <SpriteWalkTestZone
+          unitId={unitId}
+          direction={direction}
+          activePathId={pathId}
+          walkPoint={walkPoint}
+          walkDirection={walkDirection}
+          elapsedMs={elapsedMs}
+          playbackSpeed={playbackSpeed}
+          manualFrame={manualFrame}
+          showCollision={showCollision}
+          showAttachment={showAttachment}
+          showGrid={showGrid}
+          onPath={setPathId}
+        />
+        <SpriteAttackTestZone
+          unitId={unitId}
+          direction={direction}
+          frame={resolveSpriteTestFrame(unitId, "attack", direction, elapsedMs, playbackSpeed, manualFrame)}
+          elapsedMs={elapsedMs}
+          playbackSpeed={playbackSpeed}
+          showCollision={showCollision}
+          showAttachment={showAttachment}
+          showGrid={showGrid}
+          onDirection={setDirection}
+          onAttack={() => selectAction("attack")}
+        />
+      </section>
+    </main>
+  );
+}
+
+function SpriteIdleTestZone({
+  unitId,
+  direction,
+  frame,
+  elapsedMs,
+  playbackSpeed,
+  showCollision,
+  showAttachment,
+  showGrid,
+  onDirection
+}: {
+  unitId: UnitVisualType;
+  direction: UnitDirection;
+  frame: UnitAnimationFrame;
+  elapsedMs: number;
+  playbackSpeed: number;
+  showCollision: boolean;
+  showAttachment: boolean;
+  showGrid: boolean;
+  onDirection: (direction: UnitDirection) => void;
+}) {
+  return (
+    <section className={`sprite-test-zone sprite-test-idle-zone ${showGrid ? "sprite-test-grid-on" : ""}`} aria-label="待机测试区">
+      <div className="sprite-test-zone-title">
+        <h2>待机测试区</h2>
+        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}，当前动作：待机</span>
+      </div>
+      <div className="sprite-test-direction-stage">
+        <SpriteTestSprite frame={frame} showCollision={showCollision} showAttachment={showAttachment} style={{ left: "50%", top: "72%" }} />
+        {SPRITE_TEST_DIRECTIONS.map((item) => (
+          <button
+            key={item}
+            className={`sprite-test-direction-marker sprite-test-direction-${item} ${item === direction ? "active" : ""}`}
+            type="button"
+            onClick={() => onDirection(item)}
+          >
+            {SPRITE_TEST_DIRECTION_TEXT[item]}
+          </button>
+        ))}
+      </div>
+      <SpriteDirectionSamples unitId={unitId} state="idle" elapsedMs={elapsedMs} playbackSpeed={playbackSpeed} showCollision={showCollision} showAttachment={showAttachment} />
+    </section>
+  );
+}
+
+function SpriteWalkTestZone({
+  unitId,
+  direction,
+  activePathId,
+  walkPoint,
+  walkDirection,
+  elapsedMs,
+  playbackSpeed,
+  manualFrame,
+  showCollision,
+  showAttachment,
+  showGrid,
+  onPath
+}: {
+  unitId: UnitVisualType;
+  direction: UnitDirection;
+  activePathId: string;
+  walkPoint: { x: number; y: number };
+  walkDirection: UnitDirection;
+  elapsedMs: number;
+  playbackSpeed: number;
+  manualFrame: number | null;
+  showCollision: boolean;
+  showAttachment: boolean;
+  showGrid: boolean;
+  onPath: (pathId: string) => void;
+}) {
+  const frame = resolveSpriteTestFrame(unitId, "walk", walkDirection || direction, elapsedMs, playbackSpeed, manualFrame).frame;
+  return (
+    <section className={`sprite-test-zone sprite-test-walk-zone ${showGrid ? "sprite-test-grid-on" : ""}`} aria-label="行走测试区">
+      <div className="sprite-test-zone-title">
+        <h2>行走测试区</h2>
+        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[walkDirection]}，当前动作：行走</span>
+      </div>
+      <div className="sprite-test-path-buttons">
+        {SPRITE_TEST_PATHS.map((path) => (
+          <button key={path.id} className={path.id === activePathId ? "active" : ""} type="button" onClick={() => onPath(path.id)}>
+            {path.label}
+          </button>
+        ))}
+      </div>
+      <div className="sprite-test-walk-field" aria-label="行走路径网格">
+        <svg viewBox="0 0 520 310" aria-hidden="true">
+          {SPRITE_TEST_PATHS.map((path) => (
+            <polyline key={path.id} className={path.id === activePathId ? "sprite-test-path-active" : ""} points={path.points.map((point) => `${point.x},${point.y}`).join(" ")} />
+          ))}
+        </svg>
+        <SpriteTestSprite frame={frame} showCollision={showCollision} showAttachment={showAttachment} style={{ left: walkPoint.x, top: walkPoint.y }} />
+      </div>
+      <SpriteDirectionSamples unitId={unitId} state="walk" elapsedMs={elapsedMs} playbackSpeed={playbackSpeed} showCollision={showCollision} showAttachment={showAttachment} />
+    </section>
+  );
+}
+
+function SpriteAttackTestZone({
+  unitId,
+  direction,
+  frame,
+  elapsedMs,
+  playbackSpeed,
+  showCollision,
+  showAttachment,
+  showGrid,
+  onDirection,
+  onAttack
+}: {
+  unitId: UnitVisualType;
+  direction: UnitDirection;
+  frame: SpriteTestResolvedFrame;
+  elapsedMs: number;
+  playbackSpeed: number;
+  showCollision: boolean;
+  showAttachment: boolean;
+  showGrid: boolean;
+  onDirection: (direction: UnitDirection) => void;
+  onAttack: () => void;
+}) {
+  return (
+    <section className={`sprite-test-zone sprite-test-attack-zone ${showGrid ? "sprite-test-grid-on" : ""}`} aria-label="攻击测试区">
+      <div className="sprite-test-zone-title">
+        <h2>攻击测试区</h2>
+        <span>当前方向：{SPRITE_TEST_DIRECTION_TEXT[direction]}，当前动作：攻击</span>
+      </div>
+      <div className="sprite-test-attack-field">
+        <SpriteTestSprite frame={frame.frame} showCollision={showCollision} showAttachment={showAttachment} style={{ left: "50%", top: "55%" }} />
+        {SPRITE_TEST_DIRECTIONS.flatMap((item) =>
+          [88, 142, 198].map((distance, index) => {
+            const vector = SPRITE_TEST_DIRECTION_VECTOR[item];
+            const left = 50 + (vector.x * distance) / 5.1;
+            const top = 55 + (vector.y * distance) / 3.3;
+            const distanceText = index === 0 ? "近距目标" : index === 1 ? "中距目标" : "远距目标";
+            return (
+              <button
+                key={`${item}-${distance}`}
+                className={`sprite-test-dummy sprite-test-dummy-${index} ${item === direction ? "active" : ""}`}
+                style={{ left: `${left}%`, top: `${top}%` }}
+                type="button"
+                onClick={() => onDirection(item)}
+                title={`${SPRITE_TEST_DIRECTION_TEXT[item]} ${distanceText}`}
+              >
+                {distanceText}
+              </button>
+            );
+          })
+        )}
+      </div>
+      <button className="sprite-test-attack-trigger" type="button" onClick={onAttack}>手动触发攻击</button>
+      {frame.missingAction && <p className="sprite-test-missing-action">当前 sprite 未配置攻击动作</p>}
+      <SpriteDirectionSamples unitId={unitId} state="attack" elapsedMs={elapsedMs} playbackSpeed={playbackSpeed} showCollision={showCollision} showAttachment={showAttachment} />
+    </section>
+  );
+}
+
+function SpriteDirectionSamples({
+  unitId,
+  state,
+  elapsedMs,
+  playbackSpeed,
+  showCollision,
+  showAttachment
+}: {
+  unitId: UnitVisualType;
+  state: UnitAnimationState;
+  elapsedMs: number;
+  playbackSpeed: number;
+  showCollision: boolean;
+  showAttachment: boolean;
+}) {
+  return (
+    <div className="sprite-test-samples" aria-label={`8 方向 ${SPRITE_TEST_ACTION_TEXT[state]} 样例`}>
+      {SPRITE_TEST_DIRECTIONS.map((direction) => {
+        const resolved = resolveSpriteTestFrame(unitId, state, direction, elapsedMs, playbackSpeed, null);
+        return (
+          <div key={`${state}-${direction}`} className={`sprite-test-sample ${resolved.exact ? "" : "sprite-test-sample-missing"}`}>
+            <SpriteTestSprite frame={resolved.frame} scale={0.38} showCollision={showCollision} showAttachment={showAttachment} style={{ left: "50%", top: "78%" }} />
+            <span>{SPRITE_TEST_DIRECTION_TEXT[direction]}</span>
+            {!resolved.exact && <small>缺少方向</small>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SpriteTestSprite({
+  frame,
+  scale = 0.58,
+  showCollision,
+  showAttachment,
+  style
+}: {
+  frame: UnitAnimationFrame;
+  scale?: number;
+  showCollision: boolean;
+  showAttachment: boolean;
+  style: CSSProperties;
+}) {
+  const asset = frame.animation;
+  return (
+    <div
+      className={`sprite-test-sprite unit-visual-${asset.unitId}`}
+      style={{
+        width: asset.frameWidth,
+        height: asset.frameHeight,
+        "--unit-anchor-x": asset.anchorX,
+        "--unit-anchor-y": asset.anchorY,
+        "--sprite-test-scale": scale,
+        ...style
+      } as CSSProperties}
+      data-animation-state={asset.state}
+      data-animation-direction={asset.direction}
+      data-animation-frame={frame.frameIndex}
+    >
+      {showCollision && <span className="sprite-test-collision-box" aria-hidden="true" />}
+      {showAttachment && (
+        <>
+          <span className="sprite-test-anchor-point" aria-hidden="true" />
+          <span className="sprite-test-attachment-point" aria-hidden="true" />
+        </>
+      )}
+      <UnitAnimationSprite frame={frame} />
+    </div>
+  );
+}
+
+function resolveSpriteTestFrame(
+  unitId: UnitVisualType,
+  state: UnitAnimationState,
+  direction: UnitDirection,
+  elapsedMs: number,
+  playbackSpeed: number,
+  manualFrame: number | null
+): SpriteTestResolvedFrame {
+  const exact = UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, direction));
+  const stateFallback = UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, SPRITE_TEST_DIRECTION_FALLBACK[direction]))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "down"));
+  const idleFallback = UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", SPRITE_TEST_DIRECTION_FALLBACK[direction]))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "down"))
+    ?? UNIT_ANIMATION_ASSETS[0];
+  const asset = exact ?? stateFallback ?? idleFallback;
+  const hasAction = UNIT_ANIMATION_ASSETS.some((item) => item.unitId === unitId && item.state === state);
+  const resolved = getAnimationFrame(asset, elapsedMs, playbackSpeed);
+  return {
+    frame: {
+      ...resolved,
+      frameIndex: manualFrame === null ? resolved.frameIndex : manualFrame % Math.max(1, asset.frameCount)
+    },
+    exact: Boolean(exact),
+    missingAction: !hasAction,
+    requestedAction: state,
+    requestedDirection: direction
+  };
+}
+
+function spriteTestMissingMessages(unitId: UnitVisualType, action: UnitAnimationState, direction: UnitDirection, resolved: SpriteTestResolvedFrame) {
+  const messages: string[] = [];
+  if (resolved.missingAction) messages.push(`缺少动作：${action}`);
+  if (!resolved.exact) messages.push(`缺少方向：${SPRITE_TEST_DIRECTION_TEXT[direction]}（${direction}）`);
+  if (resolved.frame.animation.frameCount <= 0) messages.push(`缺少帧配置：${action}/${direction}`);
+  if (!UNIT_ANIMATION_ASSETS.some((asset) => asset.unitId === unitId)) messages.push(`缺少资源：${unitId}`);
+  if (action === "attack" && resolved.missingAction) messages.push("当前 sprite 未配置攻击动作");
+  return messages;
+}
+
+function nextSpriteTestAction(action: UnitAnimationState) {
+  return SPRITE_TEST_ACTIONS[(SPRITE_TEST_ACTIONS.indexOf(action) + 1) % SPRITE_TEST_ACTIONS.length];
+}
+
+function nextSpriteTestDirection(direction: UnitDirection) {
+  return SPRITE_TEST_DIRECTIONS[(SPRITE_TEST_DIRECTIONS.indexOf(direction) + 1) % SPRITE_TEST_DIRECTIONS.length];
+}
+
+function spriteTestAssetPath(asset: UnitAnimationAsset) {
+  return (asset as UnitAnimationAsset & { path?: string }).path ?? asset.src;
+}
+
+function pointOnSpriteTestPath(points: { x: number; y: number }[], progress: number) {
+  const segments = points.slice(1).map((point, index) => {
+    const previous = points[index];
+    return { from: previous, to: point, length: Math.hypot(point.x - previous.x, point.y - previous.y) };
+  });
+  const total = segments.reduce((sum, segment) => sum + segment.length, 0) || 1;
+  let distanceLeft = progress * total;
+  for (const segment of segments) {
+    if (distanceLeft <= segment.length) {
+      const local = segment.length <= 0 ? 0 : distanceLeft / segment.length;
+      return {
+        x: segment.from.x + (segment.to.x - segment.from.x) * local,
+        y: segment.from.y + (segment.to.y - segment.from.y) * local
+      };
+    }
+    distanceLeft -= segment.length;
+  }
+  return points[points.length - 1] ?? { x: 0, y: 0 };
+}
+
+function directionFromSpriteTestPath(points: { x: number; y: number }[], progress: number): UnitDirection {
+  const now = pointOnSpriteTestPath(points, progress);
+  const next = pointOnSpriteTestPath(points, (progress + 0.02) % 1);
+  return resolveDirection({ x: next.x - now.x, y: next.y - now.y }, "down");
+}
+
+function GameApp() {
   const [state, setState] = useState<AppState | null>(null);
   const [bagOpen, setBagOpen] = useState(false);
   const [skillEditorMode] = useState(() => initialSkillEditorMode());
@@ -754,8 +1562,14 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       const worldMovementVector = previous ? { x: enemy.x - previous.lastX, y: enemy.y - previous.lastY } : { x: currentPlayer.x - enemy.x, y: currentPlayer.y - enemy.y };
       const attackActive = previous?.attackUntilMs !== undefined && nowMs < previous.attackUntilMs;
       const nextAttackReadyAtMs = previous?.nextAttackReadyAtMs ?? 0;
-      const canStartAttack = !attackActive && nowMs >= nextAttackReadyAtMs && distance(enemy, currentPlayer) <= ENEMY_ATTACK_VISUAL_RANGE;
       const chaseVector = projectMovementVectorForAnimation({ x: currentPlayer.x - enemy.x, y: currentPlayer.y - enemy.y });
+      const enemyScreen = projectBattleWorldToScreen(enemy.x, enemy.y);
+      const playerScreen = projectBattleWorldToScreen(currentPlayer.x, currentPlayer.y);
+      const projectedDistance = Math.hypot(enemyScreen.x - playerScreen.x, enemyScreen.y - playerScreen.y);
+      const canStartAttack = !attackActive
+        && nowMs >= nextAttackReadyAtMs
+        && distance(enemy, currentPlayer) <= ENEMY_ATTACK_VISUAL_RANGE
+        && projectedDistance <= ENEMY_ATTACK_VISUAL_SCREEN_RANGE;
       const movementVector = Math.hypot(worldMovementVector.x, worldMovementVector.y) > ENEMY_WALK_VISUAL_DEADZONE
         ? chaseVector
         : { x: 0, y: 0 };
@@ -800,6 +1614,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       shapeEffects: skill.shape_effects ?? [],
       areaScale: skill.area_multiplier
     }));
+    const legacyProjectileVfxKind = projectileVfxKind(skill.visual_effect) ?? projectileVfxKind(skill.skill_template_id);
     const survivors = current
       .map((enemy) => {
         if (!targetIds.has(enemy.id)) return enemy;
@@ -817,6 +1632,23 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       setCombatLogs((logs) => [`${skill.name_text} 自动释放。`, ...logs].slice(0, 8));
     }
     setTexts((items) => [...items, ...nextTexts]);
+    if (legacyProjectileVfxKind) {
+      window.setTimeout(() => {
+        setHitVfxs((items) => [
+          ...items,
+          ...targets.map((target) => ({
+            id: nextHitVfxId.current++,
+            x: target.x,
+            y: target.y,
+            ttl: legacyProjectileVfxKind === "ice_shards" ? ICE_SHARDS_IMPACT_DURATION_MS / 1000 : FIRE_BOLT_IMPACT_DURATION_MS / 1000,
+            duration: legacyProjectileVfxKind === "ice_shards" ? ICE_SHARDS_IMPACT_DURATION_MS / 1000 : FIRE_BOLT_IMPACT_DURATION_MS / 1000,
+            damageType: skill.damage_type,
+            vfxKey: skill.visual_effect,
+            skillTemplateId: skill.skill_template_id
+          }))
+        ]);
+      }, Math.round(Math.max(...nextBolts.map((bolt) => bolt.duration), 0.12) * 1000));
+    }
     return survivors;
   }
 
@@ -1046,7 +1878,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           ttl: Math.max(0.12, event.duration_ms / 1000),
           duration: Math.max(0.12, event.duration_ms / 1000),
           damageType: event.damage_type,
-          vfxKey: event.vfx_key
+          vfxKey: event.vfx_key,
+          skillTemplateId: event.skill_instance_id
         }
       ]);
       return;
@@ -1981,6 +2814,22 @@ function SkillEditorPanel({
   const [draftSourceId, setDraftSourceId] = useState(selectedEntry?.id ?? "");
   const [saveMessage, setSaveMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [selectedModifierIds, setSelectedModifierIds] = useState<string[]>([]);
+  const [testRelation, setTestRelation] = useState("adjacent");
+  const [sourcePower, setSourcePower] = useState(1);
+  const [targetPower, setTargetPower] = useState(1);
+  const [conduitPower, setConduitPower] = useState(1);
+  const [modifierPreview, setModifierPreview] = useState<SkillEditorModifierPreview | null>(null);
+  const [modifierMessage, setModifierMessage] = useState("");
+  const [modifierPreviewing, setModifierPreviewing] = useState(false);
+  const [arenaSkillId, setArenaSkillId] = useState("active_fire_bolt");
+  const [arenaSceneId, setArenaSceneId] = useState(editor.test_arena.scenes[0]?.scene_id ?? "single_dummy");
+  const [arenaUseModifierStack, setArenaUseModifierStack] = useState(false);
+  const [arenaResult, setArenaResult] = useState<SkillTestArenaResult | null>(null);
+  const [arenaStageIndex, setArenaStageIndex] = useState(0);
+  const [arenaMessage, setArenaMessage] = useState("");
+  const [arenaRunning, setArenaRunning] = useState(false);
+  const [arenaPaused, setArenaPaused] = useState(false);
 
   useEffect(() => {
     const nextId = selectedEntry?.id ?? "";
@@ -1988,6 +2837,13 @@ function SkillEditorPanel({
     setDraft(clonePackageData(selectedEntry?.package_data ?? null));
     setDraftSourceId(nextId);
     setSaveMessage("");
+    setSelectedModifierIds([]);
+    setModifierPreview(null);
+    setModifierMessage("");
+    setArenaResult(null);
+    setArenaStageIndex(0);
+    setArenaMessage("");
+    setArenaPaused(false);
   }, [selectedEntry?.id, selectedEntry?.package_data, draftSourceId]);
 
   useEffect(() => {
@@ -2025,6 +2881,138 @@ function SkillEditorPanel({
 
   const projectileParams = draft?.behavior.params;
   const canEdit = Boolean(selectedEntry?.editable && draft);
+  const modifierStack = editor.modifier_stack;
+  const testArena = editor.test_arena;
+  const selectedArenaScene = testArena.scenes.find((scene) => scene.scene_id === arenaSceneId) ?? testArena.scenes[0] ?? null;
+  const selectedArenaSkill = testArena.skills.find((skill) => skill.id === arenaSkillId) ?? testArena.skills.find((skill) => skill.testable) ?? null;
+  const currentArenaStage = arenaResult?.stages[Math.min(arenaStageIndex, Math.max(0, arenaResult.stages.length - 1))] ?? null;
+  const availableModifierById = useMemo(
+    () => new Map(modifierStack.available_modifiers.map((modifier) => [modifier.id, modifier])),
+    [modifierStack.available_modifiers]
+  );
+  const selectedModifiers = selectedModifierIds
+    .map((modifierId) => availableModifierById.get(modifierId))
+    .filter((modifier): modifier is SkillEditorTestModifier => Boolean(modifier));
+  const powerError = validateModifierPower(sourcePower, targetPower, conduitPower, modifierStack.power_limits);
+
+  function addTestModifier(modifierId: string) {
+    setSelectedModifierIds((current) => current.includes(modifierId) ? current : [...current, modifierId]);
+    setModifierMessage("");
+  }
+
+  function removeTestModifier(modifierId: string) {
+    setSelectedModifierIds((current) => current.filter((item) => item !== modifierId));
+    setModifierPreview(null);
+    setModifierMessage("");
+  }
+
+  function clearTestModifiers() {
+    setSelectedModifierIds([]);
+    setModifierPreview(null);
+    setModifierMessage("测试栈已清空。");
+  }
+
+  async function applyTestModifiers() {
+    if (!selectedEntry) return;
+    if (powerError) {
+      setModifierMessage(powerError);
+      return;
+    }
+    setModifierPreviewing(true);
+    setModifierMessage("正在计算测试结果。");
+    try {
+      const result = await requestSkillEditorModifierPreview({
+        skill_id: selectedEntry.id,
+        modifier_ids: selectedModifierIds,
+        relation: testRelation,
+        source_power: sourcePower,
+        target_power: targetPower,
+        conduit_power: conduitPower
+      });
+      setModifierPreview(result.preview);
+      setModifierMessage(result.message_text);
+    } catch (error) {
+      setModifierPreview(null);
+      setModifierMessage(error instanceof Error ? error.message : "测试栈计算失败。");
+    } finally {
+      setModifierPreviewing(false);
+    }
+  }
+
+  async function runArenaRequest(finalStage: boolean) {
+    if (!draft || !selectedArenaSkill?.testable || !selectedArenaScene) {
+      setArenaMessage("当前技能不可测试。");
+      return null;
+    }
+    if (arenaUseModifierStack && powerError) {
+      setArenaMessage(powerError);
+      return null;
+    }
+    setArenaRunning(true);
+    setArenaMessage("正在运行技能测试场。");
+    try {
+      const response = await requestSkillTestArenaRun({
+        skill_id: arenaSkillId,
+        scene_id: selectedArenaScene.scene_id,
+        package: draft,
+        use_modifier_stack: arenaUseModifierStack,
+        modifier_ids: selectedModifierIds,
+        relation: testRelation,
+        source_power: sourcePower,
+        target_power: targetPower,
+        conduit_power: conduitPower
+      });
+      if (!response.ok || !response.result) {
+        setArenaResult(null);
+        setArenaStageIndex(0);
+        setArenaMessage(response.message_text);
+        return null;
+      }
+      setArenaResult(response.result);
+      setArenaStageIndex(finalStage ? Math.max(0, response.result.stages.length - 1) : 0);
+      setArenaMessage(response.message_text);
+      return response.result;
+    } catch (error) {
+      setArenaResult(null);
+      setArenaStageIndex(0);
+      setArenaMessage(error instanceof Error ? error.message : "技能测试场运行失败。");
+      return null;
+    } finally {
+      setArenaRunning(false);
+    }
+  }
+
+  async function runArena() {
+    if (arenaPaused) {
+      setArenaMessage("测试已暂停，继续后才能自动推进。");
+      return;
+    }
+    await runArenaRequest(true);
+  }
+
+  async function stepArena() {
+    if (!arenaResult) {
+      await runArenaRequest(false);
+      return;
+    }
+    setArenaStageIndex((current) => Math.min(current + 1, Math.max(0, arenaResult.stages.length - 1)));
+    setArenaMessage("已推进一个测试阶段。");
+  }
+
+  function pauseArena() {
+    setArenaPaused((current) => {
+      const next = !current;
+      setArenaMessage(next ? "测试已暂停。" : "测试已继续。");
+      return next;
+    });
+  }
+
+  function resetArena() {
+    setArenaResult(null);
+    setArenaStageIndex(0);
+    setArenaPaused(false);
+    setArenaMessage("测试场已重置。");
+  }
 
   return (
     <section className="skill-editor-overlay" aria-label="技能编辑器">
@@ -2205,6 +3193,147 @@ function SkillEditorPanel({
                         disabled={!canEdit}
                         onChange={(values) => updateDraft((next) => { next.preview.show_fields = values; })}
                       />
+                    </EditorSection>
+                    <EditorSection title={modifierStack.panel_title_text}>
+                      <div className="skill-editor-modifier-stack">
+                        <p className="skill-editor-test-notice">{modifierStack.notice_text}</p>
+                        <div className="skill-editor-modifier-controls">
+                          <SelectInput
+                            label={modifierStack.relation_label_text}
+                            value={testRelation}
+                            options={modifierStack.relation_options}
+                            onChange={setTestRelation}
+                          />
+                          <NumberInput label="来源强度 source_power" value={sourcePower} min={modifierStack.power_limits.min} onChange={setSourcePower} />
+                          <NumberInput label="目标强度 target_power" value={targetPower} min={modifierStack.power_limits.min} onChange={setTargetPower} />
+                          <NumberInput label="导管强度 conduit_power" value={conduitPower} min={modifierStack.power_limits.min} onChange={setConduitPower} />
+                        </div>
+                        <div className="skill-editor-modifier-columns">
+                          <div className="skill-editor-modifier-column">
+                            <h5>{modifierStack.available_title_text}</h5>
+                            <div className="skill-editor-modifier-list">
+                              {modifierStack.available_modifiers.map((modifier) => {
+                                const selected = selectedModifierIds.includes(modifier.id);
+                                return (
+                                  <article key={modifier.id} className="skill-editor-modifier-card">
+                                    <div>
+                                      <strong>{modifier.name_text}</strong>
+                                      <span>{modifier.description_text}</span>
+                                      <small>{modifier.filter_text}</small>
+                                    </div>
+                                    <ModifierStatList stats={modifier.stats} />
+                                    <button type="button" disabled={selected} onClick={() => addTestModifier(modifier.id)}>
+                                      {selected ? "已加入" : "加入测试栈"}
+                                    </button>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div className="skill-editor-modifier-column">
+                            <h5>{modifierStack.selected_title_text}</h5>
+                            {selectedModifiers.length > 0 ? (
+                              <div className="skill-editor-selected-modifiers">
+                                {selectedModifiers.map((modifier) => (
+                                  <div key={modifier.id} className="skill-editor-selected-modifier">
+                                    <span>{modifier.name_text}</span>
+                                    <button type="button" onClick={() => removeTestModifier(modifier.id)}>移除</button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="skill-editor-test-empty">尚未选择测试效果。</p>
+                            )}
+                            <div className="skill-editor-actions">
+                              <button type="button" disabled={modifierPreviewing} onClick={applyTestModifiers}>
+                                {modifierPreviewing ? "计算中" : modifierStack.apply_button_text}
+                              </button>
+                              <button type="button" disabled={selectedModifierIds.length === 0} onClick={clearTestModifiers}>
+                                {modifierStack.clear_button_text}
+                              </button>
+                            </div>
+                            {modifierMessage && (
+                              <p className={modifierMessage.includes("失败") || modifierMessage.includes("必须") ? "skill-editor-save-error" : "skill-editor-save-ok"} role="status">
+                                {modifierMessage}
+                              </p>
+                            )}
+                            {modifierPreview && <ModifierPreviewResult preview={modifierPreview} />}
+                          </div>
+                        </div>
+                      </div>
+                    </EditorSection>
+                    <EditorSection title={testArena.panel_title_text}>
+                      <div className="skill-test-arena">
+                        <p className="skill-editor-test-notice">{testArena.notice_text}</p>
+                        <div className="skill-test-arena-controls">
+                          <label className="skill-editor-field">
+                            <span>测试技能</span>
+                            <select
+                              value={arenaSkillId}
+                              onChange={(event) => setArenaSkillId(event.target.value)}
+                            >
+                              {testArena.skills.map((skill) => (
+                                <option key={skill.id} value={skill.id} disabled={!skill.testable}>
+                                  {skill.name_text}（{skill.status_text}）
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <SelectInput
+                            label="测试场景"
+                            value={selectedArenaScene?.scene_id ?? ""}
+                            options={testArena.scenes.map((scene) => ({ value: scene.scene_id, text: scene.name_text }))}
+                            onChange={(value) => {
+                              setArenaSceneId(value);
+                              setArenaResult(null);
+                              setArenaStageIndex(0);
+                              setArenaMessage("");
+                            }}
+                          />
+                          <CheckboxInput
+                            label="启用测试 Modifier 栈"
+                            checked={arenaUseModifierStack}
+                            onChange={(value) => {
+                              setArenaUseModifierStack(value);
+                              setArenaResult(null);
+                              setArenaStageIndex(0);
+                            }}
+                          />
+                        </div>
+                        <div className="skill-editor-actions">
+                          <button type="button" disabled={arenaRunning || arenaPaused || !selectedArenaSkill?.testable} onClick={runArena}>
+                            {arenaRunning ? "运行中" : "运行测试"}
+                          </button>
+                          <button type="button" disabled={arenaRunning} onClick={pauseArena}>
+                            {arenaPaused ? "继续" : "暂停"}
+                          </button>
+                          <button type="button" disabled={arenaRunning || !selectedArenaSkill?.testable} onClick={stepArena}>
+                            单步
+                          </button>
+                          <button type="button" disabled={arenaRunning} onClick={resetArena}>
+                            重置
+                          </button>
+                        </div>
+                        {arenaMessage && (
+                          <p className={arenaMessage.includes("失败") || arenaMessage.includes("不可") || arenaMessage.includes("必须") ? "skill-editor-save-error" : "skill-editor-save-ok"} role="status">
+                            {arenaMessage}
+                          </p>
+                        )}
+                        {selectedArenaScene && !arenaResult && (
+                          <div className="skill-test-arena-result">
+                            <h5>{selectedArenaScene.name_text}</h5>
+                            <MonsterLifeList monsters={selectedArenaScene.enemies} />
+                            <p>选择场景后点击运行测试或单步，结果只在本次编辑器会话中生效。</p>
+                          </div>
+                        )}
+                        {arenaResult && currentArenaStage && (
+                          <SkillTestArenaResultView
+                            result={arenaResult}
+                            stage={currentArenaStage}
+                            stageIndex={arenaStageIndex}
+                          />
+                        )}
+                      </div>
                     </EditorSection>
                     <div className="skill-editor-actions">
                       <button type="button" disabled={!canEdit || saving} onClick={saveDraft}>
@@ -2431,6 +3560,262 @@ function CheckboxList({
       </div>
     </div>
   );
+}
+
+function ModifierStatList({ stats }: { stats: SkillEditorModifierStat[] }) {
+  return (
+    <ul className="skill-editor-modifier-stats">
+      {stats.map((stat, index) => (
+        <li key={`${stat.stat}-${index}`}>
+          <span>{stat.stat_text}</span>
+          <b>{formatModifierValue(stat.stat, stat.value)}</b>
+          <em>{stat.layer_text}{stat.relation_text ? ` / ${stat.relation_text}` : ""}</em>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ModifierPreviewResult({ preview }: { preview: SkillEditorModifierPreview }) {
+  const rows = [
+    ["原始最终伤害", preview.baseline.final_damage, "测试后最终伤害", preview.tested.final_damage],
+    ["原始最终冷却", preview.baseline.final_cooldown_ms, "测试后最终冷却", preview.tested.final_cooldown_ms],
+    ["原始投射物数量", preview.baseline.projectile_count, "测试后投射物数量", preview.tested.projectile_count],
+    ["原始投射物速度", preview.baseline.projectile_speed, "测试后投射物速度", preview.tested.projectile_speed]
+  ] as const;
+  return (
+    <div className="skill-editor-modifier-preview">
+      <h5>临时 FinalSkillInstance 预览</h5>
+      <dl>
+        {rows.map(([leftLabel, leftValue, rightLabel, rightValue]) => (
+          <div key={leftLabel}>
+            <dt>{leftLabel}</dt>
+            <dd>{formatPreviewNumber(leftValue)}</dd>
+            <dt>{rightLabel}</dt>
+            <dd>{formatPreviewNumber(rightValue)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p>模拟关系：{preview.relation_text}；来源强度：{preview.source_power}；目标强度：{preview.target_power}；导管强度：{preview.conduit_power}</p>
+      <h6>生效 modifier 列表</h6>
+      {preview.applied_modifiers.length > 0 ? (
+        <ul className="skill-editor-preview-modifier-list">
+          {preview.applied_modifiers.map((modifier, index) => (
+            <li key={`${modifier.id}-${modifier.stat.stat}-${index}`}>
+              {modifier.name_text}：{modifier.stat.stat_text} {formatModifierValue(modifier.stat.stat, modifier.value)}（{modifier.layer_text}，{modifier.relation_text}）
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="skill-editor-test-empty">没有生效的测试 modifier。</p>
+      )}
+      <h6>未生效 modifier 列表</h6>
+      {preview.unapplied_modifiers.length > 0 ? (
+        <ul className="skill-editor-preview-modifier-list">
+          {preview.unapplied_modifiers.map((modifier, index) => (
+            <li key={`${modifier.id}-${modifier.stat.stat}-off-${index}`}>
+              {modifier.name_text}：{modifier.reason_text}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="skill-editor-test-empty">没有未生效项。</p>
+      )}
+    </div>
+  );
+}
+
+function SkillTestArenaResultView({
+  result,
+  stage,
+  stageIndex
+}: {
+  result: SkillTestArenaResult;
+  stage: SkillTestArenaStage;
+  stageIndex: number;
+}) {
+  return (
+    <div className="skill-test-arena-result">
+      <div className="skill-test-arena-summary">
+        <h5>本次测试结果</h5>
+        <dl>
+          <div><dt>测试技能</dt><dd>{result.skill_name_text}</dd></div>
+          <div><dt>测试场景</dt><dd>{result.scene_name_text}</dd></div>
+          <div><dt>测试栈状态</dt><dd>{result.modifier_stack_enabled ? "已启用" : "未启用"}</dd></div>
+          <div><dt>当前阶段</dt><dd>{stage.stage_name_text}</dd></div>
+          <div><dt>事件数量</dt><dd>{result.event_count}</dd></div>
+          <div><dt>飞行时间</dt><dd>{formatPreviewNumber(result.flight_duration_ms)} 毫秒</dd></div>
+        </dl>
+      </div>
+      <div className="skill-test-arena-checks">
+        <span>{result.has_projectile_spawn ? "已生成投射物" : "缺少投射物生成"}</span>
+        <span>{result.has_damage ? "已生成伤害" : "缺少伤害"}</span>
+        <span>{result.has_hit_vfx ? "已生成命中特效" : "缺少命中特效"}</span>
+        <span>{result.has_floating_text ? "已生成伤害浮字" : "缺少伤害浮字"}</span>
+        <span>{result.flight_no_damage_passed ? "飞行期间未扣血：通过" : "飞行期间未扣血：未通过"}</span>
+      </div>
+      <div className="skill-test-arena-columns">
+        <div>
+          <h5>怪物生命</h5>
+          <MonsterLifeList monsters={stage.monsters} />
+        </div>
+        <div>
+          <h5>命中目标</h5>
+          {stage.hit_targets.length > 0 ? (
+            <ul className="skill-test-arena-list">
+              {stage.hit_targets.map((target) => <li key={target.enemy_id}>{target.name_text}</li>)}
+            </ul>
+          ) : (
+            <p className="skill-editor-test-empty">当前阶段尚未命中目标。</p>
+          )}
+        </div>
+        <div>
+          <h5>实际伤害结果</h5>
+          {stage.damage_results.length > 0 ? (
+            <ul className="skill-test-arena-list">
+              {stage.damage_results.map((damage, index) => (
+                <li key={`${damage.enemy_id}-${damage.projectile_index}-${index}`}>
+                  {damage.name_text}：{formatPreviewNumber(damage.amount)} 点，延迟 {damage.delay_ms} 毫秒
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="skill-editor-test-empty">当前阶段尚未结算伤害。</p>
+          )}
+        </div>
+      </div>
+      <div className="skill-test-arena-summary">
+        <h5>参数变化</h5>
+        <dl>
+          <div><dt>原始最终伤害</dt><dd>{formatPreviewNumber(result.baseline.final_damage)}</dd></div>
+          <div><dt>测试后最终伤害</dt><dd>{formatPreviewNumber(result.tested.final_damage)}</dd></div>
+          <div><dt>原始最终冷却</dt><dd>{formatPreviewNumber(result.baseline.final_cooldown_ms)}</dd></div>
+          <div><dt>测试后最终冷却</dt><dd>{formatPreviewNumber(result.tested.final_cooldown_ms)}</dd></div>
+          <div><dt>原始投射物数量</dt><dd>{formatPreviewNumber(result.baseline.projectile_count)}</dd></div>
+          <div><dt>测试后投射物数量</dt><dd>{formatPreviewNumber(result.tested.projectile_count)}</dd></div>
+          <div><dt>原始投射物速度</dt><dd>{formatPreviewNumber(result.baseline.projectile_speed)}</dd></div>
+          <div><dt>测试后投射物速度</dt><dd>{formatPreviewNumber(result.tested.projectile_speed)}</dd></div>
+        </dl>
+      </div>
+      <div className="skill-test-arena-events">
+        <h5>本次事件原始摘要</h5>
+        <p>当前显示第 {stageIndex + 1} 个测试阶段，已应用 {stage.applied_event_count} / {stage.total_event_count} 个事件。</p>
+        {stage.event_summary.length > 0 ? (
+          <ul className="skill-test-arena-list">
+            {stage.event_summary.map((event) => (
+              <li key={event.event_id}>
+                {event.type_text}：延迟 {event.delay_ms} 毫秒，持续 {event.duration_ms} 毫秒，目标 {event.target_entity || "无"}{event.amount !== null ? `，数值 ${formatPreviewNumber(event.amount)}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="skill-editor-test-empty">当前阶段没有事件。</p>
+        )}
+      </div>
+      <SkillEventTimelineView result={result} visibleEventCount={stage.applied_event_count} />
+    </div>
+  );
+}
+
+function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTestArenaResult; visibleEventCount: number }) {
+  const visibleEvents = result.event_timeline.slice(0, visibleEventCount);
+  return (
+    <div className="skill-event-timeline">
+      <div className="skill-event-timeline-heading">
+        <div>
+          <h5>SkillEvent 时间线</h5>
+          <p>数据来自本次测试运行的真实 SkillEvent 序列，重置或切换场景后会清空旧结果。</p>
+        </div>
+        <span>{visibleEvents.length} / {result.event_timeline.length} 个事件</span>
+      </div>
+      <div className="skill-event-supported-types" aria-label="支持识别的事件类型">
+        {result.timeline_supported_types.map((eventType) => (
+          <span key={eventType.type}>{eventType.text}</span>
+        ))}
+      </div>
+      <div className="skill-event-checks">
+        <TimelineCheck label="存在投射物生成" passed={result.timeline_checks.has_projectile_spawn} />
+        <TimelineCheck label="存在伤害结算" passed={result.timeline_checks.has_damage} />
+        <TimelineCheck label="存在命中特效" passed={result.timeline_checks.has_hit_vfx} />
+        <TimelineCheck label="存在伤害浮字" passed={result.timeline_checks.has_floating_text} />
+        <TimelineCheck label="伤害不早于投射物生成" passed={result.timeline_checks.damage_after_or_at_projectile_spawn} />
+        <TimelineCheck label="飞行期间未扣血" passed={result.timeline_checks.flight_no_damage_passed} />
+        <TimelineCheck label="基础时序检查" passed={result.timeline_checks.basic_timing_passed} />
+      </div>
+      {visibleEvents.length > 0 ? (
+        <ol className="skill-event-timeline-list">
+          {visibleEvents.map((event) => (
+            <li key={event.event_id} className={`skill-event-timeline-item skill-event-${event.type}`}>
+              <div className="skill-event-timeline-item-head">
+                <strong>{event.type_text}</strong>
+                <span>事件时间 {event.timestamp_ms} 毫秒</span>
+              </div>
+              <dl>
+                <div><dt>延迟</dt><dd>{event.delay_ms} 毫秒</dd></div>
+                <div><dt>持续时间</dt><dd>{event.duration_ms} 毫秒</dd></div>
+                <div><dt>来源实体</dt><dd>{event.source_entity || "无"}</dd></div>
+                <div><dt>目标实体</dt><dd>{event.target_entity || "无"}</dd></div>
+                <div><dt>数值</dt><dd>{event.amount === null ? "无" : formatPreviewNumber(event.amount)}</dd></div>
+                <div><dt>伤害类型</dt><dd>{event.damage_type ? damageTypeText(event.damage_type) : "无"}</dd></div>
+                <div><dt>特效 Key</dt><dd>{event.vfx_key || "无"}</dd></div>
+                <div><dt>原因 Key</dt><dd>{event.reason_key || "无"}</dd></div>
+              </dl>
+              <details>
+                <summary>附加数据</summary>
+                <pre>{event.payload_text || JSON.stringify(event.payload, null, 2)}</pre>
+              </details>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="skill-editor-test-empty">当前测试阶段尚无可显示事件。</p>
+      )}
+    </div>
+  );
+}
+
+function TimelineCheck({ label, passed }: { label: string; passed: boolean }) {
+  return <span className={passed ? "skill-event-check-pass" : "skill-event-check-fail"}>{label}：{passed ? "通过" : "未通过"}</span>;
+}
+
+function MonsterLifeList({ monsters }: { monsters: SkillTestArenaEnemy[] }) {
+  return (
+    <ul className="skill-test-arena-list">
+      {monsters.map((monster) => (
+        <li key={monster.enemy_id}>
+          {monster.name_text}：{formatPreviewNumber(monster.current_life)} / {formatPreviewNumber(monster.max_life)}，{monster.is_alive ? "存活" : "已击破"}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function validateModifierPower(
+  sourcePower: number,
+  targetPower: number,
+  conduitPower: number,
+  limits: { min: number; max: number }
+) {
+  const values = [
+    ["source_power", sourcePower],
+    ["target_power", targetPower],
+    ["conduit_power", conduitPower]
+  ] as const;
+  for (const [label, value] of values) {
+    if (!Number.isFinite(value)) return `${label} 必须是合法数字。`;
+    if (value < limits.min || value > limits.max) return `${label} 必须在 ${limits.min} 到 ${limits.max} 之间。`;
+  }
+  return "";
+}
+
+function formatPreviewNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatModifierValue(stat: string, value: number) {
+  if (stat === "conduit_multiplier") return `×${formatPreviewNumber(value)}`;
+  if (stat.endsWith("_percent")) return `${value >= 0 ? "+" : ""}${formatPreviewNumber(value)}%`;
+  return `${value >= 0 ? "+" : ""}${formatPreviewNumber(value)}`;
 }
 
 function clonePackageData(packageData: SkillPackageData | null | undefined): SkillPackageData | null {
@@ -2882,7 +4267,8 @@ function battleUnitStyle(entity: { x: number; y: number }, frame: UnitAnimationF
     height: asset.frameHeight,
     zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex,
     "--unit-anchor-x": asset.anchorX,
-    "--unit-anchor-y": asset.anchorY
+    "--unit-anchor-y": asset.anchorY,
+    "--unit-render-scale": UNIT_RENDER_SCALE
   } as CSSProperties;
 }
 
@@ -3200,9 +4586,13 @@ function damageTypeText(damageType: string) {
   return text[damageType] ?? "技能";
 }
 
-function isFireBoltVfxKey(value: string | undefined) {
+type ProjectileVfxKind = "fire_bolt" | "ice_shards";
+
+function projectileVfxKind(value: string | undefined): ProjectileVfxKind | null {
   const token = cssToken(value);
-  return token.includes("fire_bolt") || token.includes("skill_event_fire_bolt");
+  if (token.includes("fire_bolt") || token.includes("skill_event_fire_bolt")) return "fire_bolt";
+  if (token.includes("ice_shards") || token.includes("skill_ice_shards") || token.includes("active_ice_shards")) return "ice_shards";
+  return null;
 }
 
 function fireBoltTravel(bolt: FireBolt) {
@@ -3245,12 +4635,13 @@ function fireBoltVfxLayerStyle(
   sheet: VfxSpriteSheet,
   depthIndex: number,
   opacity: number,
-  transformSuffix = ""
+  transformSuffix = "",
+  fakeZ = FIRE_BOLT_FAKE_Z
 ): CSSProperties {
   const visualPoint = projectBattleWorldToScreen(worldPoint.x, worldPoint.y);
   return {
     left: visualPoint.x,
-    top: visualPoint.y - FIRE_BOLT_FAKE_Z,
+    top: visualPoint.y - fakeZ,
     width: sheet.frameWidth,
     height: sheet.frameHeight,
     opacity,
@@ -3261,10 +4652,12 @@ function fireBoltVfxLayerStyle(
 }
 
 function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number }) {
-  if (!isFireBoltVfxKey(bolt.vfxKey || bolt.visualEffect)) {
+  const vfxKind = projectileVfxKind(bolt.vfxKey) ?? projectileVfxKind(bolt.visualEffect) ?? projectileVfxKind(bolt.skillTemplateId);
+  if (!vfxKind) {
     return <LegacyFireBoltView bolt={bolt} depthIndex={depthIndex} />;
   }
 
+  const isIceShards = vfxKind === "ice_shards";
   const duration = Math.max(0.001, bolt.duration);
   const opacity = Math.max(0, bolt.ttl / duration);
   const travel = fireBoltTravel(bolt);
@@ -3276,27 +4669,30 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
   const startVisual = projectBattleWorldToScreen(bolt.x, bolt.y);
   const targetVisual = projectBattleWorldToScreen(bolt.targetX, bolt.targetY);
   const angle = Math.atan2(targetVisual.y - startVisual.y, targetVisual.x - startVisual.x);
-  const projectileAngle = angle - FIRE_BOLT_PROJECTILE_BASE_ANGLE;
-  const projectileSheet = FIRE_BOLT_VFX.projectileLoop;
-  const trailSheet = FIRE_BOLT_VFX.trailPuffs;
-  const projectileFrame = vfxFrameIndexInRow(projectileSheet, FIRE_BOLT_PROJECTILE_FRAME_ROW, bolt.ttl, duration);
+  const projectileAngle = angle - (isIceShards ? ICE_SHARDS_PROJECTILE_BASE_ANGLE : FIRE_BOLT_PROJECTILE_BASE_ANGLE);
+  const projectileSheet = isIceShards ? ICE_SHARDS_VFX.projectileLoop : FIRE_BOLT_VFX.projectileLoop;
+  const trailSheet = isIceShards ? ICE_SHARDS_VFX.trailFrost : FIRE_BOLT_VFX.trailPuffs;
+  const projectileFrameRow = isIceShards ? ICE_SHARDS_PROJECTILE_FRAME_ROW : FIRE_BOLT_PROJECTILE_FRAME_ROW;
+  const trailLength = isIceShards ? ICE_SHARDS_TRAIL_LENGTH : FIRE_BOLT_TRAIL_LENGTH;
+  const fakeZ = isIceShards ? ICE_SHARDS_FAKE_Z : FIRE_BOLT_FAKE_Z;
+  const projectileFrame = vfxFrameIndexInRow(projectileSheet, projectileFrameRow, bolt.ttl, duration);
 
   return (
     <>
-      {Array.from({ length: FIRE_BOLT_TRAIL_LENGTH }, (_, index) => {
+      {Array.from({ length: trailLength }, (_, index) => {
         const backDistance = (index + 1) * 9;
         const trailPoint = {
           x: point.x - direction.x * backDistance,
           y: point.y - direction.y * backDistance
         };
         const frameIndex = Math.min(trailSheet.frameCount - 1, index);
-        const trailOpacity = opacity * (1 - index / FIRE_BOLT_TRAIL_LENGTH) * 0.68;
+        const trailOpacity = opacity * (1 - index / trailLength) * 0.68;
         const scale = Math.max(0.48, 0.92 - index * 0.055);
         return (
           <span
             key={`trail-${bolt.id}-${index}`}
-            className="fire-bolt-vfx fire-bolt-trail-puff"
-            style={fireBoltVfxLayerStyle(trailPoint, trailSheet, depthIndex, trailOpacity, ` rotate(${angle}rad) scale(${scale})`)}
+            className={`fire-bolt-vfx ${vfxKind}-vfx fire-bolt-trail-puff ${vfxKind}-trail-vfx`}
+            style={fireBoltVfxLayerStyle(trailPoint, trailSheet, depthIndex, trailOpacity, ` rotate(${angle}rad) scale(${scale})`, fakeZ)}
             aria-hidden="true"
           >
             <span className="vfx-sprite" style={vfxSpriteStyle(trailSheet, frameIndex)} />
@@ -3304,8 +4700,8 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
         );
       })}
       <span
-        className="fire-bolt-vfx fire-bolt-projectile-vfx"
-        style={fireBoltVfxLayerStyle(point, projectileSheet, depthIndex, opacity, ` rotate(${projectileAngle}rad)`)}
+        className={`fire-bolt-vfx ${vfxKind}-vfx fire-bolt-projectile-vfx ${vfxKind}-projectile-vfx`}
+        style={fireBoltVfxLayerStyle(point, projectileSheet, depthIndex, opacity, ` rotate(${projectileAngle}rad)`, fakeZ)}
         data-skill-template={bolt.skillTemplateId}
         data-skill-event="projectile_spawn"
         data-vfx-key={bolt.vfxKey}
@@ -3385,26 +4781,31 @@ function LegacyFireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: 
 }
 
 function HitVfxView({ vfx, depthIndex }: { vfx: HitVfx; depthIndex: number }) {
-  if (!isFireBoltVfxKey(vfx.vfxKey)) {
+  const vfxKind = projectileVfxKind(vfx.vfxKey) ?? projectileVfxKind(vfx.skillTemplateId);
+  if (!vfxKind) {
     return <LegacyHitVfxView vfx={vfx} depthIndex={depthIndex} />;
   }
 
+  const isIceShards = vfxKind === "ice_shards";
   const duration = Math.max(0.001, vfx.duration);
   const opacity = Math.max(0, vfx.ttl / duration);
-  const impactSheet = FIRE_BOLT_VFX.impactExplosion;
-  const sparksSheet = FIRE_BOLT_VFX.sparks;
-  const impactFrame = vfxFrameIndex(impactSheet, vfx.ttl, duration, false);
-  const sparksFrame = vfxFrameIndex(sparksSheet, vfx.ttl, duration, false);
+  const impactSheet = isIceShards ? ICE_SHARDS_VFX.impactBurst : FIRE_BOLT_VFX.impactExplosion;
+  const sparksSheet = isIceShards ? ICE_SHARDS_VFX.crystalSparks : FIRE_BOLT_VFX.sparks;
+  const vfxDuration = isIceShards ? ICE_SHARDS_IMPACT_DURATION_MS / 1000 : FIRE_BOLT_IMPACT_DURATION_MS / 1000;
+  const frameDuration = Math.max(duration, vfxDuration);
+  const fakeZ = isIceShards ? ICE_SHARDS_FAKE_Z : FIRE_BOLT_FAKE_Z;
+  const impactFrame = vfxFrameIndex(impactSheet, vfx.ttl, frameDuration, false);
+  const sparksFrame = vfxFrameIndex(sparksSheet, vfx.ttl, frameDuration, false);
   const impactPoint = { x: vfx.x, y: vfx.y };
   const sparksPoint = { x: vfx.x, y: vfx.y };
-  const impactStyle = fireBoltVfxLayerStyle(impactPoint, impactSheet, depthIndex, opacity, ` scale(${1 + (1 - opacity) * 0.08})`);
-  const sparksStyle = fireBoltVfxLayerStyle(sparksPoint, sparksSheet, depthIndex, opacity * 0.86, ` scale(${1 + (1 - opacity) * 0.18})`);
-  impactStyle.top = Number(impactStyle.top) + FIRE_BOLT_FAKE_Z * 0.45;
-  sparksStyle.top = Number(sparksStyle.top) + FIRE_BOLT_FAKE_Z * 0.35;
+  const impactStyle = fireBoltVfxLayerStyle(impactPoint, impactSheet, depthIndex, opacity, ` scale(${1 + (1 - opacity) * 0.08})`, fakeZ);
+  const sparksStyle = fireBoltVfxLayerStyle(sparksPoint, sparksSheet, depthIndex, opacity * 0.86, ` scale(${1 + (1 - opacity) * 0.18})`, fakeZ);
+  impactStyle.top = Number(impactStyle.top) + fakeZ * 0.45;
+  sparksStyle.top = Number(sparksStyle.top) + fakeZ * 0.35;
   return (
     <>
       <span
-        className="fire-bolt-vfx fire-bolt-impact-vfx"
+        className={`fire-bolt-vfx ${vfxKind}-vfx fire-bolt-impact-vfx ${vfxKind}-impact-vfx`}
         style={impactStyle}
         data-skill-event="hit_vfx"
         data-vfx-key={vfx.vfxKey}
@@ -3413,7 +4814,7 @@ function HitVfxView({ vfx, depthIndex }: { vfx: HitVfx; depthIndex: number }) {
         <span className="vfx-sprite" style={vfxSpriteStyle(impactSheet, impactFrame)} />
       </span>
       <span
-        className="fire-bolt-vfx fire-bolt-sparks-vfx"
+        className={`fire-bolt-vfx ${vfxKind}-vfx fire-bolt-sparks-vfx ${vfxKind}-sparks-vfx`}
         style={sparksStyle}
         data-skill-event="hit_vfx"
         data-vfx-key={`${vfx.vfxKey}.sparks`}

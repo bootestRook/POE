@@ -32,6 +32,7 @@ class UnitSpec:
     scale: float
     frame_padding_x: int
     frame_padding_y: int
+    max_body_height: int
 
 
 UNITS = [
@@ -47,6 +48,7 @@ UNITS = [
         scale=1.0,
         frame_padding_x=18,
         frame_padding_y=18,
+        max_body_height=172,
     ),
     UnitSpec(
         unit_id="enemy_imp",
@@ -60,6 +62,7 @@ UNITS = [
         scale=1.0,
         frame_padding_x=18,
         frame_padding_y=18,
+        max_body_height=128,
     ),
     UnitSpec(
         unit_id="enemy_brute",
@@ -73,6 +76,7 @@ UNITS = [
         scale=1.0,
         frame_padding_x=24,
         frame_padding_y=24,
+        max_body_height=224,
     ),
 ]
 
@@ -87,6 +91,25 @@ ID_PREFIX = {
     ("enemy_brute", "attack"): "enemy_brute_attack",
 }
 
+SPLIT_STATE_RAW_FILES = {
+    "enemy_brute": {
+        "idle": "formal_enemy_brute_idle_imagegen.png",
+        "walk": "formal_enemy_brute_walk_imagegen.png",
+        "attack": "formal_enemy_brute_attack_imagegen.png",
+    }
+}
+
+STRIP_RAW_FILES = {
+    ("enemy_imp", "attack", "down"): "formal_enemy_imp_attack_down_strip_imagegen.png",
+    ("enemy_imp", "attack", "right"): "formal_enemy_imp_attack_right_strip_imagegen.png",
+    ("enemy_imp", "attack", "up"): "formal_enemy_imp_attack_up_strip_imagegen.png",
+    ("enemy_imp", "attack", "left"): "formal_enemy_imp_attack_left_strip_imagegen.png",
+    ("enemy_brute", "attack", "down"): "formal_enemy_brute_attack_down_strip_imagegen.png",
+    ("enemy_brute", "attack", "right"): "formal_enemy_brute_attack_right_strip_imagegen.png",
+    ("enemy_brute", "attack", "up"): "formal_enemy_brute_attack_up_strip_imagegen.png",
+    ("enemy_brute", "attack", "left"): "formal_enemy_brute_attack_left_strip_imagegen.png",
+}
+
 
 def chroma_to_alpha(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
@@ -96,9 +119,11 @@ def chroma_to_alpha(image: Image.Image) -> Image.Image:
         for x in range(width):
             r, g, b, a = pixels[x, y]
             green_score = g - max(r, b)
+            magenta_score = min(r, b) - g
             if g > 120 and green_score > 42:
-                alpha = 0 if green_score > 88 else max(0, min(255, 255 - green_score * 3))
-                pixels[x, y] = (r, g, b, alpha)
+                pixels[x, y] = (r, g, b, 0)
+            elif r > 140 and b > 110 and magenta_score > 36:
+                pixels[x, y] = (r, g, b, 0)
     return rgba
 
 
@@ -107,6 +132,33 @@ def trim_alpha(image: Image.Image) -> Image.Image:
     if not bbox:
         return image
     return image.crop(bbox)
+
+
+def remove_small_alpha_islands(image: Image.Image) -> Image.Image:
+    components = connected_components(image, min_area=4)
+    if len(components) <= 1:
+        return image
+
+    main = components[0]
+    largest_area = main["area"]
+    keep = [main]
+    for component in components[1:]:
+        vertical_overlap = min(component["bottom"], main["bottom"]) - max(component["top"], main["top"])
+        overlaps_body = vertical_overlap > 0
+        large_action_part = component["area"] >= largest_area * 0.18
+        if large_action_part or (overlaps_body and component["area"] >= max(64, largest_area * 0.012)):
+            keep.append(component)
+
+    cleaned = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    for component in keep:
+        box = (
+            int(component["left"]),
+            int(component["top"]),
+            int(component["right"]),
+            int(component["bottom"]),
+        )
+        cleaned.alpha_composite(image.crop(box), box[:2])
+    return trim_alpha(cleaned)
 
 
 def projection_counts(image: Image.Image, axis: str, threshold: int = 24) -> list[int]:
@@ -184,60 +236,69 @@ def connected_components(image: Image.Image, min_area: int = 6) -> list[dict[str
 def slice_sheet_grid(image: Image.Image, rows: int, cols: int, gutter: int = 0) -> list[list[Image.Image]]:
     alpha_image = chroma_to_alpha(image)
     width, height = alpha_image.size
-    components = connected_components(alpha_image)
-    cells: list[list[list[dict[str, float]]]] = [[[] for _ in range(cols)] for _ in range(rows)]
-    available = {(row, col) for row in range(rows) for col in range(cols)}
     cell_width = width / cols
     cell_height = height / rows
-
-    for component in components:
-        if not available:
-            break
-        best_cell = min(
-            available,
-            key=lambda cell: (
-                abs(component["center_x"] - (cell[1] + 0.5) * cell_width)
-                + abs(component["center_y"] - (cell[0] + 0.5) * cell_height)
-            ),
-        )
-        cells[best_cell[0]][best_cell[1]].append(component)
-        available.remove(best_cell)
-
-    for component in components[rows * cols:]:
-        target_row, target_col = min(
-            ((row, col) for row in range(rows) for col in range(cols)),
-            key=lambda cell: abs(component["center_x"] - (cell[1] + 0.5) * cell_width)
-            + abs(component["center_y"] - (cell[0] + 0.5) * cell_height),
-        )
-        if not cells[target_row][target_col]:
-            continue
-        main = cells[target_row][target_col][0]
-        margin_x = max(36, int((main["right"] - main["left"]) * 0.45))
-        margin_y = max(36, int((main["bottom"] - main["top"]) * 0.45))
-        inside_main_bounds = (
-            main["left"] - margin_x <= component["center_x"] <= main["right"] + margin_x
-            and main["top"] - margin_y <= component["center_y"] <= main["bottom"] + margin_y
-        )
-        if inside_main_bounds:
-            cells[target_row][target_col].append(component)
 
     grid: list[list[Image.Image]] = []
     for row in range(rows):
         row_frames: list[Image.Image] = []
         for col in range(cols):
-            assigned = cells[row][col]
-            if assigned:
-                left = max(0, min(int(component["left"]) for component in assigned) - gutter)
-                top = max(0, min(int(component["top"]) for component in assigned) - gutter)
-                right = min(width, max(int(component["right"]) for component in assigned) + gutter)
-                bottom = min(height, max(int(component["bottom"]) for component in assigned) + gutter)
-            else:
-                left = max(0, round(col * cell_width) - gutter)
-                top = max(0, round(row * cell_height) - gutter)
-                right = min(width, round((col + 1) * cell_width) + gutter)
-                bottom = min(height, round((row + 1) * cell_height) + gutter)
-            frame = trim_alpha(alpha_image.crop((left, top, right, bottom)))
+            left = max(0, round(col * cell_width) - gutter)
+            top = max(0, round(row * cell_height) - gutter)
+            right = min(width, round((col + 1) * cell_width) + gutter)
+            bottom = min(height, round((row + 1) * cell_height) + gutter)
+            frame = remove_small_alpha_islands(trim_alpha(alpha_image.crop((left, top, right, bottom))))
             row_frames.append(frame if frame.size != (0, 0) else Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+        grid.append(row_frames)
+    return grid
+
+
+def slice_sheet_components(image: Image.Image, rows: int, cols: int) -> list[list[Image.Image]]:
+    alpha_image = chroma_to_alpha(image)
+    width, height = alpha_image.size
+    cell_width = width / cols
+    cell_height = height / rows
+    components = [
+        component
+        for component in connected_components(alpha_image, min_area=32)
+        if component["area"] >= 180 and component["right"] - component["left"] >= 14 and component["bottom"] - component["top"] >= 14
+    ]
+    used: set[int] = set()
+    grid: list[list[Image.Image]] = []
+    for row in range(rows):
+        row_frames: list[Image.Image] = []
+        for col in range(cols):
+            expected_x = (col + 0.5) * cell_width
+            expected_y = (row + 0.5) * cell_height
+            candidates = [
+                (index, component)
+                for index, component in enumerate(components)
+                if index not in used
+                and col * cell_width - cell_width * 0.2 <= component["center_x"] <= (col + 1) * cell_width + cell_width * 0.2
+                and row * cell_height - cell_height * 0.35 <= component["center_y"] <= (row + 1) * cell_height + cell_height * 0.35
+            ]
+            if not candidates:
+                candidates = [(index, component) for index, component in enumerate(components) if index not in used]
+            if not candidates:
+                row_frames.append(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+                continue
+            index, component = min(
+                candidates,
+                key=lambda item: (
+                    abs(item[1]["center_x"] - expected_x) / cell_width
+                    + abs(item[1]["center_y"] - expected_y) / cell_height
+                    - min(item[1]["area"], 8000) / 100000,
+                ),
+            )
+            used.add(index)
+            pad = 6
+            box = (
+                max(0, int(component["left"]) - pad),
+                max(0, int(component["top"]) - pad),
+                min(width, int(component["right"]) + pad),
+                min(height, int(component["bottom"]) + pad),
+            )
+            row_frames.append(remove_small_alpha_islands(trim_alpha(alpha_image.crop(box))))
         grid.append(row_frames)
     return grid
 
@@ -253,6 +314,24 @@ def normalize_sheet(frames: list[Image.Image], padding_x: int, padding_y: int, a
         top = anchor_py - round(frame.height * anchor_y)
         sheet.alpha_composite(frame, (left, top))
     return sheet, frame_w, frame_h
+
+
+def scale_frames_to_body_height(frames: list[Image.Image], max_body_height: int) -> list[Image.Image]:
+    scaled: list[Image.Image] = []
+    for frame in frames:
+        bbox = frame.getchannel("A").getbbox()
+        if not bbox:
+            scaled.append(frame)
+            continue
+        body_height = bbox[3] - bbox[1]
+        if body_height <= max_body_height:
+            scaled.append(frame)
+            continue
+        ratio = max_body_height / body_height
+        width = max(1, round(frame.width * ratio))
+        height = max(1, round(frame.height * ratio))
+        scaled.append(frame.resize((width, height), Image.Resampling.LANCZOS))
+    return scaled
 
 
 def write_contact_sheet(entries: list[dict[str, object]]) -> None:
@@ -279,6 +358,61 @@ def write_contact_sheet(entries: list[dict[str, object]]) -> None:
     contact.save(MANIFEST_DIR / "formal-unit-actions-contact-sheet.png")
 
 
+def append_animation_entry(
+    entries: list[dict[str, object]],
+    unit: UnitSpec,
+    state: str,
+    direction: str,
+    frames: list[Image.Image],
+    source_raw: Path,
+) -> None:
+    asset_id = f"{ID_PREFIX[(unit.unit_id, state)]}_{direction}"
+    frames = scale_frames_to_body_height(frames, unit.max_body_height)
+    for frame_index, frame in enumerate(frames):
+        frame.save(FORMAL_CROPPED_DIR / f"{asset_id}_f{frame_index:02d}.png")
+    sheet, frame_w, frame_h = normalize_sheet(frames, unit.frame_padding_x, unit.frame_padding_y, unit.anchor_x, unit.anchor_y)
+    output = SHEETS_DIR / f"{asset_id}.png"
+    sheet.save(output)
+    entries.append(
+        {
+            "unitId": unit.unit_id,
+            "state": state,
+            "direction": direction,
+            "id": asset_id,
+            "path": "/" + output.relative_to(ROOT).as_posix(),
+            "frameCount": 4,
+            "fps": unit.fps[state],
+            "loop": unit.loop[state],
+            "durationMs": round(4 / unit.fps[state] * 1000),
+            "frameWidth": frame_w,
+            "frameHeight": frame_h,
+            "width": sheet.width,
+            "height": sheet.height,
+            "anchorX": unit.anchor_x,
+            "anchorY": unit.anchor_y,
+            "scale": unit.scale,
+            "fallbackState": "idle" if state != "idle" else None,
+            "fallbackDirection": "down",
+            "playbackRate": 1,
+            "sourceRaw": f"/{source_raw.relative_to(ROOT).as_posix()}",
+        }
+    )
+
+
+def strip_override_frames(unit_id: str, state: str, direction: str) -> tuple[list[Image.Image], Path] | None:
+    raw_file = STRIP_RAW_FILES.get((unit_id, state, direction))
+    if not raw_file:
+        return None
+    source_raw = RAW_DIR / raw_file
+    if not source_raw.exists():
+        return None
+    raw = Image.open(source_raw).convert("RGBA")
+    try:
+        return slice_sheet_grid(raw, 1, 4)[0], source_raw
+    finally:
+        raw.close()
+
+
 def main() -> int:
     CROPPED_DIR.mkdir(parents=True, exist_ok=True)
     SHEETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -286,39 +420,25 @@ def main() -> int:
     FORMAL_CROPPED_DIR.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, object]] = []
     for unit in UNITS:
+        split_raw_files = SPLIT_STATE_RAW_FILES.get(unit.unit_id)
+        if split_raw_files and all((RAW_DIR / raw_file).exists() for raw_file in split_raw_files.values()):
+            for state in unit.states:
+                source_raw = RAW_DIR / split_raw_files[state]
+                raw = Image.open(source_raw).convert("RGBA")
+                grid = slice_sheet_components(raw, 4, 4)
+                for direction_index, direction in enumerate(DIRECTIONS_4):
+                    override = strip_override_frames(unit.unit_id, state, direction)
+                    frames, frame_source = override if override else (grid[direction_index], source_raw)
+                    append_animation_entry(entries, unit, state, direction, frames, frame_source)
+                raw.close()
+            continue
+
         raw = Image.open(RAW_DIR / unit.raw_file).convert("RGBA")
-        grid = slice_sheet_grid(raw, len(unit.rows), 4)
+        grid = slice_sheet_components(raw, len(unit.rows), 4)
         for row_index, (state, direction) in enumerate(unit.rows):
-            asset_id = f"{ID_PREFIX[(unit.unit_id, state)]}_{direction}"
-            for frame_index, frame in enumerate(grid[row_index]):
-                frame.save(FORMAL_CROPPED_DIR / f"{asset_id}_f{frame_index:02d}.png")
-            sheet, frame_w, frame_h = normalize_sheet(grid[row_index], unit.frame_padding_x, unit.frame_padding_y, unit.anchor_x, unit.anchor_y)
-            output = SHEETS_DIR / f"{asset_id}.png"
-            sheet.save(output)
-            entries.append(
-                {
-                    "unitId": unit.unit_id,
-                    "state": state,
-                    "direction": direction,
-                    "id": asset_id,
-                    "path": "/" + output.relative_to(ROOT).as_posix(),
-                    "frameCount": 4,
-                    "fps": unit.fps[state],
-                    "loop": unit.loop[state],
-                    "durationMs": round(4 / unit.fps[state] * 1000),
-                    "frameWidth": frame_w,
-                    "frameHeight": frame_h,
-                    "width": sheet.width,
-                    "height": sheet.height,
-                    "anchorX": unit.anchor_x,
-                    "anchorY": unit.anchor_y,
-                    "scale": unit.scale,
-                    "fallbackState": "idle" if state != "idle" else None,
-                    "fallbackDirection": "down",
-                    "playbackRate": 1,
-                    "sourceRaw": f"/{(RAW_DIR / unit.raw_file).relative_to(ROOT).as_posix()}",
-                }
-            )
+            override = strip_override_frames(unit.unit_id, state, direction)
+            frames, frame_source = override if override else (grid[row_index], RAW_DIR / unit.raw_file)
+            append_animation_entry(entries, unit, state, direction, frames, frame_source)
         raw.close()
 
     manifest = {
