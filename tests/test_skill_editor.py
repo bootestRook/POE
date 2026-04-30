@@ -210,7 +210,6 @@ class SkillEditorTest(unittest.TestCase):
         self.assertIn({"value": "spell", "text": "法术"}, options["cast_modes"])
         self.assertIn({"value": "nearest_enemy", "text": "最近敌人"}, options["target_selectors"])
         self.assertIn({"value": "first_hit", "text": "首次命中"}, options["hit_policies"])
-        self.assertIn({"value": "centered_fan", "text": "居中扇形"}, options["spawn_patterns"])
         self.assertIn({"value": "on_projectile_hit", "text": "投射物命中时"}, options["damage_timings"])
         self.assertIn({"value": "final_damage", "text": "最终伤害"}, options["preview_fields"])
 

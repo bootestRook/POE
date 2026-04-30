@@ -466,10 +466,11 @@ def _parameter_variant_checks(
 
     angle_package = deepcopy(package)
     angle_params = angle_package["behavior"]["params"]
-    spread_key = "spread_angle_deg" if "spread_angle_deg" in angle_params else "spread_angle"
-    base_spread_angle = float(angle_params.get(spread_key, 0.0))
+    base_spread_angle = float(angle_params.get("spread_angle_deg", 0.0))
     base_angle_step = float(angle_params.get("angle_step", 0.0))
-    angle_params[spread_key] = base_spread_angle - 10.0 if base_spread_angle >= 180.0 else min(180.0, max(1.0, base_spread_angle + 10.0))
+    angle_params["spread_angle_deg"] = (
+        base_spread_angle - 10.0 if base_spread_angle >= 180.0 else min(180.0, max(1.0, base_spread_angle + 10.0))
+    )
     angle_params["angle_step"] = base_angle_step - 5.0 if base_angle_step >= 90.0 else min(90.0, max(1.0, base_angle_step + 5.0))
     angle_result = _run_arena(service, request, angle_package)
 

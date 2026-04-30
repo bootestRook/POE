@@ -1124,10 +1124,6 @@ def skill_editor_options() -> dict[str, Any]:
             {"value": "first_hit", "text": "首次命中"},
             {"value": "pierce", "text": "贯穿"},
         ],
-        "spawn_patterns": [
-            {"value": "centered_fan", "text": "居中扇形"},
-            {"value": "edge_to_edge", "text": "边缘展开"},
-        ],
         "damage_timings": [
             {"value": "on_projectile_hit", "text": "投射物命中时"},
             {"value": "on_area_hit", "text": "范围命中时"},

@@ -50,7 +50,6 @@ EXPECTED_SKILL_PACKAGE_FILES = [
     "skills/active/active_frost_nova/skill.yaml",
     "skills/active/active_puncture/skill.yaml",
     "skills/behavior_templates/projectile.yaml",
-    "skills/behavior_templates/fan_projectile.yaml",
     "skills/behavior_templates/chain.yaml",
     "skills/behavior_templates/player_nova.yaml",
     "skills/behavior_templates/melee_arc.yaml",

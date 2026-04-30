@@ -476,7 +476,6 @@ type SkillEditorState = {
     cast_modes: SkillEditorOption[];
     target_selectors: SkillEditorOption[];
     hit_policies: SkillEditorOption[];
-    spawn_patterns: SkillEditorOption[];
     damage_timings: SkillEditorOption[];
     center_policies: SkillEditorOption[];
     zone_shapes: SkillEditorOption[];
@@ -2628,7 +2627,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           skillId: typeof event.payload?.skill_id === "string" ? event.payload.skill_id : event.skill_instance_id,
           projectileIndex: Number(event.payload?.projectile_index ?? 1),
           projectileCount: Number(event.payload?.projectile_count ?? 1),
-          fanAngle: Number(event.payload?.fan_angle ?? event.payload?.spread_angle ?? event.payload?.spread_angle_deg ?? 0),
+          fanAngle: Number(event.payload?.fan_angle ?? event.payload?.spread_angle_deg ?? 0),
           localSpreadAngle: Number(event.payload?.local_spread_angle ?? 0),
           pierceRemaining: Number(event.payload?.pierce_remaining ?? 0),
           projectileSpeed: Number(event.payload?.projectile_speed ?? Math.hypot(velocityWorld?.x ?? 0, velocityWorld?.y ?? 0)),

@@ -305,9 +305,12 @@ class SkillRuntimeTest(unittest.TestCase):
         expected_duration_ms = round(max_distance / projectile_speed * 1000)
 
         self.assertEqual(spawn.duration_ms, expected_duration_ms)
-        self.assertEqual(spawn.payload["end_position"], {"x": spawn_position["x"] + max_distance, "y": spawn_position["y"]})
+        direction_world = spawn.payload["direction_world"]
+        self.assertAlmostEqual(spawn.payload["end_position"]["x"], spawn_position["x"] + direction_world["x"] * max_distance)
+        self.assertAlmostEqual(spawn.payload["end_position"]["y"], spawn_position["y"] + direction_world["y"] * max_distance)
         self.assertLess(damage.delay_ms, spawn.duration_ms)
-        self.assertEqual(damage.position, {"x": 120.0, "y": -18.0})
+        self.assertAlmostEqual(damage.position["x"], 120.0)
+        self.assertAlmostEqual(damage.position["y"], -18.0)
         self.assertEqual(damage.payload["pierce_remaining"], int(runtime_params["pierce_count"]))
         self.assertEqual(damage.payload["impact_kind"], "projectile_hit_continue")
         self.assertEqual(damage.payload["expire_world_position"], spawn.payload["end_position"])
