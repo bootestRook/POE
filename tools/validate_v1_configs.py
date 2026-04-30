@@ -47,9 +47,12 @@ EXPECTED_SKILL_PACKAGE_FILES = [
     "skills/active/active_ice_shards/skill.yaml",
     "skills/active/active_penetrating_shot/skill.yaml",
     "skills/active/active_frost_nova/skill.yaml",
+    "skills/active/active_puncture/skill.yaml",
     "skills/behavior_templates/projectile.yaml",
     "skills/behavior_templates/fan_projectile.yaml",
     "skills/behavior_templates/player_nova.yaml",
+    "skills/behavior_templates/melee_arc.yaml",
+    "skills/behavior_templates/damage_zone.yaml",
 ]
 
 REQUIRED_STATS = {
@@ -545,9 +548,9 @@ def validate() -> list[str]:
     except Exception as exc:
         errors.append(f"skill packages: {exc}")
         skill_packages = {}
-    expected_skill_packages = {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova"}
+    expected_skill_packages = {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture"}
     if set(skill_packages) != expected_skill_packages:
-        errors.append("skill packages must contain active_fire_bolt, active_ice_shards, active_penetrating_shot and active_frost_nova in this apply slice")
+        errors.append("skill packages must contain active_fire_bolt, active_ice_shards, active_penetrating_shot, active_frost_nova and active_puncture in this apply slice")
     for package_id, package in skill_packages.items():
         display = package.get("display", {})
         presentation = package.get("presentation", {})

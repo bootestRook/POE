@@ -63,6 +63,7 @@
             "chain",
             "player_nova",
             "melee_arc",
+            "damage_zone",
             "line_pierce",
             "orbit",
             "delayed_area"
@@ -106,7 +107,19 @@
             "center_policy": { "enum": ["player_center"] },
             "damage_falloff_by_distance": { "enum": ["none"] },
             "ring_width": { "type": "number", "minimum": 1 },
-            "status_chance_scale": { "type": "number", "minimum": 0, "maximum": 10 }
+            "status_chance_scale": { "type": "number", "minimum": 0, "maximum": 10 },
+            "arc_angle": { "type": "number", "minimum": 1, "maximum": 180 },
+            "arc_radius": { "type": "number", "minimum": 1 },
+            "windup_ms": { "type": "integer", "minimum": 0 },
+            "shape": { "enum": ["circle", "rectangle"] },
+            "origin_policy": { "enum": ["caster"] },
+            "facing_policy": { "enum": ["none", "nearest_target", "locked_or_nearest_target"] },
+            "hit_shape": { "enum": ["sector", "arc"] },
+            "slash_vfx_key": { "$ref": "#/$defs/localization_key" },
+            "zone_vfx_key": { "$ref": "#/$defs/localization_key" },
+            "length": { "type": "number", "minimum": 1 },
+            "width": { "type": "number", "minimum": 1 },
+            "angle_offset_deg": { "type": "number", "minimum": -180, "maximum": 180 }
           }
         }
       }
@@ -119,7 +132,7 @@
         "base_damage": { "type": "number", "minimum": 0 },
         "can_crit": { "type": "boolean" },
         "can_apply_status": { "type": "boolean" },
-        "damage_timing": { "enum": ["on_projectile_hit", "on_area_hit"] },
+        "damage_timing": { "enum": ["on_projectile_hit", "on_area_hit", "on_melee_hit", "on_damage_zone_hit"] },
         "hit_delay_ms": { "type": "integer", "minimum": 0 },
         "hit_radius": { "type": "number", "minimum": 0 },
         "target_policy": { "enum": ["selected_target", "nearest_enemy"] }

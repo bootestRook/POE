@@ -1,0 +1,54 @@
+id: damage_zone
+allowed_params: ["shape", "origin_policy", "facing_policy", "hit_at_ms", "max_targets", "status_chance_scale", "zone_vfx_key", "radius", "length", "width", "angle_offset_deg", "expand_duration_ms", "ring_width"]
+param_constraints:
+  shape:
+    type: string
+    enum: ["circle", "rectangle"]
+  origin_policy:
+    type: string
+    enum: ["caster"]
+  facing_policy:
+    type: string
+    enum: ["none", "nearest_target", "locked_or_nearest_target"]
+  hit_at_ms:
+    type: integer
+    minimum: 0
+  max_targets:
+    type: integer
+    minimum: 1
+  status_chance_scale:
+    type: number
+    minimum: 0
+    maximum: 10
+  zone_vfx_key:
+    type: key
+  radius:
+    type: number
+    minimum: 1
+  length:
+    type: number
+    minimum: 1
+  width:
+    type: number
+    minimum: 1
+  angle_offset_deg:
+    type: number
+    minimum: -180
+    maximum: 180
+  expand_duration_ms:
+    type: integer
+    minimum: 0
+  ring_width:
+    type: number
+    minimum: 1
+shape_param_sets:
+  circle:
+    required: ["radius"]
+    optional: ["expand_duration_ms", "ring_width"]
+    forbidden: ["length", "width", "angle_offset_deg"]
+  rectangle:
+    required: ["length", "width"]
+    optional: ["angle_offset_deg"]
+    forbidden: ["radius", "expand_duration_ms", "ring_width"]
+events: ["cast_start", "damage_zone", "damage", "hit_vfx", "floating_text"]
+damage_timing: on_damage_zone_hit

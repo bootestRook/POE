@@ -84,6 +84,54 @@ button {
   z-index: 2;
 }
 
+.melee-arc-vfx {
+  position: absolute;
+  transform-origin: 50% 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    conic-gradient(from calc(var(--arc-angle) / -2), rgba(255, 255, 255, 0.58) 0deg, rgba(255, 255, 255, 0.16) var(--arc-angle), transparent var(--arc-angle), transparent 360deg);
+  mask-image: radial-gradient(ellipse at center, transparent 0 20%, #000 21% 100%);
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.24));
+  mix-blend-mode: screen;
+}
+
+.melee-arc-vfx-physical {
+  background:
+    conic-gradient(from calc(var(--arc-angle) / -2), rgba(236, 226, 202, 0.72) 0deg, rgba(172, 178, 168, 0.18) var(--arc-angle), transparent var(--arc-angle), transparent 360deg);
+}
+
+.damage-zone-vfx {
+  position: absolute;
+  pointer-events: none;
+  transform-origin: 0 50%;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.22));
+}
+
+.damage-zone-vfx-circle {
+  border-radius: 50%;
+  border: 3px solid rgba(164, 235, 255, 0.76);
+  background:
+    radial-gradient(circle, rgba(230, 252, 255, 0.28), rgba(118, 213, 255, 0.16) 54%, transparent 70%);
+}
+
+.damage-zone-vfx-rectangle {
+  border-radius: 5px;
+  border: 2px solid rgba(226, 214, 184, 0.78);
+  background:
+    linear-gradient(90deg, rgba(226, 214, 184, 0.42), rgba(174, 169, 145, 0.12)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.28) 0 8px, transparent 8px 24px);
+}
+
+.damage-zone-physical {
+  border-color: rgba(226, 214, 184, 0.82);
+}
+
+.damage-zone-cold {
+  border-color: rgba(164, 235, 255, 0.82);
+}
+
 .battle-entity-layer {
   z-index: 3;
 }
@@ -2232,6 +2280,14 @@ button {
 .skill-event-hit_vfx,
 .skill-event-floating_text {
   border-left-color: #d98a55;
+}
+
+.skill-event-melee_arc {
+  border-left-color: #d8caa8;
+}
+
+.skill-event-damage_zone {
+  border-left-color: #8fd3c7;
 }
 
 .skill-event-projectile_spawn {

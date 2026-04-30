@@ -15,21 +15,23 @@ cast:
   windup_ms: 0
   recovery_ms: 0
 behavior:
-  template: player_nova
+  template: damage_zone
   params:
+    shape: circle
+    origin_policy: caster
+    facing_policy: none
     radius: 430
     expand_duration_ms: 520
     hit_at_ms: 260
     max_targets: 8
-    center_policy: player_center
-    damage_falloff_by_distance: none
     ring_width: 64
     status_chance_scale: 1
+    zone_vfx_key: skill_event.frost_nova.vfx
 hit:
   base_damage: 14
   can_crit: true
   can_apply_status: true
-  damage_timing: on_area_hit
+  damage_timing: on_damage_zone_hit
   hit_delay_ms: 260
   hit_radius: 430
   target_policy: nearest_enemy

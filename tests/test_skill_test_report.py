@@ -88,15 +88,36 @@ class SkillTestReportTest(unittest.TestCase):
         markdown = report.markdown
         self.assertEqual(report.conclusion, "通过")
         self.assertIn("active_frost_nova", markdown)
-        self.assertIn("behavior_template：`player_nova`", markdown)
+        self.assertIn("behavior_template：`damage_zone`", markdown)
         self.assertIn("自动以玩家自身为中心释放一圈向外扩散的冰霜新星", markdown)
-        self.assertIn("area_spawn：通过", markdown)
-        self.assertIn("玩家中心：通过", markdown)
-        self.assertIn("damage 不早于 hit_at_ms：通过", markdown)
+        self.assertIn("damage_zone：通过", markdown)
+        self.assertIn("伤害区域起点：通过", markdown)
+        self.assertIn("damage 不早于 damage_zone hit_at_ms：通过", markdown)
         self.assertIn("damage_type 为 cold：通过", markdown)
         self.assertIn("radius 修改后命中目标变化：通过", markdown)
-        self.assertTrue(report.source_result["timeline_checks"]["has_area_spawn"])
-        self.assertTrue(report.source_result["timeline_checks"]["area_center_passed"])
+        self.assertTrue(report.source_result["timeline_checks"]["has_damage_zone"])
+        self.assertTrue(report.source_result["timeline_checks"]["damage_zone_origin_passed"])
+
+    def test_generate_puncture_report_from_dense_pack(self) -> None:
+        report = generate_skill_test_report(
+            self.config_root,
+            SkillTestReportRequest(skill_id="active_puncture", scenario_id="dense_pack"),
+        )
+
+        markdown = report.markdown
+        self.assertEqual(report.conclusion, "通过")
+        self.assertIn("active_puncture", markdown)
+        self.assertIn("behavior_template：`damage_zone`", markdown)
+        self.assertIn("自动朝锁定敌人的方向发出一列地刺", markdown)
+        self.assertIn("damage_zone：通过", markdown)
+        self.assertIn("伤害区域起点：通过", markdown)
+        self.assertIn("伤害区域朝向：通过", markdown)
+        self.assertIn("damage 不早于 damage_zone hit_at_ms：通过", markdown)
+        self.assertIn("damage_type 为 physical：通过", markdown)
+        self.assertIn("length 修改后命中目标变化：通过", markdown)
+        self.assertIn("width 修改后命中目标变化：通过", markdown)
+        self.assertTrue(report.source_result["timeline_checks"]["has_damage_zone"])
+        self.assertTrue(report.source_result["timeline_checks"]["damage_zone_origin_passed"])
 
     def test_report_with_modifier_stack_uses_changed_real_amount(self) -> None:
         base = generate_skill_test_report(

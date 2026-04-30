@@ -49,11 +49,13 @@ class SkillEffectTest(unittest.TestCase):
         packages = load_skill_packages(self.config_root)
         templates = load_skill_templates(self.config_root)
 
-        self.assertEqual(set(packages), {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova"})
+        self.assertEqual(set(packages), {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture"})
         self.assertEqual(packages["active_fire_bolt"]["behavior"]["template"], "projectile")
         self.assertEqual(packages["active_ice_shards"]["behavior"]["template"], "fan_projectile")
         self.assertEqual(packages["active_penetrating_shot"]["behavior"]["template"], "projectile")
-        self.assertEqual(packages["active_frost_nova"]["behavior"]["template"], "player_nova")
+        self.assertEqual(packages["active_frost_nova"]["behavior"]["template"], "damage_zone")
+        self.assertEqual(packages["active_puncture"]["behavior"]["template"], "damage_zone")
+        self.assertEqual(packages["active_puncture"]["classification"]["damage_type"], "physical")
         self.assertEqual(packages["active_penetrating_shot"]["behavior"]["params"]["hit_policy"], "pierce")
         self.assertEqual(templates["skill_fire_bolt"].skill_package_id, "active_fire_bolt")
         self.assertEqual(templates["skill_fire_bolt"].behavior_template, "projectile")
@@ -64,8 +66,11 @@ class SkillEffectTest(unittest.TestCase):
         self.assertEqual(templates["skill_penetrating_shot"].behavior_template, "projectile")
         self.assertEqual(templates["skill_penetrating_shot"].damage_type, "physical")
         self.assertEqual(templates["skill_frost_nova"].skill_package_id, "active_frost_nova")
-        self.assertEqual(templates["skill_frost_nova"].behavior_template, "player_nova")
+        self.assertEqual(templates["skill_frost_nova"].behavior_template, "damage_zone")
         self.assertEqual(templates["skill_frost_nova"].damage_type, "cold")
+        self.assertEqual(templates["skill_puncture"].skill_package_id, "active_puncture")
+        self.assertEqual(templates["skill_puncture"].behavior_template, "damage_zone")
+        self.assertEqual(templates["skill_puncture"].damage_type, "physical")
 
     def test_skill_package_schema_rejects_missing_required_field(self) -> None:
         package = deepcopy(load_skill_packages(self.config_root)["active_fire_bolt"])
@@ -138,7 +143,7 @@ class SkillEffectTest(unittest.TestCase):
                 load_behavior_templates(self.config_root),
             )
 
-    def test_player_nova_schema_rejects_unknown_fields_and_invalid_values(self) -> None:
+    def test_damage_zone_circle_schema_rejects_unknown_fields_and_invalid_values(self) -> None:
         package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
         package["behavior"]["params"]["forbidden_param"] = 1
 
@@ -159,8 +164,8 @@ class SkillEffectTest(unittest.TestCase):
             )
 
         package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
-        package["behavior"]["params"]["hit_at_ms"] = package["behavior"]["params"]["expand_duration_ms"] + 1
-        with self.assertRaisesRegex(ValueError, "hit_at_ms"):
+        package["behavior"]["params"]["length"] = 100
+        with self.assertRaisesRegex(ValueError, "length"):
             validate_skill_package_data(
                 package,
                 load_skill_schema(self.config_root),
@@ -168,8 +173,50 @@ class SkillEffectTest(unittest.TestCase):
             )
 
         package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
-        package["behavior"]["params"]["center_policy"] = "target_point"
-        with self.assertRaisesRegex(ValueError, "center_policy"):
+        package["behavior"]["params"]["shape"] = "triangle"
+        with self.assertRaisesRegex(ValueError, "shape"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+    def test_damage_zone_rectangle_schema_rejects_unknown_fields_and_invalid_values(self) -> None:
+        package = deepcopy(load_skill_packages(self.config_root)["active_puncture"])
+        package["behavior"]["params"]["script"] = "deal_damage()"
+
+        with self.assertRaisesRegex(ValueError, "script"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        invalid_cases = [
+            ("length", 0),
+            ("width", 0),
+            ("angle_offset_deg", 181),
+            ("hit_at_ms", -1),
+            ("max_targets", 0),
+            ("facing_policy", "target_point"),
+            ("origin_policy", "target"),
+            ("status_chance_scale", 11),
+            ("zone_vfx_key", "not a key"),
+        ]
+        for key, value in invalid_cases:
+            with self.subTest(key=key):
+                package = deepcopy(load_skill_packages(self.config_root)["active_puncture"])
+                package["behavior"]["params"][key] = value
+                with self.assertRaisesRegex(ValueError, key):
+                    validate_skill_package_data(
+                        package,
+                        load_skill_schema(self.config_root),
+                        load_behavior_templates(self.config_root),
+                    )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_puncture"])
+        package["behavior"]["params"]["radius"] = 120
+        with self.assertRaisesRegex(ValueError, "radius"):
             validate_skill_package_data(
                 package,
                 load_skill_schema(self.config_root),

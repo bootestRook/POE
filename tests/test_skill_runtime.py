@@ -309,6 +309,118 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertEqual(damage.payload["impact_kind"], "projectile_hit_continue")
         self.assertEqual(damage.payload["expire_world_position"], spawn.payload["end_position"])
 
+    def test_puncture_melee_arc_outputs_timed_physical_sector_events(self) -> None:
+        self.inventory.add_instance("active", "active_puncture")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        final_skill = replace(
+            final_skill,
+            runtime_params={
+                **(final_skill.runtime_params or {}),
+                "shape": "rectangle",
+                "length": 220,
+                "width": 80,
+                "angle_offset_deg": 0,
+                "hit_at_ms": 180,
+                "max_targets": 2,
+            },
+        )
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(120, 0),
+            timestamp_ms=10,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 120, "y": 0}},
+                {"entity_id": "monster_2", "position": {"x": 160, "y": 28}},
+                {"entity_id": "monster_far", "position": {"x": 360, "y": 0}},
+                {"entity_id": "monster_side", "position": {"x": 80, "y": 180}},
+            ],
+        )
+
+        event_types = [event.type for event in events]
+        self.assertIn("cast_start", event_types)
+        self.assertIn("damage_zone", event_types)
+        self.assertIn("damage", event_types)
+        self.assertIn("hit_vfx", event_types)
+        self.assertIn("floating_text", event_types)
+        zone = next(event for event in events if event.type == "damage_zone")
+        damage_events = [event for event in events if event.type == "damage"]
+
+        self.assertEqual(final_skill.skill_package_id, "active_puncture")
+        self.assertEqual(final_skill.behavior_template, "damage_zone")
+        self.assertEqual(zone.position, {"x": 0, "y": 0})
+        self.assertEqual(zone.payload["origin"], {"x": 0, "y": 0})
+        self.assertAlmostEqual(zone.direction["x"], 1.0)
+        self.assertAlmostEqual(zone.direction["y"], 0.0)
+        self.assertEqual(zone.payload["shape"], "rectangle")
+        self.assertEqual(zone.payload["length"], 220.0)
+        self.assertEqual(zone.payload["width"], 80.0)
+        self.assertEqual(zone.payload["hit_at_ms"], 180)
+        self.assertEqual(zone.payload["damage_type"], "physical")
+        self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2"})
+        self.assertTrue(all(event.timestamp_ms == 190 for event in damage_events))
+        self.assertTrue(all(event.delay_ms == 180 for event in damage_events))
+        self.assertTrue(all(event.damage_type == "physical" for event in damage_events))
+
+    def test_puncture_damage_zone_params_change_length_width_and_timing(self) -> None:
+        self.inventory.add_instance("active", "active_puncture")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        target_entities = [
+            {"entity_id": "near", "position": {"x": 120, "y": 0}},
+            {"entity_id": "wide", "position": {"x": 160, "y": 44}},
+            {"entity_id": "far", "position": {"x": 360, "y": 0}},
+        ]
+
+        short = replace(final_skill, runtime_params={**(final_skill.runtime_params or {}), "length": 140, "width": 120, "hit_at_ms": 160})
+        long = replace(final_skill, runtime_params={**(final_skill.runtime_params or {}), "length": 420, "width": 120, "hit_at_ms": 160})
+        narrow = replace(final_skill, runtime_params={**(final_skill.runtime_params or {}), "length": 420, "width": 20, "hit_at_ms": 260})
+
+        short_damage = [
+            event for event in SkillRuntime().execute(
+                short,
+                source_entity="player_1",
+                source_position=Position(0, 0),
+                target_entity="near",
+                target_position=Position(120, 0),
+                timestamp_ms=0,
+                target_entities=target_entities,
+            )
+            if event.type == "damage"
+        ]
+        long_damage = [
+            event for event in SkillRuntime().execute(
+                long,
+                source_entity="player_1",
+                source_position=Position(0, 0),
+                target_entity="near",
+                target_position=Position(120, 0),
+                timestamp_ms=0,
+                target_entities=target_entities,
+            )
+            if event.type == "damage"
+        ]
+        narrow_damage = [
+            event for event in SkillRuntime().execute(
+                narrow,
+                source_entity="player_1",
+                source_position=Position(0, 0),
+                target_entity="near",
+                target_position=Position(120, 0),
+                timestamp_ms=0,
+                target_entities=target_entities,
+            )
+            if event.type == "damage"
+        ]
+
+        self.assertLess(len(short_damage), len(long_damage))
+        self.assertLess(len(narrow_damage), len(long_damage))
+        self.assertTrue(all(event.delay_ms == 260 for event in narrow_damage))
+
     def test_ice_shards_fan_projectile_outputs_real_fan_events(self) -> None:
         self.inventory.add_instance("active", "active_ice_shards")
         self.board.mount_gem("active", 0, 0)
@@ -516,23 +628,24 @@ class SkillRuntimeTest(unittest.TestCase):
         )
 
         event_types = [event.type for event in events]
-        area_spawn = next(event for event in events if event.type == "area_spawn")
+        damage_zone = next(event for event in events if event.type == "damage_zone")
         damage_events = [event for event in events if event.type == "damage"]
 
         self.assertEqual(final_skill.skill_package_id, "active_frost_nova")
-        self.assertEqual(final_skill.behavior_template, "player_nova")
+        self.assertEqual(final_skill.behavior_template, "damage_zone")
         self.assertEqual(final_skill.damage_type, "cold")
         self.assertIn("cast_start", event_types)
-        self.assertEqual(area_spawn.position, {"x": 0.0, "y": -12.0})
-        self.assertEqual(area_spawn.payload["center"], area_spawn.position)
-        self.assertEqual(area_spawn.payload["radius"], 300)
-        self.assertEqual(area_spawn.payload["ring_width"], runtime_params["ring_width"])
-        self.assertEqual(area_spawn.duration_ms, 500)
-        self.assertEqual(area_spawn.payload["hit_at_ms"], 240)
+        self.assertEqual(damage_zone.position, {"x": 0.0, "y": -12.0})
+        self.assertEqual(damage_zone.payload["origin"], damage_zone.position)
+        self.assertEqual(damage_zone.payload["shape"], "circle")
+        self.assertEqual(damage_zone.payload["radius"], 300)
+        self.assertEqual(damage_zone.payload["ring_width"], runtime_params["ring_width"])
+        self.assertEqual(damage_zone.duration_ms, 500)
+        self.assertEqual(damage_zone.payload["hit_at_ms"], 240)
         self.assertEqual({event.target_entity for event in damage_events}, {"near_1", "near_2"})
         self.assertTrue(all(event.damage_type == "cold" for event in damage_events))
         self.assertTrue(all(event.delay_ms == 240 for event in damage_events))
-        self.assertTrue(all(event.timestamp_ms >= area_spawn.timestamp_ms + area_spawn.payload["hit_at_ms"] for event in damage_events))
+        self.assertTrue(all(event.timestamp_ms >= damage_zone.timestamp_ms + damage_zone.payload["hit_at_ms"] for event in damage_events))
         self.assertIn("hit_vfx", event_types)
         self.assertIn("floating_text", event_types)
 
@@ -566,7 +679,7 @@ class SkillRuntimeTest(unittest.TestCase):
         late = run(expand_duration_ms=700, hit_at_ms=420)
 
         self.assertLess(len([event for event in small if event.type == "damage"]), len([event for event in large if event.type == "damage"]))
-        self.assertLess(next(event for event in short if event.type == "area_spawn").duration_ms, next(event for event in long if event.type == "area_spawn").duration_ms)
+        self.assertLess(next(event for event in short if event.type == "damage_zone").duration_ms, next(event for event in long if event.type == "damage_zone").duration_ms)
         self.assertLess(next(event for event in early if event.type == "damage").delay_ms, next(event for event in late if event.type == "damage").delay_ms)
 
 

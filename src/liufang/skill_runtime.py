@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import cos, hypot, pi, sin
+from math import atan2, cos, hypot, pi, sin
 from typing import Any
 
 from .skill_effects import FinalSkillInstance
@@ -15,6 +15,7 @@ SKILL_EVENT_TYPES = frozenset(
         "chain_segment",
         "area_spawn",
         "melee_arc",
+        "damage_zone",
         "orbit_spawn",
         "orbit_tick",
         "delayed_area_prime",
@@ -91,8 +92,30 @@ class SkillRuntime:
     ) -> tuple[SkillEvent, ...]:
         if not skill.uses_skill_event_pipeline:
             raise SkillRuntimeError("skill does not use the SkillEvent pipeline")
-        if skill.behavior_template not in {"projectile", "fan_projectile", "player_nova"}:
+        if skill.behavior_template not in {"projectile", "fan_projectile", "player_nova", "melee_arc", "damage_zone"}:
             raise SkillRuntimeError(f"unsupported behavior template: {skill.behavior_template}")
+        if skill.behavior_template == "damage_zone":
+            targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
+                _RuntimeTarget(target_entity, _position_dict(target_position)),
+            )
+            return self._damage_zone_events(
+                skill,
+                source_entity=source_entity,
+                source_position=_position_dict(source_position),
+                targets=targets,
+                timestamp_ms=timestamp_ms,
+            )
+        if skill.behavior_template == "melee_arc":
+            targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
+                _RuntimeTarget(target_entity, _position_dict(target_position)),
+            )
+            return self._melee_arc_events(
+                skill,
+                source_entity=source_entity,
+                source_position=_position_dict(source_position),
+                targets=targets,
+                timestamp_ms=timestamp_ms,
+            )
         if skill.behavior_template == "player_nova":
             targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
                 _RuntimeTarget(target_entity, _position_dict(target_position)),
@@ -240,6 +263,310 @@ class SkillRuntime:
                 ("floating_text", damage_amount, 800, hit_vfx_key, floating_key, {"x": target.position["x"], "y": target.position["y"] - 28.0}),
             ):
                 payload = {**area_payload}
+                if event_type == "floating_text":
+                    payload["text"] = floating_text
+                events.append(
+                    SkillEvent(
+                        event_id=_event_id(skill, timestamp_ms, next_index, event_type),
+                        type=event_type,
+                        timestamp_ms=timestamp_ms + hit_at_ms,
+                        source_entity=source_entity,
+                        target_entity=target.entity_id,
+                        position=dict(position),
+                        direction=target_direction,
+                        delay_ms=hit_at_ms,
+                        duration_ms=duration,
+                        amount=amount,
+                        damage_type=skill.damage_type,
+                        skill_instance_id=skill.active_gem_instance_id,
+                        vfx_key=vfx,
+                        sfx_key=sfx_key,
+                        reason_key=reason,
+                        payload=payload,
+                    )
+                )
+                next_index += 1
+        return _sorted_events(events)
+
+    def _melee_arc_events(
+        self,
+        skill: FinalSkillInstance,
+        *,
+        source_entity: str,
+        source_position: dict[str, float],
+        targets: tuple[_RuntimeTarget, ...],
+        timestamp_ms: int,
+    ) -> tuple[SkillEvent, ...]:
+        runtime_params = skill.runtime_params or {}
+        presentation = skill.presentation_keys or {}
+        origin = dict(source_position)
+        arc_angle = max(1.0, min(180.0, float(runtime_params.get("arc_angle", 60.0))))
+        arc_radius = max(1.0, float(runtime_params.get("arc_radius", skill.hit.get("hit_radius", 260.0) if skill.hit else 260.0)))
+        windup_ms = max(0, int(runtime_params.get("windup_ms", skill.cast.get("windup_ms", 0) if skill.cast else 0)))
+        hit_at_ms = max(0, int(runtime_params.get("hit_at_ms", skill.hit.get("hit_delay_ms", windup_ms) if skill.hit else windup_ms)))
+        hit_at_ms = max(hit_at_ms, windup_ms)
+        max_targets = max(1, int(runtime_params.get("max_targets", len(targets) or 1)))
+        facing_policy = str(runtime_params.get("facing_policy", "nearest_target"))
+        hit_shape = str(runtime_params.get("hit_shape", "sector"))
+        status_chance_scale = max(0.0, float(runtime_params.get("status_chance_scale", 1.0)))
+        nearest_target = _nearest_target(origin, targets)
+        primary_target = nearest_target or _RuntimeTarget("", origin)
+        facing_direction = _direction(origin, primary_target.position)
+        vfx_key = str(runtime_params.get("slash_vfx_key") or presentation.get("vfx", skill.visual_effect))
+        hit_vfx_key = presentation.get("hit_vfx_key", vfx_key)
+        sfx_key = presentation.get("sfx", "")
+        floating_key = presentation.get("floating_text", "skill_event.puncture.floating_text")
+        reason_key = _damage_reason_key(skill)
+        damage_amount = skill.final_damage
+        arc_id = f"{skill.active_gem_instance_id}.{timestamp_ms}.melee_arc.1"
+        hit_targets = _melee_arc_hit_targets(
+            origin,
+            facing_direction,
+            targets,
+            arc_angle=arc_angle,
+            arc_radius=arc_radius,
+            max_targets=max_targets,
+        )
+        base_payload = {
+            "arc_id": arc_id,
+            "skill_id": skill.skill_package_id or skill.skill_template_id,
+            "origin": dict(origin),
+            "origin_world_position": dict(origin),
+            "facing_direction": dict(facing_direction),
+            "direction_world": dict(facing_direction),
+            "arc_angle": arc_angle,
+            "arc_radius": arc_radius,
+            "hit_shape": hit_shape,
+            "windup_ms": windup_ms,
+            "hit_at_ms": hit_at_ms,
+            "max_targets": max_targets,
+            "facing_policy": facing_policy,
+            "damage_type": skill.damage_type,
+            "vfx_key": vfx_key,
+            "slash_vfx_key": vfx_key,
+            "status_chance_scale": status_chance_scale,
+            "hit_target_count": len(hit_targets),
+        }
+        events: list[SkillEvent] = [
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 0, "cast_start"),
+                type="cast_start",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=facing_direction,
+                delay_ms=0,
+                duration_ms=windup_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=presentation.get("cast_vfx_key", vfx_key),
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={"skill_id": skill.skill_package_id or skill.skill_template_id, "facing_policy": facing_policy},
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 1, "melee_arc"),
+                type="melee_arc",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=facing_direction,
+                delay_ms=0,
+                duration_ms=hit_at_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload=base_payload,
+            ),
+        ]
+        next_index = 2
+        floating_text = _damage_text(damage_amount, skill.damage_type)
+        for target, target_distance, target_angle in hit_targets:
+            hit_payload = {
+                **base_payload,
+                "target_distance": target_distance,
+                "target_angle": target_angle,
+                "target_world_position": dict(target.position),
+                "hit_world_position": dict(target.position),
+                "skill_name": skill.skill_package_id or skill.skill_template_id,
+            }
+            for event_type, amount, duration, vfx, reason, position in (
+                ("damage", damage_amount, 0, hit_vfx_key, reason_key, target.position),
+                ("hit_vfx", None, 360, hit_vfx_key, reason_key, target.position),
+                ("floating_text", damage_amount, 800, hit_vfx_key, floating_key, {"x": target.position["x"], "y": target.position["y"] - 28.0}),
+            ):
+                payload = {**hit_payload}
+                if event_type == "floating_text":
+                    payload["text"] = floating_text
+                events.append(
+                    SkillEvent(
+                        event_id=_event_id(skill, timestamp_ms, next_index, event_type),
+                        type=event_type,
+                        timestamp_ms=timestamp_ms + hit_at_ms,
+                        source_entity=source_entity,
+                        target_entity=target.entity_id,
+                        position=dict(position),
+                        direction=facing_direction,
+                        delay_ms=hit_at_ms,
+                        duration_ms=duration,
+                        amount=amount,
+                        damage_type=skill.damage_type,
+                        skill_instance_id=skill.active_gem_instance_id,
+                        vfx_key=vfx,
+                        sfx_key=sfx_key,
+                        reason_key=reason,
+                        payload=payload,
+                    )
+                )
+                next_index += 1
+        return _sorted_events(events)
+
+    def _damage_zone_events(
+        self,
+        skill: FinalSkillInstance,
+        *,
+        source_entity: str,
+        source_position: dict[str, float],
+        targets: tuple[_RuntimeTarget, ...],
+        timestamp_ms: int,
+    ) -> tuple[SkillEvent, ...]:
+        runtime_params = skill.runtime_params or {}
+        presentation = skill.presentation_keys or {}
+        origin = dict(source_position)
+        shape = str(runtime_params.get("shape", "circle"))
+        origin_policy = str(runtime_params.get("origin_policy", "caster"))
+        facing_policy = str(runtime_params.get("facing_policy", "none" if shape == "circle" else "nearest_target"))
+        hit_at_ms = max(0, int(runtime_params.get("hit_at_ms", skill.hit.get("hit_delay_ms", 0) if skill.hit else 0)))
+        max_targets = max(1, int(runtime_params.get("max_targets", len(targets) or 1)))
+        status_chance_scale = max(0.0, float(runtime_params.get("status_chance_scale", 1.0)))
+        expand_duration_ms = max(0, int(runtime_params.get("expand_duration_ms", hit_at_ms)))
+        ring_width = max(1.0, float(runtime_params.get("ring_width", 48.0)))
+        nearest_target = _nearest_target(origin, targets)
+        primary_target = nearest_target or _RuntimeTarget("", origin)
+        facing_direction = {"x": 0.0, "y": 0.0} if facing_policy == "none" else _direction(origin, primary_target.position)
+        direction_world = dict(facing_direction)
+        angle_offset_deg = 0.0
+        radius = 0.0
+        length = 0.0
+        width = 0.0
+        angle_deg = 360.0
+        if shape == "circle":
+            radius = max(1.0, float(runtime_params.get("radius", skill.hit.get("hit_radius", 360.0) if skill.hit else 360.0)))
+        elif shape == "rectangle":
+            length = max(1.0, float(runtime_params.get("length", skill.hit.get("hit_radius", 320.0) if skill.hit else 320.0)))
+            width = max(1.0, float(runtime_params.get("width", 96.0)))
+            angle_offset_deg = float(runtime_params.get("angle_offset_deg", 0.0))
+            direction_world = _rotate_direction(facing_direction, angle_offset_deg)
+            angle_deg = 0.0
+        else:
+            raise SkillRuntimeError(f"unsupported damage zone shape: {shape}")
+
+        vfx_key = str(runtime_params.get("zone_vfx_key") or presentation.get("vfx", skill.visual_effect))
+        hit_vfx_key = presentation.get("hit_vfx_key", vfx_key)
+        sfx_key = presentation.get("sfx", "")
+        floating_key = presentation.get("floating_text", "skill_event.fire_bolt.floating_text")
+        reason_key = _damage_reason_key(skill)
+        damage_amount = skill.final_damage
+        zone_id = f"{skill.active_gem_instance_id}.{timestamp_ms}.damage_zone.1"
+        hit_targets = _damage_zone_hit_targets(
+            origin,
+            direction_world,
+            targets,
+            shape=shape,
+            radius=radius,
+            length=length,
+            width=width,
+            max_targets=max_targets,
+        )
+        duration_ms = max(hit_at_ms, expand_duration_ms if shape == "circle" else 0)
+        base_payload = {
+            "zone_id": zone_id,
+            "skill_id": skill.skill_package_id or skill.skill_template_id,
+            "shape": shape,
+            "origin": dict(origin),
+            "origin_world_position": dict(origin),
+            "origin_policy": origin_policy,
+            "facing_policy": facing_policy,
+            "facing_direction": dict(facing_direction),
+            "direction_world": dict(direction_world),
+            "facing_angle_deg": _direction_angle_deg(direction_world) if direction_world != {"x": 0.0, "y": 0.0} else 0.0,
+            "angle_offset_deg": angle_offset_deg,
+            "angle_deg": angle_deg,
+            "radius": radius if shape == "circle" else None,
+            "length": length if shape == "rectangle" else None,
+            "width": width if shape == "rectangle" else None,
+            "ring_width": ring_width if shape == "circle" else None,
+            "duration_ms": duration_ms,
+            "expand_duration_ms": expand_duration_ms if shape == "circle" else 0,
+            "hit_at_ms": hit_at_ms,
+            "max_targets": max_targets,
+            "damage_type": skill.damage_type,
+            "vfx_key": vfx_key,
+            "zone_vfx_key": vfx_key,
+            "status_chance_scale": status_chance_scale,
+            "hit_target_count": len(hit_targets),
+        }
+        events: list[SkillEvent] = [
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 0, "cast_start"),
+                type="cast_start",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=direction_world,
+                delay_ms=0,
+                duration_ms=0,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=presentation.get("cast_vfx_key", vfx_key),
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={"skill_id": skill.skill_package_id or skill.skill_template_id, "origin_policy": origin_policy, "facing_policy": facing_policy},
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 1, "damage_zone"),
+                type="damage_zone",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=direction_world,
+                delay_ms=0,
+                duration_ms=duration_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload=base_payload,
+            ),
+        ]
+        next_index = 2
+        floating_text = _damage_text(damage_amount, skill.damage_type)
+        for target, target_payload in hit_targets:
+            target_direction = _direction(origin, target.position)
+            hit_payload = {
+                **base_payload,
+                **target_payload,
+                "target_world_position": dict(target.position),
+                "hit_world_position": dict(target.position),
+                "skill_name": skill.skill_package_id or skill.skill_template_id,
+            }
+            for event_type, amount, duration, vfx, reason, position in (
+                ("damage", damage_amount, 0, hit_vfx_key, reason_key, target.position),
+                ("hit_vfx", None, 420, hit_vfx_key, reason_key, target.position),
+                ("floating_text", damage_amount, 800, hit_vfx_key, floating_key, {"x": target.position["x"], "y": target.position["y"] - 28.0}),
+            ):
+                payload = {**hit_payload}
                 if event_type == "floating_text":
                     payload["text"] = floating_text
                 events.append(
@@ -755,6 +1082,8 @@ def _runtime_event_sort_order(event_type: str) -> int:
     return {
         "cast_start": 0,
         "area_spawn": 1,
+        "melee_arc": 1,
+        "damage_zone": 1,
         "projectile_spawn": 1,
         "projectile_hit": 2,
         "damage": 3,
@@ -877,6 +1206,90 @@ def _projectile_hit_targets(
         )
         selected.extend(assist_targets[: max_hits - len(selected)])
     return tuple((target, forward) for target, forward, _ in selected)
+
+
+def _nearest_target(source: dict[str, float], targets: tuple[_RuntimeTarget, ...]) -> _RuntimeTarget | None:
+    if not targets:
+        return None
+    return min(
+        targets,
+        key=lambda target: hypot(target.position["x"] - source["x"], target.position["y"] - source["y"]),
+    )
+
+
+def _melee_arc_hit_targets(
+    source: dict[str, float],
+    facing_direction: dict[str, float],
+    targets: tuple[_RuntimeTarget, ...],
+    *,
+    arc_angle: float,
+    arc_radius: float,
+    max_targets: int,
+) -> tuple[tuple[_RuntimeTarget, float, float], ...]:
+    candidates: list[tuple[_RuntimeTarget, float, float]] = []
+    half_angle = max(0.5, arc_angle / 2.0)
+    for target in targets:
+        dx = target.position["x"] - source["x"]
+        dy = target.position["y"] - source["y"]
+        distance = hypot(dx, dy)
+        if distance <= 0 or distance > arc_radius:
+            continue
+        target_direction = {"x": dx / distance, "y": dy / distance}
+        angle = _angle_between_degrees(facing_direction, target_direction)
+        if angle <= half_angle:
+            candidates.append((target, distance, angle))
+    return tuple(sorted(candidates, key=lambda item: (item[1], item[2], item[0].entity_id))[:max(1, max_targets)])
+
+
+def _damage_zone_hit_targets(
+    origin: dict[str, float],
+    direction: dict[str, float],
+    targets: tuple[_RuntimeTarget, ...],
+    *,
+    shape: str,
+    radius: float,
+    length: float,
+    width: float,
+    max_targets: int,
+) -> tuple[tuple[_RuntimeTarget, dict[str, float]], ...]:
+    candidates: list[tuple[_RuntimeTarget, dict[str, float], tuple[float, float, str]]] = []
+    if shape == "circle":
+        for target in targets:
+            distance = hypot(target.position["x"] - origin["x"], target.position["y"] - origin["y"])
+            if distance <= radius:
+                payload = {"target_distance": distance}
+                candidates.append((target, payload, (distance, 0.0, target.entity_id)))
+    elif shape == "rectangle":
+        for target in targets:
+            dx = target.position["x"] - origin["x"]
+            dy = target.position["y"] - origin["y"]
+            forward = dx * direction["x"] + dy * direction["y"]
+            lateral = dx * -direction["y"] + dy * direction["x"]
+            if forward < 0 or forward > length or abs(lateral) > width / 2.0:
+                continue
+            payload = {
+                "target_forward_distance": forward,
+                "target_lateral_offset": lateral,
+                "target_distance": hypot(dx, dy),
+            }
+            candidates.append((target, payload, (forward, abs(lateral), target.entity_id)))
+    else:
+        return ()
+    selected = sorted(candidates, key=lambda item: item[2])[:max(1, max_targets)]
+    return tuple((target, payload) for target, payload, _ in selected)
+
+
+def _angle_between_degrees(left: dict[str, float], right: dict[str, float]) -> float:
+    dot = left["x"] * right["x"] + left["y"] * right["y"]
+    dot = max(-1.0, min(1.0, dot))
+    # Avoid importing acos at module top in older snapshots by deriving from atan-compatible cosine.
+    from math import acos
+
+    return acos(dot) * 180.0 / pi
+
+
+def _direction_angle_deg(direction: dict[str, float]) -> float:
+    return atan2(direction["y"], direction["x"]) * 180.0 / pi
 
 
 def _spread_angle_deg(runtime_params: dict[str, Any], behavior_template: str) -> float:

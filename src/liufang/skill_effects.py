@@ -568,6 +568,16 @@ class SkillEffectCalculator:
             runtime_params["projectile_speed"] = float(runtime_params["projectile_speed"]) * speed_multiplier
         if "radius" in runtime_params:
             runtime_params["radius"] = float(runtime_params["radius"]) * area_multiplier
+        if "arc_radius" in runtime_params:
+            runtime_params["arc_radius"] = float(runtime_params["arc_radius"]) * area_multiplier
+        if "length" in runtime_params:
+            runtime_params["length"] = float(runtime_params["length"]) * area_multiplier
+        if "width" in runtime_params:
+            runtime_params["width"] = float(runtime_params["width"]) * area_multiplier
+        if "status_chance_scale" in runtime_params:
+            runtime_params["status_chance_scale"] = float(runtime_params["status_chance_scale"]) * (
+                1.0 + additive.get("status_chance_add_percent", 0.0) / 100.0
+            )
         base_projectile_count = int(runtime_params.get("projectile_count", 1))
         runtime_params["projectile_count"] = max(
             1,

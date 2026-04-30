@@ -173,6 +173,14 @@ type SkillPackageData = {
       projectile_radius?: number;
       impact_radius?: number;
       max_targets?: number;
+      arc_angle?: number;
+      arc_radius?: number;
+      windup_ms?: number;
+      hit_at_ms?: number;
+      facing_policy?: string;
+      hit_shape?: string;
+      status_chance_scale?: number;
+      slash_vfx_key?: string;
       min_duration_ms?: number;
       max_duration_ms?: number;
       [key: string]: unknown;
@@ -283,12 +291,16 @@ type SkillEditorModifierPreview = {
     final_cooldown_ms: number;
     projectile_count: number;
     projectile_speed: number;
+    arc_radius?: number;
+    status_chance_scale?: number;
   };
   tested: {
     final_damage: number;
     final_cooldown_ms: number;
     projectile_count: number;
     projectile_speed: number;
+    arc_radius?: number;
+    status_chance_scale?: number;
   };
   applied_modifiers: SkillEditorPreviewModifier[];
   unapplied_modifiers: SkillEditorPreviewModifier[];
@@ -357,14 +369,20 @@ type SkillEventTimelineItem = {
 type SkillEventTimelineChecks = {
   has_projectile_spawn: boolean;
   has_multiple_projectile_spawn: boolean;
+  has_damage_zone?: boolean;
   has_area_spawn?: boolean;
+  has_melee_arc?: boolean;
   has_projectile_hit: boolean;
   has_damage: boolean;
   has_hit_vfx: boolean;
   has_floating_text: boolean;
   damage_after_or_at_projectile_spawn: boolean;
   damage_after_or_at_area_hit?: boolean;
+  damage_after_or_at_melee_hit?: boolean;
+  damage_after_or_at_damage_zone_hit?: boolean;
   area_center_passed?: boolean;
+  melee_arc_origin_passed?: boolean;
+  damage_zone_origin_passed?: boolean;
   flight_no_damage_passed: boolean;
   fan_direction_passed: boolean;
   basic_timing_passed: boolean;
@@ -407,7 +425,9 @@ type SkillTestArenaResult = {
   event_count: number;
   event_counts: Record<string, number>;
   has_projectile_spawn: boolean;
+  has_damage_zone?: boolean;
   has_area_spawn?: boolean;
+  has_melee_arc?: boolean;
   has_damage: boolean;
   has_hit_vfx: boolean;
   has_floating_text: boolean;
@@ -449,6 +469,10 @@ type SkillEditorState = {
     spawn_patterns: SkillEditorOption[];
     damage_timings: SkillEditorOption[];
     center_policies: SkillEditorOption[];
+    zone_shapes: SkillEditorOption[];
+    origin_policies: SkillEditorOption[];
+    facing_policies: SkillEditorOption[];
+    hit_shapes: SkillEditorOption[];
     damage_falloff_modes: SkillEditorOption[];
     target_policies: SkillEditorOption[];
     preview_fields: SkillEditorOption[];
@@ -518,6 +542,7 @@ type SkillEvent = {
     | "chain_segment"
     | "area_spawn"
     | "melee_arc"
+    | "damage_zone"
     | "orbit_spawn"
     | "orbit_tick"
     | "delayed_area_prime"
@@ -641,6 +666,40 @@ type AreaNova = {
   damageType: string;
   vfxKey: string;
   areaId?: string;
+  skillId?: string;
+};
+
+type MeleeArcVfx = {
+  id: number;
+  x: number;
+  y: number;
+  radius: number;
+  arcAngle: number;
+  directionX: number;
+  directionY: number;
+  ttl: number;
+  duration: number;
+  damageType: string;
+  vfxKey: string;
+  arcId?: string;
+  skillId?: string;
+};
+
+type DamageZoneVfx = {
+  id: number;
+  x: number;
+  y: number;
+  shape: "circle" | "rectangle";
+  radius: number;
+  length: number;
+  width: number;
+  directionX: number;
+  directionY: number;
+  ttl: number;
+  duration: number;
+  damageType: string;
+  vfxKey: string;
+  zoneId?: string;
   skillId?: string;
 };
 
@@ -1396,6 +1455,8 @@ function GameApp() {
   const [texts, setTexts] = useState<FloatingText[]>([]);
   const [bolts, setBolts] = useState<FireBolt[]>([]);
   const [areaNovas, setAreaNovas] = useState<AreaNova[]>([]);
+  const [meleeArcs, setMeleeArcs] = useState<MeleeArcVfx[]>([]);
+  const [damageZones, setDamageZones] = useState<DamageZoneVfx[]>([]);
   const [hitVfxs, setHitVfxs] = useState<HitVfx[]>([]);
   const [kills, setKills] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -1415,6 +1476,8 @@ function GameApp() {
   const nextTextId = useRef(1);
   const nextBoltId = useRef(1);
   const nextAreaNovaId = useRef(1);
+  const nextMeleeArcId = useRef(1);
+  const nextDamageZoneId = useRef(1);
   const nextHitVfxId = useRef(1);
   const nextPromptId = useRef(1);
   const attackTimers = useRef<Record<string, number>>({});
@@ -1580,6 +1643,8 @@ function GameApp() {
     );
     setBolts((current) => current.map((bolt) => ({ ...bolt, ttl: bolt.ttl - dt })).filter((bolt) => bolt.ttl > 0));
     setAreaNovas((current) => current.map((nova) => ({ ...nova, ttl: nova.ttl - dt })).filter((nova) => nova.ttl > 0));
+    setMeleeArcs((current) => current.map((arc) => ({ ...arc, ttl: arc.ttl - dt })).filter((arc) => arc.ttl > 0));
+    setDamageZones((current) => current.map((zone) => ({ ...zone, ttl: zone.ttl - dt })).filter((zone) => zone.ttl > 0));
     setHitVfxs((current) => current.map((vfx) => ({ ...vfx, ttl: vfx.ttl - dt })).filter((vfx) => vfx.ttl > 0));
     consumeScheduledSkillEvents(dt);
   }
@@ -1711,9 +1776,33 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
 
   function hitEnemiesWithSkillEvents(current: Enemy[], skill: SkillPreview) {
     if (current.length === 0) return current;
+    if (skill.behavior_template === "damage_zone") {
+      const targets = selectDamageZoneTargets(current, skill, player);
+      const skillEvents = createDamageZoneSkillEvents(skill, targets);
+      consumeImmediateSkillEvents(skillEvents);
+      for (const event of skillEvents) {
+        if (event.delay_ms > 0) {
+          scheduledSkillEvents.current.push({ event, remaining: event.delay_ms / 1000 });
+        }
+      }
+      setCombatLogs((logs) => [`${skill.name_text} 自动释放。`, ...logs].slice(0, 8));
+      return current;
+    }
     if (skill.behavior_template === "player_nova") {
       const targets = selectPlayerNovaTargets(current, skill, player);
       const skillEvents = createPlayerNovaSkillEvents(skill, targets);
+      consumeImmediateSkillEvents(skillEvents);
+      for (const event of skillEvents) {
+        if (event.delay_ms > 0) {
+          scheduledSkillEvents.current.push({ event, remaining: event.delay_ms / 1000 });
+        }
+      }
+      setCombatLogs((logs) => [`${skill.name_text} 自动释放。`, ...logs].slice(0, 8));
+      return current;
+    }
+    if (skill.behavior_template === "melee_arc") {
+      const targets = selectMeleeArcTargets(current, skill, player);
+      const skillEvents = createMeleeArcSkillEvents(skill, targets);
       consumeImmediateSkillEvents(skillEvents);
       for (const event of skillEvents) {
         if (event.delay_ms > 0) {
@@ -1735,6 +1824,240 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     }
     setCombatLogs((logs) => [`${skill.name_text} 自动释放。`, ...logs].slice(0, 8));
     return current;
+  }
+
+  function createDamageZoneSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
+    const runtimeParams = skill.runtime_params ?? {};
+    const origin = { x: player.x, y: player.y };
+    const shape = String(runtimeParams.shape ?? "circle") === "rectangle" ? "rectangle" : "circle";
+    const hitAtMs = Math.max(0, Math.round(Number(runtimeParams.hit_at_ms ?? skill.hit?.hit_delay_ms ?? 0)));
+    const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? (targets.length || 1))));
+    const primaryTarget = nearestEnemy(targets, origin) ?? nearestEnemy(enemies, origin);
+    const facingDirection = shape === "circle" ? { x: 0, y: 0 } : guideDirection(origin, primaryTarget ?? { x: origin.x + 1, y: origin.y });
+    const angleOffsetDeg = Number(runtimeParams.angle_offset_deg ?? 0);
+    const directionWorld = shape === "circle" ? { x: 0, y: 0 } : rotateDirection(facingDirection, angleOffsetDeg);
+    const radius = Math.max(1, Number(runtimeParams.radius ?? skill.hit?.hit_radius ?? 360));
+    const length = Math.max(1, Number(runtimeParams.length ?? skill.hit?.hit_radius ?? 320));
+    const width = Math.max(1, Number(runtimeParams.width ?? 96));
+    const ringWidth = Math.max(1, Number(runtimeParams.ring_width ?? 48));
+    const expandDurationMs = Math.max(0, Math.round(Number(runtimeParams.expand_duration_ms ?? hitAtMs)));
+    const timestampMs = Math.round(elapsed * 1000);
+    const vfxKey = String(runtimeParams.zone_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
+    const hitVfxKey = skill.presentation_keys?.hit_vfx_key ?? vfxKey;
+    const sfxKey = skill.presentation_keys?.sfx ?? "";
+    const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
+    const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const zoneId = `${skill.active_gem_instance_id}.${timestampMs}.damage_zone.1`;
+    const selectedTargets = targets.slice(0, maxTargets);
+    const durationMs = Math.max(hitAtMs, shape === "circle" ? expandDurationMs : 0);
+    const zonePayload = {
+      zone_id: zoneId,
+      skill_id: skill.skill_package_id ?? skill.skill_template_id,
+      shape,
+      origin,
+      origin_world_position: origin,
+      origin_policy: String(runtimeParams.origin_policy ?? "caster"),
+      facing_policy: String(runtimeParams.facing_policy ?? (shape === "circle" ? "none" : "locked_or_nearest_target")),
+      facing_direction: facingDirection,
+      direction_world: directionWorld,
+      radius: shape === "circle" ? radius : null,
+      length: shape === "rectangle" ? length : null,
+      width: shape === "rectangle" ? width : null,
+      ring_width: shape === "circle" ? ringWidth : null,
+      angle_deg: shape === "circle" ? 360 : 0,
+      angle_offset_deg: angleOffsetDeg,
+      duration_ms: durationMs,
+      expand_duration_ms: shape === "circle" ? expandDurationMs : 0,
+      hit_at_ms: hitAtMs,
+      max_targets: maxTargets,
+      damage_type: skill.damage_type,
+      vfx_key: vfxKey,
+      zone_vfx_key: vfxKey,
+      status_chance_scale: Number(runtimeParams.status_chance_scale ?? 1),
+      hit_target_count: selectedTargets.length,
+      skill_name: skill.name_text
+    };
+    const base = {
+      timestamp_ms: timestampMs,
+      source_entity: "player",
+      target_entity: primaryTarget ? String(primaryTarget.id) : "",
+      direction: directionWorld,
+      damage_type: skill.damage_type,
+      skill_instance_id: skill.active_gem_instance_id,
+      sfx_key: sfxKey
+    };
+    return [
+      {
+        ...base,
+        event_id: `${skill.active_gem_instance_id}.cast_start.${timestampMs}`,
+        type: "cast_start" as const,
+        position: origin,
+        delay_ms: 0,
+        duration_ms: 0,
+        amount: null,
+        vfx_key: skill.presentation_keys?.cast_vfx_key ?? vfxKey,
+        reason_key: "",
+        payload: { skill_id: skill.skill_package_id ?? skill.skill_template_id, skill_name: skill.name_text }
+      },
+      {
+        ...base,
+        event_id: `${skill.active_gem_instance_id}.damage_zone.${timestampMs}`,
+        type: "damage_zone" as const,
+        position: origin,
+        delay_ms: 0,
+        duration_ms: durationMs,
+        amount: null,
+        vfx_key: vfxKey,
+        reason_key: "",
+        payload: zonePayload
+      },
+      ...selectedTargets.flatMap((target, index) => {
+        const targetPosition = { x: target.x, y: target.y };
+        const hitPayload = { ...zonePayload, target_world_position: targetPosition, hit_world_position: targetPosition, target_distance: distance(targetPosition, origin) };
+        const targetBase = { ...base, target_entity: String(target.id), direction: guideDirection(origin, targetPosition) };
+        return [
+          { ...targetBase, event_id: `${skill.active_gem_instance_id}.${target.id}.damage.${index}.${timestampMs}`, type: "damage" as const, timestamp_ms: timestampMs + hitAtMs, position: targetPosition, delay_ms: hitAtMs, duration_ms: 0, amount: skill.final_damage, vfx_key: hitVfxKey, reason_key: reasonKey, payload: hitPayload },
+          { ...targetBase, event_id: `${skill.active_gem_instance_id}.${target.id}.hit_vfx.${index}.${timestampMs}`, type: "hit_vfx" as const, timestamp_ms: timestampMs + hitAtMs, position: targetPosition, delay_ms: hitAtMs, duration_ms: FIRE_BOLT_IMPACT_DURATION_MS, amount: null, vfx_key: hitVfxKey, reason_key: reasonKey, payload: hitPayload },
+          { ...targetBase, event_id: `${skill.active_gem_instance_id}.${target.id}.floating_text.${index}.${timestampMs}`, type: "floating_text" as const, timestamp_ms: timestampMs + hitAtMs, position: { x: target.x, y: target.y - 28 }, delay_ms: hitAtMs, duration_ms: 800, amount: skill.final_damage, vfx_key: hitVfxKey, reason_key: floatingKey, payload: { ...hitPayload, text: `${Math.round(skill.final_damage)}点${damageTypeText(skill.damage_type)}伤害` } }
+        ];
+      })
+    ];
+  }
+
+  function createMeleeArcSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
+    const runtimeParams = skill.runtime_params ?? {};
+    const origin = { x: player.x, y: player.y };
+    const arcAngle = clamp(Number(runtimeParams.arc_angle ?? 70), 1, 180);
+    const arcRadius = Math.max(1, Number(runtimeParams.arc_radius ?? skill.cast?.search_range ?? 320));
+    const windupMs = Math.max(0, Math.round(Number(runtimeParams.windup_ms ?? skill.cast?.windup_ms ?? 0)));
+    const hitAtMs = Math.max(windupMs, Math.max(0, Math.round(Number(runtimeParams.hit_at_ms ?? windupMs))));
+    const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? (targets.length || 1))));
+    const primaryTarget = nearestEnemy(targets, origin);
+    const fallbackTarget = nearestEnemy(enemies, origin);
+    const guideTarget = primaryTarget ?? fallbackTarget ?? { x: origin.x + 1, y: origin.y };
+    const facingDirection = guideDirection(origin, guideTarget);
+    const selectedTargets = targets.slice(0, maxTargets);
+    const timestampMs = Math.round(elapsed * 1000);
+    const vfxKey = skill.presentation_keys?.hit_vfx_key ?? String(runtimeParams.slash_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
+    const sfxKey = skill.presentation_keys?.sfx ?? "";
+    const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
+    const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const arcId = `${skill.active_gem_instance_id}.${timestampMs}.melee_arc.1`;
+    const arcPayload = {
+      arc_id: arcId,
+      skill_id: skill.skill_package_id ?? skill.skill_template_id,
+      origin,
+      origin_world_position: origin,
+      facing_direction: facingDirection,
+      direction_world: facingDirection,
+      arc_angle: arcAngle,
+      arc_radius: arcRadius,
+      hit_shape: String(runtimeParams.hit_shape ?? "sector"),
+      windup_ms: windupMs,
+      hit_at_ms: hitAtMs,
+      max_targets: maxTargets,
+      facing_policy: String(runtimeParams.facing_policy ?? "nearest_target"),
+      damage_type: skill.damage_type,
+      vfx_key: vfxKey,
+      slash_vfx_key: String(runtimeParams.slash_vfx_key ?? vfxKey),
+      status_chance_scale: Number(runtimeParams.status_chance_scale ?? 1),
+      hit_target_count: selectedTargets.length,
+      skill_name: skill.name_text
+    };
+    const base = {
+      timestamp_ms: timestampMs,
+      source_entity: "player",
+      target_entity: primaryTarget ? String(primaryTarget.id) : "",
+      direction: facingDirection,
+      damage_type: skill.damage_type,
+      skill_instance_id: skill.active_gem_instance_id,
+      sfx_key: sfxKey
+    };
+    return [
+      {
+        ...base,
+        event_id: `${skill.active_gem_instance_id}.cast_start.${timestampMs}`,
+        type: "cast_start" as const,
+        position: origin,
+        delay_ms: 0,
+        duration_ms: windupMs,
+        amount: null,
+        vfx_key: skill.presentation_keys?.cast_vfx_key ?? vfxKey,
+        reason_key: "",
+        payload: { skill_id: skill.skill_package_id ?? skill.skill_template_id, skill_name: skill.name_text }
+      },
+      {
+        ...base,
+        event_id: `${skill.active_gem_instance_id}.melee_arc.${timestampMs}`,
+        type: "melee_arc" as const,
+        position: origin,
+        delay_ms: 0,
+        duration_ms: Math.max(hitAtMs, windupMs),
+        amount: null,
+        vfx_key: vfxKey,
+        reason_key: "",
+        payload: arcPayload
+      },
+      ...selectedTargets.flatMap((target, index) => {
+        const targetPosition = { x: target.x, y: target.y };
+        const targetDirection = guideDirection(origin, targetPosition);
+        const targetDistance = distance(targetPosition, origin);
+        const targetAngle = angleBetweenDegrees(facingDirection, targetDirection);
+        const hitPayload = {
+          ...arcPayload,
+          target_world_position: targetPosition,
+          hit_world_position: targetPosition,
+          target_distance: targetDistance,
+          target_angle: targetAngle
+        };
+        const targetBase = {
+          ...base,
+          target_entity: String(target.id),
+          direction: targetDirection
+        };
+        return [
+          {
+            ...targetBase,
+            event_id: `${skill.active_gem_instance_id}.${target.id}.damage.${index}.${timestampMs}`,
+            type: "damage" as const,
+            timestamp_ms: timestampMs + hitAtMs,
+            position: targetPosition,
+            delay_ms: hitAtMs,
+            duration_ms: 0,
+            amount: skill.final_damage,
+            vfx_key: vfxKey,
+            reason_key: reasonKey,
+            payload: hitPayload
+          },
+          {
+            ...targetBase,
+            event_id: `${skill.active_gem_instance_id}.${target.id}.hit_vfx.${index}.${timestampMs}`,
+            type: "hit_vfx" as const,
+            timestamp_ms: timestampMs + hitAtMs,
+            position: targetPosition,
+            delay_ms: hitAtMs,
+            duration_ms: FIRE_BOLT_IMPACT_DURATION_MS,
+            amount: null,
+            vfx_key: vfxKey,
+            reason_key: reasonKey,
+            payload: hitPayload
+          },
+          {
+            ...targetBase,
+            event_id: `${skill.active_gem_instance_id}.${target.id}.floating_text.${index}.${timestampMs}`,
+            type: "floating_text" as const,
+            timestamp_ms: timestampMs + hitAtMs,
+            position: { x: target.x, y: target.y - 28 },
+            delay_ms: hitAtMs,
+            duration_ms: 800,
+            amount: skill.final_damage,
+            vfx_key: vfxKey,
+            reason_key: floatingKey,
+            payload: { ...hitPayload, text: `${Math.round(skill.final_damage)}点${damageTypeText(skill.damage_type)}伤害` }
+          }
+        ];
+      })
+    ];
   }
 
   function createPlayerNovaSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
@@ -2057,6 +2380,59 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
   }
 
   function consumeSkillEvent(event: SkillEvent) {
+    if (event.type === "damage_zone") {
+      const payload = event.payload ?? {};
+      const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
+      const direction = (payload.direction_world ?? payload.facing_direction ?? event.direction) as { x?: number; y?: number };
+      const shape = String(payload.shape ?? "circle") === "rectangle" ? "rectangle" : "circle";
+      const duration = Math.max(0.18, event.duration_ms / 1000);
+      setDamageZones((items) => [
+        ...items,
+        {
+          id: nextDamageZoneId.current++,
+          x: Number(origin.x ?? event.position.x),
+          y: Number(origin.y ?? event.position.y),
+          shape,
+          radius: Math.max(1, Number(payload.radius ?? 120)),
+          length: Math.max(1, Number(payload.length ?? 160)),
+          width: Math.max(1, Number(payload.width ?? 80)),
+          directionX: Number(direction.x ?? event.direction.x),
+          directionY: Number(direction.y ?? event.direction.y),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          zoneId: typeof payload.zone_id === "string" ? payload.zone_id : event.event_id,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+        }
+      ]);
+      return;
+    }
+    if (event.type === "melee_arc") {
+      const payload = event.payload ?? {};
+      const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
+      const direction = (payload.direction_world ?? payload.facing_direction ?? event.direction) as { x?: number; y?: number };
+      const duration = Math.max(0.18, event.duration_ms / 1000);
+      setMeleeArcs((items) => [
+        ...items,
+        {
+          id: nextMeleeArcId.current++,
+          x: Number(origin.x ?? event.position.x),
+          y: Number(origin.y ?? event.position.y),
+          radius: Math.max(1, Number(payload.arc_radius ?? 160)),
+          arcAngle: clamp(Number(payload.arc_angle ?? 70), 1, 180),
+          directionX: Number(direction.x ?? event.direction.x),
+          directionY: Number(direction.y ?? event.direction.y),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          arcId: typeof payload.arc_id === "string" ? payload.arc_id : event.event_id,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+        }
+      ]);
+      return;
+    }
     if (event.type === "area_spawn") {
       const payload = event.payload ?? {};
       const center = (payload.center_world_position ?? payload.center ?? event.position) as { x?: number; y?: number };
@@ -2396,7 +2772,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           </div>
           <div className="battle-ground-decal-layer">
             <PassiveAuraLayer effects={passiveVisualEffects} x={player.x} y={player.y} />
+            <DamageZoneLayer zones={damageZones} />
             <AreaNovaLayer novas={areaNovas} />
+            <MeleeArcLayer arcs={meleeArcs} />
           </div>
           <div className="battle-entity-layer">
             {sortedRenderItems.map((item, index) => renderBattleRenderItem(item, index, battleAnimationContexts))}
@@ -3221,7 +3599,7 @@ function SkillEditorPanel({
     if (!draft) return ["当前技能包对象不存在，无法保存。"];
     const errors: string[] = [];
     const params = draft.behavior.params ?? {};
-    const allowedTemplates = new Set(["projectile", "fan_projectile", "chain", "player_nova", "melee_arc", "line_pierce", "orbit", "delayed_area"]);
+    const allowedTemplates = new Set(["projectile", "fan_projectile", "chain", "player_nova", "melee_arc", "damage_zone", "line_pierce", "orbit", "delayed_area"]);
     const projectileAllowedParams = new Set([
       "projectile_count",
       "burst_interval_ms",
@@ -3264,20 +3642,71 @@ function SkillEditorPanel({
       "ring_width",
       "status_chance_scale"
     ]);
+    const meleeArcAllowedParams = new Set([
+      "arc_angle",
+      "arc_radius",
+      "windup_ms",
+      "hit_at_ms",
+      "max_targets",
+      "facing_policy",
+      "hit_shape",
+      "status_chance_scale",
+      "slash_vfx_key"
+    ]);
+    const damageZoneAllowedParams = new Set([
+      "shape",
+      "origin_policy",
+      "facing_policy",
+      "hit_at_ms",
+      "max_targets",
+      "status_chance_scale",
+      "zone_vfx_key",
+      "radius",
+      "length",
+      "width",
+      "angle_offset_deg",
+      "expand_duration_ms",
+      "ring_width"
+    ]);
     const allowedParams = draft.behavior.template === "player_nova"
       ? playerNovaAllowedParams
       : draft.behavior.template === "fan_projectile"
         ? fanProjectileAllowedParams
-        : projectileAllowedParams;
+        : draft.behavior.template === "melee_arc"
+          ? meleeArcAllowedParams
+          : draft.behavior.template === "damage_zone"
+            ? damageZoneAllowedParams
+            : projectileAllowedParams;
 
     if (draft.id !== selectedEntry.id) errors.push("技能 ID 必须与当前选择的技能一致。");
     if (!allowedTemplates.has(draft.behavior.template)) errors.push("行为模板不在允许范围内。");
-    if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova") {
+    if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova" || draft.behavior.template === "melee_arc" || draft.behavior.template === "damage_zone") {
       for (const key of Object.keys(params)) {
         if (!allowedParams.has(key)) errors.push(`行为参数 ${key} 不属于当前行为模板。`);
       }
     }
-    if (draft.behavior.template === "player_nova") {
+    if (draft.behavior.template === "damage_zone") {
+      if (!editor.options.zone_shapes.some((option) => option.value === params.shape)) errors.push("结算区域类型必须使用已有选项。");
+      if (!editor.options.origin_policies.some((option) => option.value === params.origin_policy)) errors.push("起点规则必须使用已有选项。");
+      if (!editor.options.facing_policies.some((option) => option.value === params.facing_policy)) errors.push("朝向规则必须使用已有选项。");
+      requireIntegerAtLeast(params.hit_at_ms, "命中时机毫秒", 0, errors);
+      requireIntegerAtLeast(params.max_targets, "最大目标数", 1, errors);
+      requireNumberRange(params.status_chance_scale, "状态几率倍率", 0, 10, errors);
+      if (params.shape === "circle") {
+        requireNumberAtLeast(params.radius, "半径", 1, errors);
+        requireIntegerAtLeast(params.expand_duration_ms, "扩散时长毫秒", 0, errors);
+        requireNumberAtLeast(params.ring_width, "新星环宽", 1, errors);
+        if (params.length !== undefined || params.width !== undefined || params.angle_offset_deg !== undefined) errors.push("圆形伤害区域不能写入矩形专属参数。");
+      } else if (params.shape === "rectangle") {
+        requireNumberAtLeast(params.length, "长度", 1, errors);
+        requireNumberAtLeast(params.width, "宽度", 1, errors);
+        requireNumberRange(params.angle_offset_deg, "角度", -180, 180, errors);
+        if (params.radius !== undefined || params.expand_duration_ms !== undefined || params.ring_width !== undefined) errors.push("矩形伤害区域不能写入圆形专属参数。");
+      }
+      if (typeof params.zone_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.zone_vfx_key)) {
+        errors.push("区域特效键必须是配置键。");
+      }
+    } else if (draft.behavior.template === "player_nova") {
       requireNumberAtLeast(params.radius, "半径", 1, errors);
       requireIntegerAtLeast(params.expand_duration_ms, "扩散时长毫秒", 0, errors);
       requireIntegerAtLeast(params.hit_at_ms, "命中时机毫秒", 0, errors);
@@ -3290,6 +3719,23 @@ function SkillEditorPanel({
       }
       if (params.damage_falloff_by_distance !== undefined && !editor.options.damage_falloff_modes.some((option) => option.value === params.damage_falloff_by_distance)) {
         errors.push("距离衰减规则必须使用已有选项。");
+      }
+    } else if (draft.behavior.template === "melee_arc") {
+      requireNumberRange(params.arc_angle, "扇形角度", 1, 180, errors);
+      requireNumberAtLeast(params.arc_radius, "扇形半径", 1, errors);
+      requireIntegerAtLeast(params.windup_ms, "前摇毫秒", 0, errors);
+      requireIntegerAtLeast(params.hit_at_ms, "命中时机毫秒", 0, errors);
+      if (Number(params.hit_at_ms) < Number(params.windup_ms)) errors.push("命中时机毫秒不能早于前摇毫秒。");
+      requireIntegerAtLeast(params.max_targets, "最大目标数", 1, errors);
+      requireNumberRange(params.status_chance_scale, "状态几率倍率", 0, 10, errors);
+      if (!editor.options.facing_policies.some((option) => option.value === params.facing_policy)) {
+        errors.push("朝向规则必须使用已有选项。");
+      }
+      if (!editor.options.hit_shapes.some((option) => option.value === params.hit_shape)) {
+        errors.push("命中形状必须使用已有选项。");
+      }
+      if (typeof params.slash_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.slash_vfx_key)) {
+        errors.push("斩击特效键必须是配置键。");
       }
     } else {
       requirePositiveInteger(params.projectile_count, "投射物数量", errors);
@@ -3892,9 +4338,33 @@ function SkillEditorPanel({
                         <NumberInput label="后摇毫秒" value={draft.cast.recovery_ms} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.cast.recovery_ms = value; })} />
                       </div>
                     </EditorSection>
-                    <EditorSection title={draft.behavior.template === "player_nova" ? "范围新星模块" : draft.behavior.template === "fan_projectile" ? "扇形投射物模块" : "投射物模块"}>
+                    <EditorSection title={draft.behavior.template === "damage_zone" ? "伤害结算区域" : draft.behavior.template === "player_nova" ? "范围新星模块" : draft.behavior.template === "melee_arc" ? "近战扇形模块" : draft.behavior.template === "fan_projectile" ? "扇形投射物模块" : "投射物模块"}>
                       <div className="skill-editor-form-grid">
-                        {draft.behavior.template === "player_nova" ? (
+                        {draft.behavior.template === "damage_zone" ? (
+                          <>
+                            <SelectInput label="结算区域类型" value={String(projectileParams?.shape ?? "circle")} options={editor.options.zone_shapes} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.shape = value; })} />
+                            <SelectInput label="起点规则" value={String(projectileParams?.origin_policy ?? "caster")} options={editor.options.origin_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.origin_policy = value; })} />
+                            <SelectInput label="朝向规则" value={String(projectileParams?.facing_policy ?? "none")} options={editor.options.facing_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.facing_policy = value; })} />
+                            {String(projectileParams?.shape ?? "circle") === "rectangle" ? (
+                              <>
+                                <NumberInput label="长" value={numberValue(projectileParams?.length, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.length = value; })} />
+                                <NumberInput label="宽" value={numberValue(projectileParams?.width, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.width = value; })} />
+                                <NumberInput label="角度" value={numberValue(projectileParams?.angle_offset_deg, 0)} min={-180} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.angle_offset_deg = value; })} />
+                              </>
+                            ) : (
+                              <>
+                                <NumberInput label="半径" value={numberValue(projectileParams?.radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.radius = value; })} />
+                                <ReadOnlyInput label="角度" value="360°" />
+                              </>
+                            )}
+                            <NumberInput label="命中时机毫秒" value={numberValue(projectileParams?.hit_at_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_at_ms = value; })} />
+                            <NumberInput label="最大目标数" value={numberValue(projectileParams?.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
+                            <NumberInput label="状态几率倍率" value={numberValue(projectileParams?.status_chance_scale, 1)} min={0} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.status_chance_scale = value; })} />
+                            <TextInput label="区域特效键" value={String(projectileParams?.zone_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.zone_vfx_key = value; })} />
+                            <ReadOnlyInput label="只读范围摘要" value={damageZoneRangeSummary(draft)} />
+                            <ReadOnlyInput label="只读命中时机摘要" value={damageZoneHitTimingSummary(draft)} />
+                          </>
+                        ) : draft.behavior.template === "player_nova" ? (
                           <>
                             <NumberInput label="半径" value={numberValue(projectileParams?.radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.radius = value; })} />
                             <NumberInput label="扩散时长毫秒" value={numberValue(projectileParams?.expand_duration_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.expand_duration_ms = value; })} />
@@ -3918,6 +4388,20 @@ function SkillEditorPanel({
                             <NumberInput label="状态几率倍率" value={numberValue(projectileParams?.status_chance_scale, 1)} min={0} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.status_chance_scale = value; })} />
                             <ReadOnlyInput label="只读范围摘要" value={playerNovaRangeSummary(draft)} />
                             <ReadOnlyInput label="只读命中时机摘要" value={playerNovaHitTimingSummary(draft)} />
+                          </>
+                        ) : draft.behavior.template === "melee_arc" ? (
+                          <>
+                            <NumberInput label="扇形角度" value={numberValue(projectileParams?.arc_angle, 1)} min={1} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.arc_angle = value; })} />
+                            <NumberInput label="扇形半径" value={numberValue(projectileParams?.arc_radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.arc_radius = value; })} />
+                            <NumberInput label="前摇毫秒" value={numberValue(projectileParams?.windup_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.windup_ms = value; })} />
+                            <NumberInput label="命中时机毫秒" value={numberValue(projectileParams?.hit_at_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_at_ms = value; })} />
+                            <NumberInput label="最大目标数" value={numberValue(projectileParams?.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
+                            <SelectInput label="朝向规则" value={String(projectileParams?.facing_policy ?? "nearest_target")} options={editor.options.facing_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.facing_policy = value; })} />
+                            <SelectInput label="命中形状" value={String(projectileParams?.hit_shape ?? "sector")} options={editor.options.hit_shapes} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_shape = value; })} />
+                            <NumberInput label="状态几率倍率" value={numberValue(projectileParams?.status_chance_scale, 1)} min={0} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.status_chance_scale = value; })} />
+                            <TextInput label="斩击特效键" value={String(projectileParams?.slash_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.slash_vfx_key = value; })} />
+                            <ReadOnlyInput label="只读扇形范围摘要" value={meleeArcRangeSummary(draft)} />
+                            <ReadOnlyInput label="只读命中时机摘要" value={meleeArcHitTimingSummary(draft)} />
                           </>
                         ) : draft.behavior.template === "fan_projectile" ? (
                           <>
@@ -4301,6 +4785,46 @@ function ProjectileParameterPanel({
         <EditorSection title="表现">
           <div className="skill-editor-form-grid">
             <TextInput label="释放特效" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
+            <TextInput label="命中特效" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
+            <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
+            <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
+            <TextInput label="伤害浮字" value={draft.presentation.floating_text} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text = value; })} />
+            <TextInput label="屏幕反馈" value={draft.presentation.screen_feedback} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.screen_feedback = value; })} />
+          </div>
+        </EditorSection>
+      </div>
+    );
+  }
+  if (draft.behavior.template === "melee_arc") {
+    return (
+      <div className="skill-editor-projectile-panel">
+        <EditorSection title="近战扇形">
+          <div className="skill-editor-form-grid">
+            <ReadOnlyInput label="技能编号" value={draft.id} />
+            <ReadOnlyInput label="行为模板" value={draft.behavior.template} />
+            <SelectInput label="朝向规则" value={String(params.facing_policy ?? "nearest_target")} options={editor.options.facing_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.facing_policy = value; })} />
+            <SelectInput label="命中形状" value={String(params.hit_shape ?? "sector")} options={editor.options.hit_shapes} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_shape = value; })} />
+            <NumberInput label="扇形角度" value={numberValue(params.arc_angle, 1)} min={1} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.arc_angle = value; })} />
+            <NumberInput label="扇形半径" value={numberValue(params.arc_radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.arc_radius = value; })} />
+            <NumberInput label="最大目标数" value={numberValue(params.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
+            <NumberInput label="状态几率倍率" value={numberValue(params.status_chance_scale, 1)} min={0} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.status_chance_scale = value; })} />
+            <ReadOnlyInput label="只读扇形范围摘要" value={meleeArcRangeSummary(draft)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="时序">
+          <div className="skill-editor-form-grid">
+            <NumberInput label="前摇毫秒" value={numberValue(params.windup_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.windup_ms = value; })} />
+            <NumberInput label="命中时机毫秒" value={numberValue(params.hit_at_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_at_ms = value; })} />
+            <SelectInput label="伤害时机" value={draft.hit.damage_timing ?? "on_melee_hit"} options={editor.options.damage_timings} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.damage_timing = value; })} />
+            <NumberInput label="命中延迟毫秒" value={numberValue(draft.hit.hit_delay_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.hit_delay_ms = value; })} />
+            <NumberInput label="命中范围" value={numberValue(draft.hit.hit_radius, 0)} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.hit_radius = value; })} />
+            <ReadOnlyInput label="只读命中时机摘要" value={meleeArcHitTimingSummary(draft)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="表现">
+          <div className="skill-editor-form-grid">
+            <TextInput label="斩击特效键" value={String(params.slash_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.slash_vfx_key = value; })} />
+            <TextInput label="施法特效" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
             <TextInput label="命中特效" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
             <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
             <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
@@ -4788,7 +5312,9 @@ function SkillTestArenaResultView({
       </div>
       <div className="skill-test-arena-checks">
         {result.has_area_spawn && <span>已生成范围</span>}
-        <span>{result.has_projectile_spawn ? "已生成投射物" : result.has_area_spawn ? "范围生成已生效" : "缺少投射物生成"}</span>
+        {result.has_melee_arc && <span>已生成近战扇形</span>}
+        {result.has_damage_zone && <span>已生成伤害结算区域</span>}
+        <span>{result.has_projectile_spawn ? "已生成投射物" : result.has_damage_zone ? "伤害区域已生效" : result.has_area_spawn ? "范围生成已生效" : result.has_melee_arc ? "近战扇形已生效" : "缺少技能生成事件"}</span>
         <span>{result.has_damage ? "已生成伤害" : "缺少伤害"}</span>
         <span>{result.has_hit_vfx ? "已生成命中特效" : "缺少命中特效"}</span>
         <span>{result.has_floating_text ? "已生成伤害浮字" : "缺少伤害浮字"}</span>
@@ -4876,6 +5402,10 @@ function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTe
       <div className="skill-event-checks">
         <TimelineCheck label="存在范围生成" passed={Boolean(result.timeline_checks.has_area_spawn)} />
         <TimelineCheck label="范围以玩家为中心" passed={Boolean(result.timeline_checks.area_center_passed ?? true)} />
+        <TimelineCheck label="存在伤害结算区域" passed={Boolean(result.timeline_checks.has_damage_zone)} />
+        <TimelineCheck label="伤害区域从玩家发出" passed={Boolean(result.timeline_checks.damage_zone_origin_passed ?? true)} />
+        <TimelineCheck label="存在近战扇形" passed={Boolean(result.timeline_checks.has_melee_arc)} />
+        <TimelineCheck label="扇形从玩家发出" passed={Boolean(result.timeline_checks.melee_arc_origin_passed ?? true)} />
         <TimelineCheck label="存在投射物生成" passed={result.timeline_checks.has_projectile_spawn} />
         <TimelineCheck label="存在多枚投射物" passed={result.timeline_checks.has_multiple_projectile_spawn} />
         <TimelineCheck label="存在投射物命中" passed={result.timeline_checks.has_projectile_hit} />
@@ -4884,6 +5414,7 @@ function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTe
         <TimelineCheck label="存在伤害浮字" passed={result.timeline_checks.has_floating_text} />
         <TimelineCheck label="伤害不早于投射物生成" passed={result.timeline_checks.damage_after_or_at_projectile_spawn} />
         <TimelineCheck label="伤害不早于命中时机" passed={Boolean(result.timeline_checks.damage_after_or_at_area_hit ?? true)} />
+        <TimelineCheck label="伤害不早于近战命中" passed={Boolean(result.timeline_checks.damage_after_or_at_melee_hit ?? true)} />
         <TimelineCheck label="飞行期间未扣血" passed={result.timeline_checks.flight_no_damage_passed} />
         <TimelineCheck label="扇形方向可见" passed={result.timeline_checks.fan_direction_passed} />
         <TimelineCheck label="基础时序检查" passed={result.timeline_checks.basic_timing_passed} />
@@ -5005,6 +5536,33 @@ function playerNovaHitTimingSummary(packageData: SkillPackageData) {
   const expandDurationMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.expand_duration_ms, 0)));
   const hitAtMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.hit_at_ms, 0)));
   return `扩散 ${expandDurationMs} ms，${hitAtMs} ms 时结算伤害`;
+}
+
+function meleeArcRangeSummary(packageData: SkillPackageData) {
+  const arcAngle = clamp(numberValue(packageData.behavior.params.arc_angle, 0), 1, 180);
+  const arcRadius = Math.max(1, numberValue(packageData.behavior.params.arc_radius, 1));
+  const maxTargets = Math.max(1, Math.round(numberValue(packageData.behavior.params.max_targets, 1)));
+  return `半径 ${formatPreviewNumber(arcRadius)}，角度 ${formatPreviewNumber(arcAngle)}°，最多命中 ${maxTargets} 个目标`;
+}
+
+function meleeArcHitTimingSummary(packageData: SkillPackageData) {
+  const windupMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.windup_ms, 0)));
+  const hitAtMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.hit_at_ms, 0)));
+  return `前摇 ${windupMs} ms，${hitAtMs} ms 时结算伤害`;
+}
+
+function damageZoneRangeSummary(packageData: SkillPackageData) {
+  const params = packageData.behavior.params;
+  const maxTargets = Math.max(1, Math.round(numberValue(params.max_targets, 1)));
+  if (String(params.shape ?? "circle") === "rectangle") {
+    return `矩形，长 ${formatPreviewNumber(numberValue(params.length, 0))}，宽 ${formatPreviewNumber(numberValue(params.width, 0))}，角度 ${formatPreviewNumber(numberValue(params.angle_offset_deg, 0))}°，最多命中 ${maxTargets} 个目标`;
+  }
+  return `圆形，半径 ${formatPreviewNumber(numberValue(params.radius, 0))}，角度 360°，最多命中 ${maxTargets} 个目标`;
+}
+
+function damageZoneHitTimingSummary(packageData: SkillPackageData) {
+  const hitAtMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.hit_at_ms, 0)));
+  return `${hitAtMs} ms 时通过 damage 事件结算伤害`;
 }
 
 function projectileLaneOffsets(projectileCount: number, spacing = 18) {
@@ -5132,6 +5690,75 @@ function selectPlayerNovaTargets(enemies: Enemy[], skill: SkillPreview, player: 
     .sort((left, right) => left.distance - right.distance)
     .slice(0, maxTargets)
     .map((item) => item.enemy);
+}
+
+function selectDamageZoneTargets(enemies: Enemy[], skill: SkillPreview, player: { x: number; y: number }): Enemy[] {
+  const runtimeParams = skill.runtime_params ?? {};
+  const shape = String(runtimeParams.shape ?? "circle");
+  const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? (enemies.length || 1))));
+  if (shape === "rectangle") {
+    const length = Math.max(1, Number(runtimeParams.length ?? skill.cast?.search_range ?? 320));
+    const width = Math.max(1, Number(runtimeParams.width ?? 96));
+    const facingTarget = nearestEnemy(enemies, player);
+    if (!facingTarget) return [];
+    const direction = rotateDirection(guideDirection(player, facingTarget), Number(runtimeParams.angle_offset_deg ?? 0));
+    return [...enemies]
+      .filter((enemy) => enemy.hp > 0)
+      .map((enemy) => {
+        const metrics = projectileLineMetrics(player, direction, enemy);
+        return { enemy, forward: metrics.forward, lateral: metrics.perpendicular };
+      })
+      .filter((item) => item.forward >= 0 && item.forward <= length && item.lateral <= width / 2)
+      .sort((left, right) => left.forward - right.forward || left.lateral - right.lateral)
+      .slice(0, maxTargets)
+      .map((item) => item.enemy);
+  }
+  const radius = Math.max(1, Number(runtimeParams.radius ?? skill.cast?.search_range ?? 360));
+  return [...enemies]
+    .map((enemy) => ({ enemy, distance: Math.hypot(enemy.x - player.x, enemy.y - player.y) }))
+    .filter((item) => item.enemy.hp > 0 && item.distance <= radius)
+    .sort((left, right) => left.distance - right.distance)
+    .slice(0, maxTargets)
+    .map((item) => item.enemy);
+}
+
+function selectMeleeArcTargets(enemies: Enemy[], skill: SkillPreview, player: { x: number; y: number }): Enemy[] {
+  const runtimeParams = skill.runtime_params ?? {};
+  const arcAngle = clamp(Number(runtimeParams.arc_angle ?? 70), 1, 180);
+  const arcRadius = Math.max(1, Number(runtimeParams.arc_radius ?? skill.cast?.search_range ?? 320));
+  const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? (enemies.length || 1))));
+  const candidates = [...enemies]
+    .filter((enemy) => enemy.hp > 0 && distance(enemy, player) <= arcRadius)
+    .sort((a, b) => distance(a, player) - distance(b, player));
+  const facingTarget = candidates[0] ?? nearestEnemy(enemies, player);
+  if (!facingTarget) return [];
+  const facingDirection = guideDirection(player, facingTarget);
+  return candidates
+    .map((enemy) => {
+      const targetDirection = guideDirection(player, enemy);
+      return {
+        enemy,
+        distance: distance(enemy, player),
+        angle: angleBetweenDegrees(facingDirection, targetDirection)
+      };
+    })
+    .filter((item) => item.angle <= arcAngle / 2)
+    .sort((left, right) => left.distance - right.distance)
+    .slice(0, maxTargets)
+    .map((item) => item.enemy);
+}
+
+function nearestEnemy(enemies: Enemy[], source: { x: number; y: number }) {
+  return [...enemies]
+    .filter((enemy) => enemy.hp > 0)
+    .sort((a, b) => distance(a, source) - distance(b, source))[0];
+}
+
+function angleBetweenDegrees(left: { x: number; y: number }, right: { x: number; y: number }) {
+  const a = normalizedWorldDirection(left);
+  const b = normalizedWorldDirection(right);
+  const dot = clamp(a.x * b.x + a.y * b.y, -1, 1);
+  return Math.acos(dot) * 180 / Math.PI;
 }
 
 function projectileSpawnWorldPosition(player: { x: number; y: number }, runtimeParams: Record<string, unknown>) {
@@ -5827,7 +6454,7 @@ function gemColorValue(gem: Gem) {
 }
 
 function usesSkillEventPipeline(skill: SkillPreview) {
-  return Boolean(skill.skill_package_id && (isProjectileSkillTemplate(skill.behavior_template) || skill.behavior_template === "player_nova"));
+  return Boolean(skill.skill_package_id && (isProjectileSkillTemplate(skill.behavior_template) || skill.behavior_template === "player_nova" || skill.behavior_template === "melee_arc" || skill.behavior_template === "damage_zone"));
 }
 
 function isProjectileSkillTemplate(behaviorTemplate: string | undefined) {
@@ -6397,6 +7024,41 @@ function PassiveAuraLayer({ effects, x, y }: { effects: Gem[]; x: number; y: num
   );
 }
 
+function DamageZoneLayer({ zones }: { zones: DamageZoneVfx[] }) {
+  return (
+    <>
+      {zones.map((zone) => {
+        const position = projectBattleWorldToScreen(zone.x, zone.y);
+        const progress = clamp(1 - zone.ttl / zone.duration, 0, 1);
+        const angle = zone.shape === "rectangle"
+          ? worldDirectionToBattleScreenAngle({ x: zone.directionX || 1, y: zone.directionY || 0 }, { x: zone.x, y: zone.y })
+          : 0;
+        return (
+          <div
+            key={zone.id}
+            className={`damage-zone-vfx damage-zone-vfx-${zone.shape} damage-zone-${zone.damageType}`}
+            style={{
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              width: `${zone.shape === "circle" ? zone.radius * 2 : zone.length}px`,
+              height: `${zone.shape === "circle" ? zone.radius * 2 : zone.width}px`,
+              transform: zone.shape === "rectangle"
+                ? `translate(0, -50%) rotate(${angle}rad)`
+                : "translate(-50%, -50%)",
+              opacity: Math.max(0, 1 - progress * 0.75),
+              zIndex: BATTLE_ENTITY_Z_INDEX_BASE - 2,
+            }}
+            data-skill-event="damage_zone"
+            data-vfx-key={zone.vfxKey}
+            data-zone-id={zone.zoneId}
+            data-skill-id={zone.skillId}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 function AreaNovaLayer({ novas }: { novas: AreaNova[] }) {
   return (
     <>
@@ -6428,6 +7090,46 @@ function AreaNovaLayer({ novas }: { novas: AreaNova[] }) {
             data-center-world-y={nova.y}
             data-radius={nova.radius}
             data-ring-width={nova.ringWidth}
+            aria-hidden="true"
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function MeleeArcLayer({ arcs }: { arcs: MeleeArcVfx[] }) {
+  return (
+    <>
+      {arcs.map((arc) => {
+        const visualPoint = projectBattleWorldToScreen(arc.x, arc.y);
+        const duration = Math.max(0.001, arc.duration);
+        const progress = clamp(1 - arc.ttl / duration, 0, 1);
+        const opacity = Math.max(0, arc.ttl / duration);
+        const diameter = Math.max(1, arc.radius * 2);
+        const angle = worldDirectionToBattleScreenAngle({ x: arc.directionX, y: arc.directionY }, { x: arc.x, y: arc.y }) * 180 / Math.PI;
+        return (
+          <div
+            key={arc.id}
+            className={`melee-arc-vfx melee-arc-vfx-${visualTone(arc.vfxKey || arc.damageType)}`}
+            style={{
+              left: visualPoint.x,
+              top: visualPoint.y,
+              width: diameter,
+              height: diameter * DIMETRIC_GROUND_EFFECT_Y_SCALE,
+              opacity,
+              transform: `translate(-50%, -50%) rotate(${angle}deg) scale(${0.82 + progress * 0.18})`,
+              ["--arc-angle" as string]: `${arc.arcAngle}deg`,
+              zIndex: BATTLE_ENTITY_Z_INDEX_BASE - 1,
+            }}
+            data-skill-event="melee_arc"
+            data-vfx-key={arc.vfxKey}
+            data-arc-id={arc.arcId}
+            data-skill-id={arc.skillId}
+            data-origin-world-x={arc.x}
+            data-origin-world-y={arc.y}
+            data-arc-angle={arc.arcAngle}
+            data-arc-radius={arc.radius}
             aria-hidden="true"
           />
         );

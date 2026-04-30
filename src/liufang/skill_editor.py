@@ -101,6 +101,8 @@ TEST_ARENA_SCENE_ALIASES = {
 }
 TIMELINE_EVENT_TYPES = (
     "cast_start",
+    "damage_zone",
+    "melee_arc",
     "area_spawn",
     "projectile_spawn",
     "projectile_hit",
@@ -128,13 +130,30 @@ NESTED_KEY_ORDER = {
     "cast": ("mode", "target_selector", "search_range", "cooldown_ms", "windup_ms", "recovery_ms"),
     "behavior": ("template", "params"),
     "params": (
-        "radius",
-        "expand_duration_ms",
+        "shape",
+        "origin_policy",
+        "facing_policy",
         "hit_at_ms",
+        "max_targets",
+        "status_chance_scale",
+        "zone_vfx_key",
+        "radius",
+        "length",
+        "width",
+        "angle_offset_deg",
+        "expand_duration_ms",
         "ring_width",
+        "arc_angle",
+        "arc_radius",
+        "windup_ms",
+        "hit_at_ms",
+        "max_targets",
+        "facing_policy",
+        "hit_shape",
+        "status_chance_scale",
+        "slash_vfx_key",
         "center_policy",
         "damage_falloff_by_distance",
-        "status_chance_scale",
         "projectile_count",
         "burst_interval_ms",
         "spread_angle_deg",
@@ -735,7 +754,13 @@ class SkillEditorService:
             "final_cooldown_ms": final_skill.final_cooldown_ms,
             "projectile_count": final_skill.projectile_count,
             "projectile_speed": runtime_params.get("projectile_speed", 0),
+            "shape": runtime_params.get("shape", ""),
             "radius": runtime_params.get("radius", 0),
+            "length": runtime_params.get("length", 0),
+            "width": runtime_params.get("width", 0),
+            "angle_offset_deg": runtime_params.get("angle_offset_deg", 0),
+            "arc_radius": runtime_params.get("arc_radius", 0),
+            "arc_angle": runtime_params.get("arc_angle", 0),
             "expand_duration_ms": runtime_params.get("expand_duration_ms", 0),
             "hit_at_ms": runtime_params.get("hit_at_ms", 0),
         }
@@ -822,7 +847,9 @@ class SkillEditorService:
             "event_count": len(events),
             "event_counts": event_counts,
             "has_projectile_spawn": event_counts.get("projectile_spawn", 0) > 0,
+            "has_damage_zone": event_counts.get("damage_zone", 0) > 0,
             "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
+            "has_melee_arc": event_counts.get("melee_arc", 0) > 0,
             "has_damage": event_counts.get("damage", 0) > 0,
             "has_hit_vfx": event_counts.get("hit_vfx", 0) > 0,
             "has_floating_text": event_counts.get("floating_text", 0) > 0,
@@ -1094,9 +1121,25 @@ def skill_editor_options() -> dict[str, Any]:
         "damage_timings": [
             {"value": "on_projectile_hit", "text": "投射物命中时"},
             {"value": "on_area_hit", "text": "范围命中时"},
+            {"value": "on_melee_hit", "text": "近战命中时"},
+            {"value": "on_damage_zone_hit", "text": "伤害区域命中时"},
         ],
         "center_policies": [{"value": "player_center", "text": "玩家中心"}],
+        "zone_shapes": [
+            {"value": "circle", "text": "圆形"},
+            {"value": "rectangle", "text": "矩形"},
+        ],
+        "origin_policies": [{"value": "caster", "text": "释放源"}],
         "damage_falloff_modes": [{"value": "none", "text": "无衰减"}],
+        "facing_policies": [
+            {"value": "none", "text": "无需朝向"},
+            {"value": "nearest_target", "text": "朝向最近敌人"},
+            {"value": "locked_or_nearest_target", "text": "锁定敌人，否则最近敌人"},
+        ],
+        "hit_shapes": [
+            {"value": "sector", "text": "扇形"},
+            {"value": "arc", "text": "弧形"},
+        ],
         "target_policies": [
             {"value": "selected_target", "text": "当前目标"},
             {"value": "nearest_enemy", "text": "最近敌人"},
@@ -1267,8 +1310,8 @@ def _chinese_test_arena_error(error: Exception) -> str:
 
 
 def _arena_stages(enemies: list[dict[str, Any]], events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
-    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "area_spawn"})
-    stage_name = "技能生效前" if any(event.type == "area_spawn" for event in spawn_events) else "投射物飞行中"
+    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "area_spawn", "melee_arc", "damage_zone"})
+    stage_name = "技能生效前" if any(event.type in {"area_spawn", "melee_arc", "damage_zone"} for event in spawn_events) else "投射物飞行中"
     stages = [_arena_stage(stage_name, enemies, events, spawn_events)]
     damage_delays = sorted({event.delay_ms for event in events if event.type == "damage"})
     for delay in damage_delays:
@@ -1327,7 +1370,7 @@ def _event_summary(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
             "target_entity": event.target_entity,
             "amount": event.amount,
             "projectile_index": event.payload.get("projectile_index"),
-            "area_id": event.payload.get("area_id"),
+            "area_id": event.payload.get("zone_id") or event.payload.get("area_id") or event.payload.get("arc_id"),
         }
         for event in sorted(events, key=lambda item: (item.delay_ms, _event_sort_order(item.type), item.event_id))
     ]
@@ -1346,9 +1389,11 @@ def _event_timeline(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
 
 def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list[dict[str, Any]]) -> dict[str, Any]:
     event_counts = _event_counts(events)
-    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "area_spawn"}]
+    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "area_spawn", "melee_arc", "damage_zone"}]
     projectile_spawn_times = [event.timestamp_ms for event in events if event.type == "projectile_spawn"]
     area_spawn_events = [event for event in events if event.type == "area_spawn"]
+    melee_arc_events = [event for event in events if event.type == "melee_arc"]
+    damage_zone_events = [event for event in events if event.type == "damage_zone"]
     damage_times = [event.timestamp_ms for event in events if event.type == "damage"]
     damage_after_spawn = bool(spawn_times and damage_times and min(damage_times) >= min(spawn_times))
     damage_after_area_hit = bool(
@@ -1365,30 +1410,71 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
         not area_spawn_events
         or all(event.payload.get("center") == event.position for event in area_spawn_events)
     )
+    melee_arc_origin_passed = bool(
+        not melee_arc_events
+        or all(event.payload.get("origin") == event.position for event in melee_arc_events)
+    )
+    damage_zone_origin_passed = bool(
+        not damage_zone_events
+        or all(event.payload.get("origin") == event.position for event in damage_zone_events)
+    )
+    damage_after_melee_hit = bool(
+        not melee_arc_events
+        or (
+            damage_times
+            and all(
+                min(damage_times) >= arc_event.timestamp_ms + int(arc_event.payload.get("hit_at_ms", 0))
+                for arc_event in melee_arc_events
+            )
+        )
+    )
+    damage_after_damage_zone_hit = bool(
+        not damage_zone_events
+        or (
+            damage_times
+            and all(
+                min(damage_times) >= zone_event.timestamp_ms + int(zone_event.payload.get("hit_at_ms", 0))
+                for zone_event in damage_zone_events
+            )
+        )
+    )
     flight_no_damage = all(
         monster["current_life"] == monster["max_life"]
         for monster in flight_stage_monsters
     )
     basic_timing_passed = (
-        (event_counts.get("projectile_spawn", 0) > 0 or event_counts.get("area_spawn", 0) > 0)
+        (
+            event_counts.get("projectile_spawn", 0) > 0
+            or event_counts.get("area_spawn", 0) > 0
+            or event_counts.get("melee_arc", 0) > 0
+            or event_counts.get("damage_zone", 0) > 0
+        )
         and event_counts.get("damage", 0) > 0
         and event_counts.get("hit_vfx", 0) > 0
         and event_counts.get("floating_text", 0) > 0
         and damage_after_spawn
         and damage_after_area_hit
+        and damage_after_melee_hit
+        and damage_after_damage_zone_hit
         and flight_no_damage
     )
     return {
         "has_projectile_spawn": event_counts.get("projectile_spawn", 0) > 0,
         "has_multiple_projectile_spawn": event_counts.get("projectile_spawn", 0) > 1,
+        "has_damage_zone": event_counts.get("damage_zone", 0) > 0,
         "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
+        "has_melee_arc": event_counts.get("melee_arc", 0) > 0,
         "has_projectile_hit": event_counts.get("projectile_hit", 0) > 0,
         "has_damage": event_counts.get("damage", 0) > 0,
         "has_hit_vfx": event_counts.get("hit_vfx", 0) > 0,
         "has_floating_text": event_counts.get("floating_text", 0) > 0,
         "damage_after_or_at_projectile_spawn": damage_after_spawn,
         "damage_after_or_at_area_hit": damage_after_area_hit,
+        "damage_after_or_at_melee_hit": damage_after_melee_hit,
+        "damage_after_or_at_damage_zone_hit": damage_after_damage_zone_hit,
         "area_center_passed": area_center_passed,
+        "melee_arc_origin_passed": melee_arc_origin_passed,
+        "damage_zone_origin_passed": damage_zone_origin_passed,
         "flight_no_damage_passed": flight_no_damage,
         "fan_direction_passed": _has_fan_directions(events),
         "basic_timing_passed": basic_timing_passed,
@@ -1398,7 +1484,9 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
 def _event_sort_order(event_type: str) -> int:
     order = {
         "cast_start": -1,
+        "damage_zone": 0,
         "area_spawn": 0,
+        "melee_arc": 0,
         "projectile_spawn": 0,
         "projectile_hit": 1,
         "damage": 2,
@@ -1424,6 +1512,7 @@ def _event_type_text(event_type: str) -> str:
     return {
         "cast_start": "释放开始",
         "area_spawn": "范围生成",
+        "melee_arc": "近战扇形",
         "projectile_spawn": "投射物生成",
         "projectile_hit": "投射物命中",
         "damage": "伤害结算",

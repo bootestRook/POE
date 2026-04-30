@@ -16,6 +16,7 @@ ALLOWED_SKILL_BEHAVIOR_TEMPLATES = frozenset(
         "chain",
         "player_nova",
         "melee_arc",
+        "damage_zone",
         "line_pierce",
         "orbit",
         "delayed_area",
@@ -571,6 +572,19 @@ def validate_skill_package_data(
         expand_duration_ms = params.get("expand_duration_ms")
         if _is_integer(hit_at_ms) and _is_integer(expand_duration_ms) and hit_at_ms > expand_duration_ms:
             raise ValueError(f"skill package behavior.params.hit_at_ms must not exceed expand_duration_ms: {package_id}")
+    if behavior_template == "melee_arc":
+        hit_at_ms = params.get("hit_at_ms")
+        windup_ms = params.get("windup_ms")
+        allow_hit_during_windup = bool(behavior_templates[behavior_template].get("allow_hit_during_windup", False))
+        if (
+            not allow_hit_during_windup
+            and _is_integer(hit_at_ms)
+            and _is_integer(windup_ms)
+            and hit_at_ms < windup_ms
+        ):
+            raise ValueError(f"skill package behavior.params.hit_at_ms must not be earlier than windup_ms: {package_id}")
+    if behavior_template == "damage_zone":
+        _validate_damage_zone_params(params, behavior_templates[behavior_template], package_id)
 
     hit = _require_mapping(package["hit"], "hit")
     _reject_unknown_fields(hit, SKILL_PACKAGE_FIELD_ALLOWLISTS["hit"], "hit", package_id)
@@ -578,7 +592,7 @@ def validate_skill_package_data(
         raise ValueError(f"skill package hit.base_damage must be non-negative: {package_id}")
     if not isinstance(hit["can_crit"], bool) or not isinstance(hit["can_apply_status"], bool):
         raise ValueError(f"skill package hit crit/status fields must be booleans: {package_id}")
-    if "damage_timing" in hit and hit["damage_timing"] not in {"on_projectile_hit", "on_area_hit"}:
+    if "damage_timing" in hit and hit["damage_timing"] not in {"on_projectile_hit", "on_area_hit", "on_melee_hit", "on_damage_zone_hit"}:
         raise ValueError(f"skill package hit.damage_timing is invalid: {package_id}")
     if "hit_delay_ms" in hit and (not _is_integer(hit["hit_delay_ms"]) or hit["hit_delay_ms"] < 0):
         raise ValueError(f"skill package hit.hit_delay_ms must be a non-negative integer: {package_id}")
@@ -657,6 +671,13 @@ def _validate_behavior_param(param_name: str, param_value: Any, constraint: Any,
         enum_values = constraint.get("enum", [])
         if isinstance(enum_values, list) and enum_values and param_value not in enum_values:
             raise ValueError(f"skill package behavior.params.{param_name} has invalid enum value: {package_id}")
+        pattern = constraint.get("pattern")
+        if isinstance(pattern, str) and not re.match(pattern, param_value):
+            raise ValueError(f"skill package behavior.params.{param_name} must match required key pattern: {package_id}")
+        return
+    if expected_type == "key":
+        if not isinstance(param_value, str) or not LOCALIZATION_KEY_PATTERN.match(param_value) or "." not in param_value:
+            raise ValueError(f"skill package behavior.params.{param_name} must be a key: {package_id}")
         return
     if expected_type == "object":
         if not isinstance(param_value, dict):
@@ -675,6 +696,33 @@ def _validate_behavior_param(param_name: str, param_value: Any, constraint: Any,
         return
     if isinstance(param_value, str):
         raise ValueError(f"skill package behavior.params must not contain expression strings: {package_id}.{param_name}")
+
+
+def _validate_damage_zone_params(params: dict[str, Any], template: dict[str, Any], package_id: str) -> None:
+    shape = params.get("shape")
+    if shape not in {"circle", "rectangle"}:
+        raise ValueError(f"skill package behavior.params.shape is invalid: {package_id}")
+    if params.get("origin_policy") != "caster":
+        raise ValueError(f"skill package behavior.params.origin_policy is invalid: {package_id}")
+    if params.get("facing_policy") not in {"none", "nearest_target", "locked_or_nearest_target"}:
+        raise ValueError(f"skill package behavior.params.facing_policy is invalid: {package_id}")
+    if not _is_integer(params.get("hit_at_ms")) or params["hit_at_ms"] < 0:
+        raise ValueError(f"skill package behavior.params.hit_at_ms must be a non-negative integer: {package_id}")
+    if not _is_integer(params.get("max_targets")) or params["max_targets"] < 1:
+        raise ValueError(f"skill package behavior.params.max_targets must be a positive integer: {package_id}")
+
+    shape_sets = _require_mapping(template.get("shape_param_sets", {}), "shape_param_sets")
+    shape_rules = _require_mapping(shape_sets.get(str(shape), {}), f"shape_param_sets.{shape}")
+    for field_name in shape_rules.get("required", []):
+        if field_name not in params:
+            raise ValueError(f"skill package behavior.params.{field_name} is required for {shape}: {package_id}")
+    for field_name in shape_rules.get("forbidden", []):
+        if field_name in params:
+            raise ValueError(f"skill package behavior.params.{field_name} is not allowed for {shape}: {package_id}")
+    if shape == "circle" and params.get("facing_policy") != "none":
+        raise ValueError(f"skill package behavior.params.facing_policy must be none for circle: {package_id}")
+    if shape == "rectangle" and params.get("facing_policy") == "none":
+        raise ValueError(f"skill package behavior.params.facing_policy must choose a target direction for rectangle: {package_id}")
 
 
 def _validate_minimum(param_name: str, param_value: int | float, constraint: dict[str, Any], package_id: str) -> None:

@@ -1,0 +1,34 @@
+id: melee_arc
+allowed_params: ["arc_angle", "arc_radius", "windup_ms", "hit_at_ms", "max_targets", "facing_policy", "hit_shape", "status_chance_scale", "slash_vfx_key"]
+param_constraints:
+  arc_angle:
+    type: number
+    minimum: 1
+    maximum: 180
+  arc_radius:
+    type: number
+    minimum: 1
+  windup_ms:
+    type: integer
+    minimum: 0
+  hit_at_ms:
+    type: integer
+    minimum: 0
+  max_targets:
+    type: integer
+    minimum: 1
+  facing_policy:
+    type: string
+    enum: ["nearest_target"]
+  hit_shape:
+    type: string
+    enum: ["sector", "arc"]
+  status_chance_scale:
+    type: number
+    minimum: 0
+    maximum: 10
+  slash_vfx_key:
+    type: key
+events: ["cast_start", "melee_arc", "damage", "hit_vfx", "floating_text"]
+damage_timing: on_melee_hit
+allow_hit_during_windup: false
