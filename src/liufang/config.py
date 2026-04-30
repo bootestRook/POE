@@ -345,7 +345,38 @@ def load_gem_definitions(config_root: Path) -> dict[str, GemDefinition]:
                 apply_filter_tags_all=frozenset(apply_filter.get("tags_all", [])),
                 apply_filter_tags_none=frozenset(apply_filter.get("tags_none", [])),
             )
+    for package in load_skill_packages(config_root).values():
+        package_id = str(package["id"])
+        existing = definitions.get(package_id)
+        if existing is not None:
+            definitions[package_id] = _active_gem_definition_from_package(package, existing)
     return definitions
+
+
+def _active_gem_definition_from_package(package: dict[str, Any], existing: GemDefinition) -> GemDefinition:
+    package_id = str(package["id"])
+    template_id = _legacy_template_id_from_package_id(package_id)
+    classification = package["classification"]
+    presentation = package["presentation"]
+    return GemDefinition(
+        base_gem_id=package_id,
+        gem_type=existing.gem_type,
+        gem_kind=existing.gem_kind,
+        sudoku_digit=existing.sudoku_digit,
+        tags=frozenset(existing.tags | set(str(tag) for tag in classification["tags"]) | {template_id}),
+        name_key=str(package["display"]["name_key"]),
+        description_key=str(package["display"]["description_key"]),
+        category=existing.category,
+        effect_stats=existing.effect_stats,
+        passive_effects=existing.passive_effects,
+        skill_template_id=template_id,
+        visual_effect=str(presentation["vfx"]),
+        shape_effect=existing.shape_effect,
+        apply_filter_target_kinds=existing.apply_filter_target_kinds,
+        apply_filter_tags_any=existing.apply_filter_tags_any,
+        apply_filter_tags_all=existing.apply_filter_tags_all,
+        apply_filter_tags_none=existing.apply_filter_tags_none,
+    )
 
 
 def _gem_kind_from_entry(entry: dict[str, Any]) -> str:
@@ -535,6 +566,11 @@ def validate_skill_package_data(
             _require_mapping(behavior_templates[behavior_template].get("param_constraints", {}), "param_constraints").get(param_name, {}),
             package_id,
         )
+    if behavior_template == "player_nova":
+        hit_at_ms = params.get("hit_at_ms")
+        expand_duration_ms = params.get("expand_duration_ms")
+        if _is_integer(hit_at_ms) and _is_integer(expand_duration_ms) and hit_at_ms > expand_duration_ms:
+            raise ValueError(f"skill package behavior.params.hit_at_ms must not exceed expand_duration_ms: {package_id}")
 
     hit = _require_mapping(package["hit"], "hit")
     _reject_unknown_fields(hit, SKILL_PACKAGE_FIELD_ALLOWLISTS["hit"], "hit", package_id)
@@ -542,7 +578,7 @@ def validate_skill_package_data(
         raise ValueError(f"skill package hit.base_damage must be non-negative: {package_id}")
     if not isinstance(hit["can_crit"], bool) or not isinstance(hit["can_apply_status"], bool):
         raise ValueError(f"skill package hit crit/status fields must be booleans: {package_id}")
-    if "damage_timing" in hit and hit["damage_timing"] not in {"on_projectile_hit"}:
+    if "damage_timing" in hit and hit["damage_timing"] not in {"on_projectile_hit", "on_area_hit"}:
         raise ValueError(f"skill package hit.damage_timing is invalid: {package_id}")
     if "hit_delay_ms" in hit and (not _is_integer(hit["hit_delay_ms"]) or hit["hit_delay_ms"] < 0):
         raise ValueError(f"skill package hit.hit_delay_ms must be a non-negative integer: {package_id}")

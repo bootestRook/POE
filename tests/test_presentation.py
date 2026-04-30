@@ -69,7 +69,9 @@ class PresentationTest(unittest.TestCase):
 
         active_detail = self.presenter.gem_detail(active, board=self.board, final_skills=final_skills)
         self.assertEqual(active_detail["name_text"], self.presenter.localizer.text("gem.active_fire_bolt.name"))
-        self.assertEqual(active_detail["description_text"], "发射一枚火球，命中敌人造成火焰伤害。")
+        self.assertIn("火球", active_detail["description_text"])
+        self.assertIn("火焰伤害", active_detail["description_text"])
+        self.assertNotIn("{projectile_count_text}", active_detail["description_text"])
         self.assertNotIn("验证", active_detail["description_text"])
         self.assertNotIn("标签", active_detail["description_text"])
         self.assertEqual(active_detail["category_text"], self.presenter.localizer.text("tag.active_skill_gem.name"))

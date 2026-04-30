@@ -46,6 +46,18 @@ const requiredCode = [
   "GemTooltip",
   "FireBoltView",
   "SkillEvent",
+  "skill-editor-workspace",
+  "skill-editor-left-pane",
+  "skill-editor-middle-pane",
+  "skill-editor-right-pane",
+  "skill-editor-bottom-bar",
+  "skill-editor-projectile-panel",
+  "showLaunchPoints",
+  "showTargetPoint",
+  "showDirectionLines",
+  "showCollisionRadius",
+  "showSearchRange",
+  "validateDraftBeforeSave",
   "scheduledSkillEvents",
   "createProjectileSkillEvents",
   "consumeSkillEvent",
@@ -102,6 +114,8 @@ const unitAnimationCodeChecks = [
   "fallbackAnimation",
   "baseMoveSpeed",
   "currentMoveSpeed",
+  "unitMovementState",
+  "UNIT_RUN_SPEED_RATIO",
   "data-animation-state",
   "data-animation-direction",
   "data-animation-playback-rate",
@@ -123,8 +137,8 @@ const spriteTestChecks = [
   "Sprites 动作测试场景",
   "待机测试区",
   "行走测试区",
-  "攻击测试区",
-  "当前 sprite 未配置攻击动作",
+  "奔跑测试区",
+  "run",
   "缺少动作：",
   "缺少方向：",
   "缺少帧配置：",
@@ -150,12 +164,7 @@ function hasAnimation(unitId, stateName) {
 const requiredUnitAnimations = [
   ["player_adventurer", "idle"],
   ["player_adventurer", "walk"],
-  ["enemy_imp", "idle"],
-  ["enemy_imp", "walk"],
-  ["enemy_imp", "attack"],
-  ["enemy_brute", "idle"],
-  ["enemy_brute", "walk"],
-  ["enemy_brute", "attack"]
+  ["player_adventurer", "run"]
 ];
 
 for (const [unitId, stateName] of requiredUnitAnimations) {
@@ -169,9 +178,21 @@ if (hasAnimation("player_adventurer", "attack")) {
 }
 
 for (const direction of ["left", "right"]) {
-  for (const unitId of ["player_adventurer", "enemy_imp", "enemy_brute"]) {
-    if (!unitAnimationManifest.assets.some((asset) => asset.unitId === unitId && asset.direction === direction)) {
-      throw new Error(`缺少 4 方向动画资源：${unitId}/${direction}`);
+  if (!unitAnimationManifest.assets.some((asset) => asset.unitId === "player_adventurer" && asset.direction === direction)) {
+    throw new Error(`缺少角色方向动画资源：player_adventurer/${direction}`);
+  }
+}
+
+for (const action of ["idle", "walk", "run"]) {
+  for (const direction of ["left", "right"]) {
+    const asset = unitAnimationManifest.assets.find((item) => item.unitId === "player_adventurer" && item.state === action && item.direction === direction);
+    if (!asset) throw new Error(`缺少规范角色动作资源：player_adventurer/${action}/${direction}`);
+    if (asset.frameCount !== 6) throw new Error(`角色动作帧数错误：${action}/${direction}`);
+    if (!String(asset.path).includes(`player_adventurer_${action}_${direction}.png`)) {
+      throw new Error(`角色动作 sheet 命名不规范：${asset.path}`);
+    }
+    if (!String(asset.framesPath ?? "").includes(`/frames/player_adventurer/${action}/${direction}`)) {
+      throw new Error(`角色动作序列帧目录不规范：${asset.framesPath}`);
     }
   }
 }
@@ -195,23 +216,38 @@ const skillEditorChecks = [
   "技能文件列表",
   "仅编辑已迁移技能包允许的字段",
   "active_fire_bolt",
+  "active_ice_shards",
+  "active_penetrating_shot",
+  "active_frost_nova",
+  "player_nova",
+  "area_spawn",
+  "player-nova-vfx",
+  "createPlayerNovaSkillEvents",
+  "selectPlayerNovaTargets",
+  "penetrating_shot",
+  "PENETRATING_SHOT_VFX",
+  "PENETRATING_SHOT_ART_FACING_OFFSET_DEG",
+  "penetrating_shot-muzzle-vfx",
+  "fan_projectile",
   "火焰弹",
-  "技能文件路径",
+  "冰棱散射",
+  "技能配置来源",
   "行为模板",
   "结构校验通过",
   "未迁移 / 不可编辑",
   "不可打开",
   "基础信息模块",
   "释放参数模块",
-  "投射物子弹模块",
+  "投射物模块",
   "伤害点模块",
   "表现模块",
   "预览字段模块",
-  "id（只读）",
+  "技能编号（只读）",
   "保存技能包",
   "保存成功",
   "/api/skill-editor/save",
   "requestSkillEditorSave",
+  "openSkillEditorPanel",
   "initialSkillEditorOpen",
   "initialSkillEditorMode",
   "/skill-editor",
@@ -220,6 +256,12 @@ const skillEditorChecks = [
   "版本",
   "冷却毫秒",
   "投射物速度",
+  "扇形投射物模块",
+  "扇形角度",
+  "角度步长",
+  "生成模式",
+  "单枚伤害倍率",
+  "只读飞行时间摘要",
   "连发间隔毫秒",
   "散射角度",
   "基础伤害",
@@ -232,16 +274,26 @@ const skillEditorChecks = [
   "runtime-skill-trajectory-line",
   "projectileLaneOffsets",
   "projectileSpreadDirections",
+  "projectileSpreadAngleDeg",
+  "projectileAngleStepDeg",
+  "isProjectileSkillTemplate",
   "rotateDirection",
   "selectProjectileTargets",
   "ProjectileDamageTarget",
   "projectileIndex",
+  "data-projectile-index",
+  "data-current-world-x",
+  "data-velocity-world-x",
+  "data-local-spread-angle",
+  "data-pierce-remaining",
+  "data-projectile-speed",
+  "data-impact-kind",
   ".p${projectileIndex + 1}.damage",
   "maxHitsPerProjectile",
   "collisionRadius * 3",
   "projectileLineMetrics",
   "pierce_count",
-  "测试 Modifier 栈",
+  "测试词缀栈",
   "可测试辅助效果",
   "已选择效果",
   "清空测试栈",
@@ -252,13 +304,13 @@ const skillEditorChecks = [
   "同行",
   "同列",
   "同宫",
-  "来源强度 source_power",
-  "目标强度 target_power",
-  "导管强度 conduit_power",
-  "临时 FinalSkillInstance 预览",
+  "来源强度",
+  "目标强度",
+  "导管强度",
+  "临时最终技能实例预览",
   "原始最终伤害",
   "测试后最终伤害",
-  "未生效 modifier 列表",
+  "未生效词缀列表",
   "/api/skill-editor/modifier-preview",
   "requestSkillEditorModifierPreview",
   "技能测试场",
@@ -270,24 +322,26 @@ const skillEditorChecks = [
   "暂停",
   "单步",
   "重置",
-  "启用测试 Modifier 栈",
+  "启用测试词缀栈",
   "本次事件原始摘要",
   "飞行期间未扣血：通过",
   "/api/skill-editor/test-arena/run",
   "requestSkillTestArenaRun",
-  "SkillEvent 时间线",
+  "技能事件时间线",
   "支持识别的事件类型",
   "释放开始",
   "投射物命中",
   "冷却更新",
   "事件时间",
+  "存在多枚投射物",
+  "扇形方向可见",
   "延迟",
   "持续时间",
   "来源实体",
   "目标实体",
   "伤害类型",
-  "特效 Key",
-  "原因 Key",
+  "特效标识",
+  "原因标识",
   "附加数据",
   "基础时序检查",
   "event_timeline",
@@ -301,10 +355,22 @@ for (const text of skillEditorChecks) {
   }
 }
 
+const penetratingShotEditorEntry = state.skill_editor.entries.find((entry) => entry.id === "active_penetrating_shot");
+if (!penetratingShotEditorEntry?.openable || !penetratingShotEditorEntry?.editable || !penetratingShotEditorEntry?.package_data) {
+  throw new Error("active_penetrating_shot must be openable and editable in SkillEditor state.");
+}
+
 const forbiddenSkillEditorText = [
   ">Save<",
   ">Edit<",
   "SkillEditor V0",
+  "测试 Modifier 栈",
+  "启用测试 Modifier 栈",
+  "SkillEvent 时间线",
+  "modifier 列表",
+  "特效 Key",
+  "原因 Key",
+  "skill.yaml",
   ">保存<",
   "自测报告",
   "编辑器专用预览场景",

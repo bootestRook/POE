@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import replace
+from math import hypot
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,32 +57,59 @@ class SkillRuntimeTest(unittest.TestCase):
         )
 
         expected_spawn_count = final_skill.projectile_count
-        self.assertEqual(
-            [event.type for event in events],
-            ["projectile_spawn"] * expected_spawn_count + ["damage", "hit_vfx", "floating_text"] * expected_spawn_count,
-        )
-        spawn = events[0]
-        impact_events = events[expected_spawn_count:]
-        damage, hit_vfx, floating_text = impact_events[:3]
+        event_types = [event.type for event in events]
+        self.assertEqual(event_types.count("projectile_spawn"), expected_spawn_count)
+        self.assertIn("damage", event_types)
+        self.assertIn("hit_vfx", event_types)
+        self.assertIn("floating_text", event_types)
+        spawn_events = [event for event in events if event.type == "projectile_spawn"]
+        spawn = spawn_events[0]
+        impact_events = [event for event in events if event.type in {"damage", "hit_vfx", "floating_text"}]
+        damage = next(event for event in events if event.type == "damage")
+        hit_vfx = next(event for event in events if event.type == "hit_vfx")
+        floating_text = next(event for event in events if event.type == "floating_text")
         runtime_params = final_skill.runtime_params or {}
         projectile_speed = max(1.0, float(runtime_params.get("projectile_speed", 720.0)))
         burst_interval_ms = max(0, int(runtime_params.get("burst_interval_ms", 0)))
         spread_angle_deg = max(0.0, float(runtime_params.get("spread_angle_deg", 0.0)))
-        expected_duration_ms = round(100 / projectile_speed * 1000)
+        spawn_offset = runtime_params.get("spawn_offset", {})
+        spawn_position = {"x": float(spawn_offset.get("x", 0.0)), "y": float(spawn_offset.get("y", 0.0))}
+        expected_distance = hypot(100.0 - spawn_position["x"], 0.0 - spawn_position["y"])
+        expected_duration_ms = round(expected_distance / projectile_speed * 1000)
         expected_duration_ms = max(
             int(runtime_params.get("min_duration_ms", 0)),
             min(expected_duration_ms, int(runtime_params.get("max_duration_ms", 1000))),
         )
-        self.assertEqual(spawn.position, {"x": 0.0, "y": 0.0})
+        self.assertEqual(spawn.position, spawn_position)
+        self.assertEqual(spawn.payload["spawn_world_position"], spawn_position)
+        self.assertEqual(spawn.payload["vfx_spawn_world_position"], spawn_position)
+        self.assertEqual(spawn.payload["direction_world"], spawn.direction)
+        self.assertEqual(spawn.payload["vfx_direction_world"], spawn.direction)
+        self.assertAlmostEqual(
+            hypot(spawn.payload["velocity_world"]["x"], spawn.payload["velocity_world"]["y"]),
+            projectile_speed,
+            places=6,
+        )
         self.assertEqual(spawn.payload["projectile_count"], expected_spawn_count)
         if expected_spawn_count > 1:
-            self.assertEqual(events[1].delay_ms, burst_interval_ms)
+            self.assertEqual(spawn_events[1].delay_ms, burst_interval_ms)
             if spread_angle_deg > 0:
                 self.assertNotEqual(spawn.payload["end_position"], {"x": 100.0, "y": 0.0})
-                self.assertNotEqual(events[0].direction, events[1].direction)
-            self.assertEqual(events[0].payload["spread_angle_deg"], spread_angle_deg)
-            self.assertEqual(impact_events[-3].payload["projectile_index"], expected_spawn_count)
-            self.assertEqual(impact_events[-3].delay_ms, expected_duration_ms + burst_interval_ms * (expected_spawn_count - 1))
+                self.assertNotEqual(spawn_events[0].direction, spawn_events[1].direction)
+                first_projectile_damage = next(
+                    event for event in impact_events
+                    if event.type == "damage" and event.payload["projectile_index"] == spawn.payload["projectile_index"]
+                )
+                self.assertAlmostEqual(first_projectile_damage.position["x"], spawn.payload["end_position"]["x"])
+                self.assertAlmostEqual(first_projectile_damage.position["y"], spawn.payload["end_position"]["y"])
+                self.assertEqual(first_projectile_damage.payload["impact_world_position"], first_projectile_damage.position)
+            self.assertEqual(spawn.payload["spread_angle_deg"], spread_angle_deg)
+            last_projectile_impacts = [
+                event for event in impact_events
+                if event.payload["projectile_index"] == expected_spawn_count
+            ]
+            self.assertTrue(last_projectile_impacts)
+            self.assertEqual(last_projectile_impacts[0].delay_ms, expected_duration_ms + burst_interval_ms * (expected_spawn_count - 1))
         else:
             self.assertEqual(spawn.payload["end_position"], {"x": 100.0, "y": 0.0})
         self.assertEqual(spawn.duration_ms, expected_duration_ms)
@@ -95,12 +124,62 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertIn("火焰伤害", floating_text.payload["text"])
 
 
+    def test_fire_bolt_projectile_alignment_payload_covers_eight_directions(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = final_skill.runtime_params or {}
+        runtime_params = {**runtime_params, "projectile_count": 1, "spread_angle_deg": 0}
+        final_skill = replace(final_skill, projectile_count=1, runtime_params=runtime_params)
+        spawn_offset = runtime_params.get("spawn_offset", {})
+        spawn_position = {"x": float(spawn_offset.get("x", 0.0)), "y": float(spawn_offset.get("y", 0.0))}
+        directions = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ]
+
+        for dx, dy in directions:
+            with self.subTest(direction=(dx, dy)):
+                length = hypot(dx, dy)
+                expected_direction = {"x": dx / length, "y": dy / length}
+                target = Position(
+                    spawn_position["x"] + expected_direction["x"] * 100,
+                    spawn_position["y"] + expected_direction["y"] * 100,
+                )
+                events = SkillRuntime().execute(
+                    final_skill,
+                    source_entity="player_1",
+                    source_position=Position(0, 0),
+                    target_entity="monster_1",
+                    target_position=target,
+                    timestamp_ms=10,
+                )
+
+                spawn = [event for event in events if event.type == "projectile_spawn"][0]
+                hit_vfx = [event for event in events if event.type == "hit_vfx"][0]
+                self.assertEqual(spawn.position, spawn_position)
+                self.assertEqual(spawn.payload["spawn_world_position"], spawn_position)
+                self.assertEqual(spawn.payload["vfx_spawn_world_position"], spawn_position)
+                self.assertAlmostEqual(spawn.direction["x"], expected_direction["x"])
+                self.assertAlmostEqual(spawn.direction["y"], expected_direction["y"])
+                self.assertEqual(spawn.payload["direction_world"], spawn.direction)
+                self.assertEqual(spawn.payload["vfx_direction_world"], spawn.direction)
+                self.assertEqual(hit_vfx.position, {"x": target.x, "y": target.y})
+                self.assertEqual(hit_vfx.payload["impact_world_position"], hit_vfx.position)
+
     def test_fire_bolt_projectile_multi_target_runtime_respects_pierce_and_projectile_count(self) -> None:
         self.inventory.add_instance("active", "active_fire_bolt")
         self.board.mount_gem("active", 0, 0)
         final_skill = self.calculator.calculate_all()[0]
         runtime_params = dict(final_skill.runtime_params or {})
         runtime_params["projectile_count"] = 2
+        runtime_params["spread_angle_deg"] = 0
         runtime_params["hit_policy"] = "pierce"
         runtime_params["pierce_count"] = 1
         final_skill = final_skill.__class__(
@@ -125,6 +204,370 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertEqual(len(spawn_events), 2)
         self.assertEqual(len(damage_events), 4)
         self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2"})
+
+    def test_fire_bolt_projectile_respects_angle_step(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = {
+            **(final_skill.runtime_params or {}),
+            "projectile_count": 3,
+            "spread_angle_deg": 60,
+            "angle_step": 15,
+        }
+        final_skill = replace(final_skill, projectile_count=3, runtime_params=runtime_params)
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(100, 0),
+            timestamp_ms=10,
+        )
+
+        spawn_events = [event for event in events if event.type == "projectile_spawn"]
+
+        self.assertEqual([event.payload["local_spread_angle"] for event in spawn_events], [-15.0, 0.0, 15.0])
+        self.assertEqual([event.payload["angle_step"] for event in spawn_events], [15.0, 15.0, 15.0])
+
+    def test_penetrating_shot_uses_projectile_params_and_pierces_targets(self) -> None:
+        self.inventory.add_instance("active", "active_penetrating_shot")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(120, 0),
+            timestamp_ms=10,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 120, "y": -18}},
+                {"entity_id": "monster_2", "position": {"x": 240, "y": -18}},
+                {"entity_id": "monster_3", "position": {"x": 360, "y": -18}},
+            ],
+        )
+
+        spawn_events = [event for event in events if event.type == "projectile_spawn"]
+        hit_events = [event for event in events if event.type == "projectile_hit"]
+        damage_events = [event for event in events if event.type == "damage"]
+
+        self.assertEqual(final_skill.skill_package_id, "active_penetrating_shot")
+        self.assertEqual(final_skill.behavior_template, "projectile")
+        self.assertEqual(final_skill.runtime_params["hit_policy"], "pierce")
+        self.assertEqual(final_skill.runtime_params["spread_angle_deg"], 0)
+        self.assertEqual(final_skill.runtime_params["angle_step"], 0)
+        self.assertEqual(len(spawn_events), 1)
+        self.assertEqual(len(hit_events), 3)
+        self.assertEqual(len(damage_events), 3)
+        self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2", "monster_3"})
+        self.assertTrue(all(event.damage_type == "physical" for event in damage_events))
+        self.assertTrue(all(event.payload["hit_policy"] == "pierce" for event in damage_events))
+        self.assertTrue(all(event.delay_ms > 0 for event in damage_events))
+        self.assertEqual(spawn_events[0].payload["skill_id"], "active_penetrating_shot")
+        self.assertEqual(spawn_events[0].payload["vfx_spawn_world_position"], spawn_events[0].payload["spawn_world_position"])
+        self.assertEqual(spawn_events[0].payload["vfx_direction_world"], spawn_events[0].payload["direction_world"])
+        self.assertEqual(spawn_events[0].payload["projectile_speed"], final_skill.runtime_params["projectile_speed"])
+        self.assertEqual(spawn_events[0].payload["pierce_remaining"], final_skill.runtime_params["pierce_count"])
+        self.assertEqual([event.payload["pierce_remaining"] for event in hit_events], [3, 2, 1])
+        self.assertTrue(all(event.payload["impact_kind"] == "projectile_hit_continue" for event in hit_events))
+        self.assertTrue(all(event.payload["projectile_continues"] for event in hit_events))
+        self.assertTrue(all(event.payload["hit_world_position"] == event.position for event in hit_events))
+
+    def test_penetrating_shot_single_target_visual_travels_past_hit(self) -> None:
+        self.inventory.add_instance("active", "active_penetrating_shot")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = final_skill.runtime_params or {}
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(120, 0),
+            timestamp_ms=10,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 120, "y": -18}},
+            ],
+        )
+
+        spawn = next(event for event in events if event.type == "projectile_spawn")
+        damage = next(event for event in events if event.type == "damage")
+        projectile_speed = float(runtime_params["projectile_speed"])
+        max_distance = float(runtime_params["max_distance"])
+        spawn_position = spawn.payload["spawn_world_position"]
+        expected_duration_ms = round(max_distance / projectile_speed * 1000)
+
+        self.assertEqual(spawn.duration_ms, expected_duration_ms)
+        self.assertEqual(spawn.payload["end_position"], {"x": spawn_position["x"] + max_distance, "y": spawn_position["y"]})
+        self.assertLess(damage.delay_ms, spawn.duration_ms)
+        self.assertEqual(damage.position, {"x": 120.0, "y": -18.0})
+        self.assertEqual(damage.payload["pierce_remaining"], int(runtime_params["pierce_count"]))
+        self.assertEqual(damage.payload["impact_kind"], "projectile_hit_continue")
+        self.assertEqual(damage.payload["expire_world_position"], spawn.payload["end_position"])
+
+    def test_ice_shards_fan_projectile_outputs_real_fan_events(self) -> None:
+        self.inventory.add_instance("active", "active_ice_shards")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = {**(final_skill.runtime_params or {}), "projectile_count": 3, "spread_angle": 20, "angle_step": 10}
+        final_skill = replace(final_skill, projectile_count=3, runtime_params=runtime_params)
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, -12),
+            target_entity="dummy_mid",
+            target_position=Position(360, -12),
+            timestamp_ms=0,
+            target_entities=[
+                {"entity_id": "dummy_left", "position": {"x": 360, "y": -72}},
+                {"entity_id": "dummy_mid", "position": {"x": 360, "y": -12}},
+                {"entity_id": "dummy_right", "position": {"x": 360, "y": 48}},
+            ],
+        )
+
+        spawn_events = [event for event in events if event.type == "projectile_spawn"]
+        hit_events = [event for event in events if event.type == "projectile_hit"]
+        damage_events = [event for event in events if event.type == "damage"]
+        hit_vfx_events = [event for event in events if event.type == "hit_vfx"]
+        floating_events = [event for event in events if event.type == "floating_text"]
+        directions = {(round(event.direction["x"], 4), round(event.direction["y"], 4)) for event in spawn_events}
+
+        self.assertEqual(final_skill.skill_package_id, "active_ice_shards")
+        self.assertEqual(final_skill.behavior_template, "fan_projectile")
+        self.assertEqual(final_skill.damage_type, "cold")
+        self.assertEqual(len(spawn_events), final_skill.projectile_count)
+        self.assertGreater(len(directions), 1)
+        self.assertTrue(hit_events)
+        self.assertTrue(damage_events)
+        self.assertTrue(hit_vfx_events)
+        self.assertTrue(floating_events)
+        self.assertTrue(all(event.damage_type == "cold" for event in damage_events))
+        self.assertGreater(min(event.delay_ms for event in damage_events), 0)
+        self.assertGreaterEqual(min(event.timestamp_ms for event in damage_events), min(event.timestamp_ms for event in spawn_events))
+        self.assertTrue({event.target_entity for event in damage_events}.issubset({"dummy_left", "dummy_mid", "dummy_right"}))
+        spawn_by_index = {event.payload["projectile_index"]: event for event in spawn_events}
+        self.assertEqual(sorted(spawn_by_index), [1, 2, 3])
+        self.assertEqual(len({event.payload["projectile_id"] for event in spawn_events}), final_skill.projectile_count)
+        self.assertEqual([event.payload["local_spread_angle"] for event in spawn_events], [-10.0, 0.0, 10.0])
+        for event in hit_events + damage_events + hit_vfx_events + floating_events:
+            spawn = spawn_by_index[event.payload["projectile_index"]]
+            dx = event.position["x"] - spawn.position["x"]
+            dy = event.position["y"] - spawn.position["y"]
+            perpendicular = abs(dx * spawn.direction["y"] - dy * spawn.direction["x"])
+            self.assertAlmostEqual(perpendicular, 0.0)
+            self.assertEqual(event.payload["projectile_id"], spawn.payload["projectile_id"])
+            self.assertEqual(event.payload["direction_world"], spawn.payload["direction_world"])
+            self.assertEqual(event.payload["velocity_world"], spawn.payload["velocity_world"])
+            self.assertEqual(event.payload["hit_world_position"], event.position)
+            self.assertEqual(event.payload["impact_world_position"], event.position)
+
+    def test_ice_shards_fan_projectile_params_change_count_direction_and_flight_time(self) -> None:
+        self.inventory.add_instance("active", "active_ice_shards")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        base_params = dict(final_skill.runtime_params or {})
+
+        def with_params(**params: float | int) -> object:
+            runtime_params = {**base_params, **params}
+            projectile_count = int(runtime_params.get("projectile_count", final_skill.projectile_count))
+            return final_skill.__class__(
+                **{**final_skill.__dict__, "projectile_count": projectile_count, "runtime_params": runtime_params}
+            )
+
+        def run(skill: object) -> tuple:
+            return SkillRuntime().execute(
+                skill,
+                source_entity="player_1",
+                source_position=Position(0, -12),
+                target_entity="dummy_mid",
+                target_position=Position(360, -12),
+                timestamp_ms=0,
+                target_entities=[
+                    {"entity_id": "dummy_left", "position": {"x": 360, "y": -72}},
+                    {"entity_id": "dummy_mid", "position": {"x": 360, "y": -12}},
+                    {"entity_id": "dummy_right", "position": {"x": 360, "y": 48}},
+                ],
+            )
+
+        more_count_events = run(with_params(projectile_count=5))
+        narrow_events = run(with_params(projectile_count=3, spread_angle=10, angle_step=5))
+        wide_events = run(with_params(projectile_count=3, spread_angle=40, angle_step=20))
+        slow_events = run(with_params(projectile_speed=240))
+        fast_events = run(with_params(projectile_speed=720))
+
+        self.assertEqual(len([event for event in more_count_events if event.type == "projectile_spawn"]), 5)
+        narrow_directions = [event.direction for event in narrow_events if event.type == "projectile_spawn"]
+        wide_directions = [event.direction for event in wide_events if event.type == "projectile_spawn"]
+        self.assertNotEqual(narrow_directions, wide_directions)
+        slow_spawn = next(event for event in slow_events if event.type == "projectile_spawn")
+        fast_spawn = next(event for event in fast_events if event.type == "projectile_spawn")
+        self.assertGreater(slow_spawn.duration_ms, fast_spawn.duration_ms)
+
+    def test_ice_shards_low_projectile_speed_is_not_capped_to_one_second(self) -> None:
+        self.inventory.add_instance("active", "active_ice_shards")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = dict(final_skill.runtime_params or {})
+        runtime_params["projectile_speed"] = 20
+        runtime_params.pop("max_duration_ms", None)
+        final_skill = final_skill.__class__(**{**final_skill.__dict__, "runtime_params": runtime_params})
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, -12),
+            target_entity="dummy_mid",
+            target_position=Position(360, -12),
+            timestamp_ms=0,
+            target_entities=[
+                {"entity_id": "dummy_mid", "position": {"x": 360, "y": -12}},
+            ],
+        )
+
+        spawn = next(event for event in events if event.type == "projectile_spawn")
+        damage = next(event for event in events if event.type == "damage")
+        self.assertEqual(spawn.duration_ms, 18000)
+        self.assertEqual(damage.delay_ms, 18000)
+
+    def test_ice_shards_projectile_vfx_alignment_payload_covers_counts_and_eight_directions(self) -> None:
+        self.inventory.add_instance("active", "active_ice_shards")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        base_params = dict(final_skill.runtime_params or {})
+        directions = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ]
+
+        for projectile_count in (1, 3, 5):
+            runtime_params = {**base_params, "projectile_count": projectile_count}
+            tested_skill = replace(final_skill, projectile_count=projectile_count, runtime_params=runtime_params)
+            spawn_position = {"x": 0.0, "y": -12.0}
+            for dx, dy in directions:
+                with self.subTest(projectile_count=projectile_count, direction=(dx, dy)):
+                    length = hypot(dx, dy)
+                    expected_direction = {"x": dx / length, "y": dy / length}
+                    target = Position(
+                        spawn_position["x"] + expected_direction["x"] * 360,
+                        spawn_position["y"] + expected_direction["y"] * 360,
+                    )
+                    events = SkillRuntime().execute(
+                        tested_skill,
+                        source_entity="player_1",
+                        source_position=Position(0, -12),
+                        target_entity="dummy",
+                        target_position=target,
+                        timestamp_ms=0,
+                    )
+                    spawn_events = [event for event in events if event.type == "projectile_spawn"]
+                    hit_vfx_events = [event for event in events if event.type == "hit_vfx"]
+
+                    self.assertEqual(len(spawn_events), projectile_count)
+                    self.assertEqual(len(hit_vfx_events), projectile_count)
+                    for spawn in spawn_events:
+                        self.assertEqual(spawn.position, spawn.payload["spawn_world_position"])
+                        self.assertEqual(spawn.payload["vfx_spawn_world_position"], spawn.payload["spawn_world_position"])
+                        self.assertEqual(spawn.payload["vfx_direction_world"], spawn.payload["direction_world"])
+                        self.assertEqual(spawn.payload["direction_world"], spawn.direction)
+                        self.assertAlmostEqual(
+                            hypot(spawn.payload["velocity_world"]["x"], spawn.payload["velocity_world"]["y"]),
+                            float(runtime_params["projectile_speed"]),
+                            places=6,
+                        )
+                        self.assertEqual(spawn.payload["projectile_count"], projectile_count)
+                        self.assertEqual(spawn.payload["skill_id"], "active_ice_shards")
+                    hit_by_projectile = {event.payload["projectile_id"]: event for event in hit_vfx_events}
+                    self.assertEqual(set(hit_by_projectile), {event.payload["projectile_id"] for event in spawn_events})
+                    for spawn in spawn_events:
+                        hit_vfx = hit_by_projectile[spawn.payload["projectile_id"]]
+                        self.assertEqual(hit_vfx.position, hit_vfx.payload["impact_world_position"])
+                        self.assertEqual(hit_vfx.position, hit_vfx.payload["hit_world_position"])
+
+    def test_frost_nova_player_nova_outputs_area_events_and_respects_timing(self) -> None:
+        self.inventory.add_instance("active", "active_frost_nova")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = {**(final_skill.runtime_params or {}), "radius": 300, "expand_duration_ms": 500, "hit_at_ms": 240}
+        final_skill = replace(final_skill, runtime_params=runtime_params)
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, -12),
+            target_entity="near_1",
+            target_position=Position(120, -12),
+            timestamp_ms=0,
+            target_entities=[
+                {"entity_id": "near_1", "position": {"x": 120, "y": -12}},
+                {"entity_id": "near_2", "position": {"x": 220, "y": -12}},
+                {"entity_id": "far_1", "position": {"x": 420, "y": -12}},
+            ],
+        )
+
+        event_types = [event.type for event in events]
+        area_spawn = next(event for event in events if event.type == "area_spawn")
+        damage_events = [event for event in events if event.type == "damage"]
+
+        self.assertEqual(final_skill.skill_package_id, "active_frost_nova")
+        self.assertEqual(final_skill.behavior_template, "player_nova")
+        self.assertEqual(final_skill.damage_type, "cold")
+        self.assertIn("cast_start", event_types)
+        self.assertEqual(area_spawn.position, {"x": 0.0, "y": -12.0})
+        self.assertEqual(area_spawn.payload["center"], area_spawn.position)
+        self.assertEqual(area_spawn.payload["radius"], 300)
+        self.assertEqual(area_spawn.payload["ring_width"], runtime_params["ring_width"])
+        self.assertEqual(area_spawn.duration_ms, 500)
+        self.assertEqual(area_spawn.payload["hit_at_ms"], 240)
+        self.assertEqual({event.target_entity for event in damage_events}, {"near_1", "near_2"})
+        self.assertTrue(all(event.damage_type == "cold" for event in damage_events))
+        self.assertTrue(all(event.delay_ms == 240 for event in damage_events))
+        self.assertTrue(all(event.timestamp_ms >= area_spawn.timestamp_ms + area_spawn.payload["hit_at_ms"] for event in damage_events))
+        self.assertIn("hit_vfx", event_types)
+        self.assertIn("floating_text", event_types)
+
+    def test_frost_nova_params_change_radius_duration_and_hit_timing(self) -> None:
+        self.inventory.add_instance("active", "active_frost_nova")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        base_params = dict(final_skill.runtime_params or {})
+
+        def run(**params: float | int) -> tuple:
+            tested_params = {**base_params, **params}
+            tested_skill = replace(final_skill, runtime_params=tested_params)
+            return SkillRuntime().execute(
+                tested_skill,
+                source_entity="player_1",
+                source_position=Position(0, -12),
+                target_entity="near_1",
+                target_position=Position(180, -12),
+                timestamp_ms=0,
+                target_entities=[
+                    {"entity_id": "near_1", "position": {"x": 180, "y": -12}},
+                    {"entity_id": "mid_1", "position": {"x": 360, "y": -12}},
+                ],
+            )
+
+        small = run(radius=220)
+        large = run(radius=430)
+        short = run(expand_duration_ms=300, hit_at_ms=200)
+        long = run(expand_duration_ms=700, hit_at_ms=200)
+        early = run(expand_duration_ms=700, hit_at_ms=120)
+        late = run(expand_duration_ms=700, hit_at_ms=420)
+
+        self.assertLess(len([event for event in small if event.type == "damage"]), len([event for event in large if event.type == "damage"]))
+        self.assertLess(next(event for event in short if event.type == "area_spawn").duration_ms, next(event for event in long if event.type == "area_spawn").duration_ms)
+        self.assertLess(next(event for event in early if event.type == "damage").delay_ms, next(event for event in late if event.type == "damage").delay_ms)
 
 
 if __name__ == "__main__":

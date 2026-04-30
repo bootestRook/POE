@@ -1,0 +1,4 @@
+interface:
+  display_name: "Projectile VFX Standard Production"
+  short_description: "Runtime-bound projectile VFX standard."
+  default_prompt: "使用 projectile-vfx-standard-production skill，为指定投射物技能制作或改造特效。"

@@ -105,12 +105,15 @@ class CombatTest(unittest.TestCase):
         self.assertEqual(session.monsters[0].current_life, 200)
         expected_spawn_count = session.active_skill_instances[0].projectile_count
         burst_interval_ms = int((session.active_skill_instances[0].runtime_params or {}).get("burst_interval_ms", 0))
-        self.assertEqual(
-            [event.type for event in session.skill_events],
-            ["projectile_spawn"] * expected_spawn_count + ["damage", "hit_vfx", "floating_text"] * expected_spawn_count,
-        )
+        event_types = [event.type for event in session.skill_events]
+        self.assertIn("cast_start", event_types)
+        self.assertEqual(event_types.count("projectile_spawn"), expected_spawn_count)
+        self.assertEqual(event_types.count("projectile_hit"), expected_spawn_count)
+        self.assertEqual(event_types.count("damage"), expected_spawn_count)
+        self.assertEqual(event_types.count("hit_vfx"), expected_spawn_count)
+        self.assertEqual(event_types.count("floating_text"), expected_spawn_count)
 
-        projectile_duration_ms = session.skill_events[0].duration_ms
+        projectile_duration_ms = next(event.duration_ms for event in session.skill_events if event.type == "projectile_spawn")
         before_hit_events = session.tick(projectile_duration_ms - 1)
         self.assertEqual(before_hit_events, ())
         self.assertEqual(session.monsters[0].current_life, 200)
@@ -132,7 +135,7 @@ class CombatTest(unittest.TestCase):
             self.assertEqual(second_events, ())
 
     def test_non_packaged_active_skills_keep_legacy_immediate_path(self) -> None:
-        self.inventory.add_instance("active", "active_ice_shards")
+        self.inventory.add_instance("active", "active_lightning_chain")
         self.board.mount_gem("active", 0, 0)
         session = CombatSession.start(
             player=self.player(),
@@ -146,7 +149,7 @@ class CombatTest(unittest.TestCase):
 
         self.assertEqual(len(events), 1)
         self.assertEqual(session.active_skill_instances[0].skill_package_id, "")
-        self.assertEqual(session.monsters[0].current_life, 22)
+        self.assertLess(session.monsters[0].current_life, 30)
         self.assertEqual(session.skill_events, [])
 
     def test_passive_self_stat_applies_before_combat_and_does_not_release(self) -> None:

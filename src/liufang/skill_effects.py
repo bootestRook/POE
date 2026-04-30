@@ -562,9 +562,12 @@ class SkillEffectCalculator:
         cooldown *= max(0.0, 1.0 - additive.get("cooldown_reduction_percent", 0.0) / 100.0)
         if speed_multiplier > 0:
             cooldown /= speed_multiplier
+        area_multiplier = 1.0 + additive.get("area_add_percent", 0.0) / 100.0
         runtime_params = dict(template.runtime_params)
         if "projectile_speed" in runtime_params:
             runtime_params["projectile_speed"] = float(runtime_params["projectile_speed"]) * speed_multiplier
+        if "radius" in runtime_params:
+            runtime_params["radius"] = float(runtime_params["radius"]) * area_multiplier
         base_projectile_count = int(runtime_params.get("projectile_count", 1))
         runtime_params["projectile_count"] = max(
             1,
@@ -586,7 +589,7 @@ class SkillEffectCalculator:
             base_cooldown_ms=template.base_cooldown_ms,
             final_cooldown_ms=max(0, round(cooldown)),
             projectile_count=int(runtime_params["projectile_count"]),
-            area_multiplier=1.0 + additive.get("area_add_percent", 0.0) / 100.0,
+            area_multiplier=area_multiplier,
             speed_multiplier=speed_multiplier,
             applied_modifiers=modifiers,
             skill_package_id=template.skill_package_id,

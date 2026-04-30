@@ -76,10 +76,14 @@
             "projectile_count": { "type": "integer", "minimum": 1 },
             "burst_interval_ms": { "type": "integer", "minimum": 0 },
             "spread_angle_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+            "spread_angle": { "type": "number", "minimum": 0, "maximum": 180 },
+            "angle_step": { "type": "number", "minimum": 0, "maximum": 90 },
             "projectile_width": { "type": "number", "minimum": 1 },
             "projectile_height": { "type": "number", "minimum": 1 },
             "max_distance": { "type": "number", "minimum": 1 },
             "hit_policy": { "enum": ["first_hit", "pierce"] },
+            "spawn_pattern": { "enum": ["centered_fan", "edge_to_edge"] },
+            "per_projectile_damage_scale": { "type": "number", "minimum": 0.01, "maximum": 10 },
             "pierce_count": { "type": "integer", "minimum": 0 },
             "collision_radius": { "type": "number", "minimum": 0 },
             "spawn_offset": {
@@ -95,7 +99,14 @@
             "impact_radius": { "type": "number", "minimum": 0 },
             "max_targets": { "type": "integer", "minimum": 1 },
             "min_duration_ms": { "type": "integer", "minimum": 0 },
-            "max_duration_ms": { "type": "integer", "minimum": 1 }
+            "max_duration_ms": { "type": "integer", "minimum": 1 },
+            "radius": { "type": "number", "minimum": 1 },
+            "expand_duration_ms": { "type": "integer", "minimum": 0 },
+            "hit_at_ms": { "type": "integer", "minimum": 0 },
+            "center_policy": { "enum": ["player_center"] },
+            "damage_falloff_by_distance": { "enum": ["none"] },
+            "ring_width": { "type": "number", "minimum": 1 },
+            "status_chance_scale": { "type": "number", "minimum": 0, "maximum": 10 }
           }
         }
       }
@@ -108,7 +119,7 @@
         "base_damage": { "type": "number", "minimum": 0 },
         "can_crit": { "type": "boolean" },
         "can_apply_status": { "type": "boolean" },
-        "damage_timing": { "enum": ["on_projectile_hit"] },
+        "damage_timing": { "enum": ["on_projectile_hit", "on_area_hit"] },
         "hit_delay_ms": { "type": "integer", "minimum": 0 },
         "hit_radius": { "type": "number", "minimum": 0 },
         "target_policy": { "enum": ["selected_target", "nearest_enemy"] }

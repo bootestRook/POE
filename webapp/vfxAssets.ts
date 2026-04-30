@@ -8,6 +8,11 @@ import iceShardsCrystalSparksUrl from "../assest/battle/vfx/ice_shards/ice_shard
 import iceShardsImpactBurstUrl from "../assest/battle/vfx/ice_shards/ice_shards_impact_burst.png";
 import iceShardsProjectileLoopUrl from "../assest/battle/vfx/ice_shards/ice_shards_projectile_loop.png";
 import iceShardsTrailFrostUrl from "../assest/battle/vfx/ice_shards/ice_shards_trail_frost.png";
+import penetratingShotManifest from "../assest/battle/vfx/penetrating_shot/penetrating_shot.vfx.json";
+import penetratingShotImpactSparksUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_impact_sparks.png";
+import penetratingShotMuzzleFlashUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_muzzle_flash.png";
+import penetratingShotProjectileLoopUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_projectile_loop.png";
+import penetratingShotTrailLinesUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_trail_lines.png";
 
 export type VfxBlendMode = "screen" | "normal";
 
@@ -39,6 +44,13 @@ export type IceShardsVfxManifest = {
   crystalSparks: VfxSpriteSheet;
 };
 
+export type PenetratingShotVfxManifest = {
+  muzzleFlash: VfxSpriteSheet;
+  projectileLoop: VfxSpriteSheet;
+  trailLines: VfxSpriteSheet;
+  impactSparks: VfxSpriteSheet;
+};
+
 const fireBoltUrls: Record<string, string> = {
   "fire_bolt_projectile_loop.png": fireBoltProjectileLoopUrl,
   "fire_bolt_trail_puffs.png": fireBoltTrailPuffsUrl,
@@ -51,6 +63,13 @@ const iceShardsUrls: Record<string, string> = {
   "ice_shards_trail_frost.png": iceShardsTrailFrostUrl,
   "ice_shards_impact_burst.png": iceShardsImpactBurstUrl,
   "ice_shards_crystal_sparks.png": iceShardsCrystalSparksUrl
+};
+
+const penetratingShotUrls: Record<string, string> = {
+  "penetrating_shot_muzzle_flash.png": penetratingShotMuzzleFlashUrl,
+  "penetrating_shot_projectile_loop.png": penetratingShotProjectileLoopUrl,
+  "penetrating_shot_trail_lines.png": penetratingShotTrailLinesUrl,
+  "penetrating_shot_impact_sparks.png": penetratingShotImpactSparksUrl
 };
 
 function withSource(sheet: Omit<VfxSpriteSheet, "src">, urls: Record<string, string>): VfxSpriteSheet {
@@ -74,6 +93,13 @@ const rawIceShardsManifest = iceShardsManifest as {
   crystalSparks: Omit<VfxSpriteSheet, "src">;
 };
 
+const rawPenetratingShotManifest = penetratingShotManifest as {
+  muzzleFlash: Omit<VfxSpriteSheet, "src">;
+  projectileLoop: Omit<VfxSpriteSheet, "src">;
+  trailLines: Omit<VfxSpriteSheet, "src">;
+  impactSparks: Omit<VfxSpriteSheet, "src">;
+};
+
 export const FIRE_BOLT_VFX: FireBoltVfxManifest = {
   projectileLoop: withSource(rawFireBoltManifest.projectileLoop, fireBoltUrls),
   trailPuffs: withSource(rawFireBoltManifest.trailPuffs, fireBoltUrls),
@@ -86,4 +112,11 @@ export const ICE_SHARDS_VFX: IceShardsVfxManifest = {
   trailFrost: withSource(rawIceShardsManifest.trailFrost, iceShardsUrls),
   impactBurst: withSource(rawIceShardsManifest.impactBurst, iceShardsUrls),
   crystalSparks: withSource(rawIceShardsManifest.crystalSparks, iceShardsUrls)
+};
+
+export const PENETRATING_SHOT_VFX: PenetratingShotVfxManifest = {
+  muzzleFlash: withSource(rawPenetratingShotManifest.muzzleFlash, penetratingShotUrls),
+  projectileLoop: withSource(rawPenetratingShotManifest.projectileLoop, penetratingShotUrls),
+  trailLines: withSource(rawPenetratingShotManifest.trailLines, penetratingShotUrls),
+  impactSparks: withSource(rawPenetratingShotManifest.impactSparks, penetratingShotUrls)
 };

@@ -47,6 +47,7 @@ class V1WebAppApi:
         self._seed_inventory()
 
     def state(self) -> dict[str, Any]:
+        self._reload_config_backed_services()
         final_skills, skill_error = self._final_skills_or_error()
         board_view = self.presenter.board_view(self.board, final_skills=final_skills)
         inventory = [
@@ -149,6 +150,8 @@ class V1WebAppApi:
         }
 
     def _reload_config_backed_services(self) -> None:
+        self.definitions = load_gem_definitions(self.config_root)
+        self.inventory.update_definitions(self.definitions)
         self.presenter = PresentationService.from_configs(self.config_root)
         self.skill_editor = SkillEditorService(self.config_root)
 

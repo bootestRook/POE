@@ -67,6 +67,7 @@ class V1RequestHandler(BaseHTTPRequestHandler):
         body = encode_json(payload)
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._send_no_cache_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -91,6 +92,7 @@ class V1RequestHandler(BaseHTTPRequestHandler):
         body = target.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
+        self._send_no_cache_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -101,9 +103,15 @@ class V1RequestHandler(BaseHTTPRequestHandler):
         )
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self._send_no_cache_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_no_cache_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
 
 
 def main() -> int:

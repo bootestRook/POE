@@ -46,6 +46,14 @@ if /I "%~1"=="--check" (
   exit /b 0
 )
 
+echo Stopping stale SkillEditor server on port %PORT%...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$targets = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -like '*tools\webapp_server.py --port %PORT%*' }; foreach ($p in $targets) { Stop-Process -Id $p.ProcessId -Force }"
+if errorlevel 1 (
+  echo Failed to stop stale SkillEditor server.
+  pause
+  exit /b 1
+)
+
 echo Starting SkillEditor...
 echo Browser URL: http://127.0.0.1:%PORT%/skill-editor
 start "" powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:%PORT%/skill-editor'"

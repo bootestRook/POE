@@ -1,0 +1,50 @@
+﻿{
+  "muzzleFlash": {
+    "image": "penetrating_shot_muzzle_flash.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "columns": 4,
+    "rows": 2,
+    "frameCount": 8,
+    "fps": 28,
+    "anchorX": 0.18,
+    "anchorY": 0.5,
+    "blendMode": "screen"
+  },
+  "projectileLoop": {
+    "image": "penetrating_shot_projectile_loop.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 4,
+    "rows": 1,
+    "frameCount": 4,
+    "fps": 24,
+    "anchorX": 0.58,
+    "anchorY": 0.5,
+    "blendMode": "screen"
+  },
+  "trailLines": {
+    "image": "penetrating_shot_trail_lines.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "columns": 4,
+    "rows": 2,
+    "frameCount": 8,
+    "fps": 22,
+    "anchorX": 0.75,
+    "anchorY": 0.5,
+    "blendMode": "screen"
+  },
+  "impactSparks": {
+    "image": "penetrating_shot_impact_sparks.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "columns": 4,
+    "rows": 2,
+    "frameCount": 8,
+    "fps": 28,
+    "anchorX": 0.5,
+    "anchorY": 0.5,
+    "blendMode": "screen"
+  }
+}

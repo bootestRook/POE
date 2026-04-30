@@ -1,0 +1,30 @@
+id: player_nova
+allowed_params: ["radius", "expand_duration_ms", "hit_at_ms", "max_targets", "center_policy", "damage_falloff_by_distance", "ring_width", "status_chance_scale"]
+param_constraints:
+  radius:
+    type: number
+    minimum: 1
+  expand_duration_ms:
+    type: integer
+    minimum: 0
+  hit_at_ms:
+    type: integer
+    minimum: 0
+  max_targets:
+    type: integer
+    minimum: 1
+  center_policy:
+    type: string
+    enum: ["player_center"]
+  damage_falloff_by_distance:
+    type: string
+    enum: ["none"]
+  ring_width:
+    type: number
+    minimum: 1
+  status_chance_scale:
+    type: number
+    minimum: 0
+    maximum: 10
+events: ["cast_start", "area_spawn", "damage", "hit_vfx", "floating_text"]
+damage_timing: on_area_hit

@@ -1,0 +1,41 @@
+id: fan_projectile
+allowed_params: ["projectile_count", "projectile_speed", "projectile_width", "projectile_height", "spread_angle", "angle_step", "max_distance", "hit_policy", "collision_radius", "spawn_pattern", "per_projectile_damage_scale"]
+param_constraints:
+  projectile_count:
+    type: integer
+    minimum: 1
+  projectile_speed:
+    type: number
+    minimum: 1
+  projectile_width:
+    type: number
+    minimum: 1
+  projectile_height:
+    type: number
+    minimum: 1
+  spread_angle:
+    type: number
+    minimum: 0
+    maximum: 180
+  angle_step:
+    type: number
+    minimum: 0
+    maximum: 90
+  max_distance:
+    type: number
+    minimum: 1
+  hit_policy:
+    type: string
+    enum: ["first_hit", "pierce"]
+  collision_radius:
+    type: number
+    minimum: 1
+  spawn_pattern:
+    type: string
+    enum: ["centered_fan", "edge_to_edge"]
+  per_projectile_damage_scale:
+    type: number
+    minimum: 0.01
+    maximum: 10
+events: ["cast_start", "projectile_spawn", "projectile_hit", "damage", "hit_vfx", "floating_text"]
+damage_timing: on_projectile_hit

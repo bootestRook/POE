@@ -1,5 +1,5 @@
 id: projectile
-allowed_params: ["projectile_count", "burst_interval_ms", "spread_angle_deg", "projectile_speed", "projectile_width", "projectile_height", "max_distance", "hit_policy", "pierce_count", "collision_radius", "spawn_offset", "projectile_radius", "impact_radius", "max_targets", "min_duration_ms", "max_duration_ms"]
+allowed_params: ["projectile_count", "burst_interval_ms", "spread_angle_deg", "angle_step", "projectile_speed", "projectile_width", "projectile_height", "max_distance", "hit_policy", "pierce_count", "collision_radius", "spawn_offset", "projectile_radius", "impact_radius", "max_targets", "min_duration_ms", "max_duration_ms"]
 param_constraints:
   projectile_count:
     type: integer
@@ -11,6 +11,10 @@ param_constraints:
     type: number
     minimum: 0
     maximum: 180
+  angle_step:
+    type: number
+    minimum: 0
+    maximum: 90
   projectile_speed:
     type: number
     minimum: 1

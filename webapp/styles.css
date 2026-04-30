@@ -908,6 +908,10 @@ button {
 .fire-bolt-impact-vfx,
 .fire-bolt-sparks-vfx,
 .fire-bolt-trail-puff,
+.penetrating_shot-projectile-vfx,
+.penetrating_shot-impact-vfx,
+.penetrating_shot-muzzle-vfx,
+.penetrating_shot-trail-vfx,
 .ice_shards-projectile-vfx,
 .ice_shards-impact-vfx,
 .ice_shards-sparks-vfx,
@@ -941,6 +945,22 @@ button {
 
 .ice_shards-sparks-vfx {
   filter: brightness(1.08) saturate(0.78) contrast(1.12);
+}
+
+.penetrating_shot-projectile-vfx {
+  filter: brightness(1.06) saturate(0.76) contrast(1.22);
+}
+
+.penetrating_shot-trail-vfx {
+  filter: brightness(1.02) saturate(0.68) contrast(1.16);
+}
+
+.penetrating_shot-muzzle-vfx {
+  filter: brightness(1.1) saturate(0.9) contrast(1.22);
+}
+
+.penetrating_shot-impact-vfx {
+  filter: brightness(1.08) saturate(0.88) contrast(1.24);
 }
 
 .vfx-sprite {
@@ -994,6 +1014,62 @@ button {
   border: 1px solid rgba(143, 232, 139, 0.95);
   background: rgba(143, 232, 139, 0.09);
   box-shadow: 0 0 12px rgba(143, 232, 139, 0.2);
+}
+
+.fire-bolt-alignment-debug {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fire-bolt-debug-point,
+.fire-bolt-debug-line {
+  position: absolute;
+  pointer-events: none;
+}
+
+.fire-bolt-debug-point {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.fire-bolt-debug-logic-spawn {
+  border: 1px solid #ffffff;
+  background: #ff4c4c;
+}
+
+.fire-bolt-debug-vfx-spawn {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #44d7ff;
+  background: transparent;
+}
+
+.fire-bolt-debug-center {
+  background: #ffd84d;
+  box-shadow: 0 0 10px rgba(255, 216, 77, 0.6);
+}
+
+.fire-bolt-debug-hit {
+  width: 10px;
+  height: 10px;
+  border: 1px solid #ffffff;
+  background: #5cff8d;
+}
+
+.fire-bolt-debug-line {
+  height: 0;
+  transform-origin: left center;
+}
+
+.fire-bolt-debug-direction {
+  border-top: 2px solid rgba(255, 76, 76, 0.9);
+}
+
+.fire-bolt-debug-facing {
+  border-top: 2px solid rgba(68, 215, 255, 0.9);
 }
 
 .skill-vfx-core {
@@ -1185,6 +1261,28 @@ button {
   box-shadow: 0 0 22px rgba(91, 190, 255, 0.42);
 }
 
+.player-nova-vfx {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  border-style: solid;
+  border-radius: 50%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(ellipse at center, rgba(232, 250, 255, 0.34), rgba(120, 218, 255, 0.18) 44%, transparent 70%),
+    repeating-radial-gradient(ellipse at center, rgba(245, 252, 255, 0.44) 0 2px, transparent 2px 14px);
+  border-color: rgba(150, 234, 255, 0.72);
+  box-shadow: 0 0 22px rgba(112, 212, 255, 0.42), inset 0 0 22px rgba(230, 250, 255, 0.2);
+}
+
+.player-nova-vfx-cold {
+  border-color: rgba(169, 239, 255, 0.84);
+  box-shadow: 0 0 28px rgba(96, 210, 255, 0.54), inset 0 0 28px rgba(230, 252, 255, 0.24);
+}
+
 @keyframes skill-vfx-pulse {
   from {
     opacity: 0.9;
@@ -1275,6 +1373,35 @@ button {
 
 .help-text p {
   margin: 4px 0;
+}
+
+.skill-test-debug-toggles {
+  position: absolute;
+  right: 24px;
+  top: 64px;
+  z-index: 22;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(230, 196, 126, 0.68);
+  border-radius: 6px;
+  background: rgba(18, 16, 13, 0.86);
+  color: #ffe9b0;
+  font-size: 13px;
+  text-shadow: 0 2px 2px #000;
+}
+
+.skill-test-debug-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.skill-test-debug-toggles input {
+  width: 14px;
+  height: 14px;
+  accent-color: #e6c47e;
 }
 
 .start-button {
@@ -1406,6 +1533,134 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
+}
+
+.skill-editor-workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(360px, 0.9fr) minmax(420px, 1.1fr);
+  border-bottom: 1px solid rgba(210, 190, 142, 0.2);
+  overflow: hidden;
+}
+
+.skill-editor-left-pane,
+.skill-editor-middle-pane,
+.skill-editor-right-pane {
+  min-height: 0;
+  overflow: auto;
+}
+
+.skill-editor-left-pane {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 14px;
+  border-right: 1px solid rgba(210, 190, 142, 0.2);
+}
+
+.skill-editor-middle-pane {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 16px;
+  border-right: 1px solid rgba(210, 190, 142, 0.2);
+}
+
+.skill-editor-right-pane {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 16px;
+}
+
+.skill-editor-pane-section {
+  display: grid;
+  gap: 10px;
+}
+
+.skill-editor-pane-section h3,
+.skill-editor-parameter-heading h3 {
+  margin: 0;
+  color: #ffe3a3;
+  font-size: 15px;
+}
+
+.skill-editor-parameter-heading p {
+  margin: 4px 0 0;
+  color: #c9baa0;
+  font-size: 13px;
+}
+
+.skill-editor-compact-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skill-editor-event-type-list,
+.skill-editor-logical-events,
+.skill-editor-debug-options {
+  display: grid;
+  gap: 8px;
+}
+
+.skill-editor-event-type-list button,
+.skill-editor-logical-events button,
+.skill-editor-event-select {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(164, 151, 120, 0.64);
+  border-radius: 4px;
+  background: rgba(20, 21, 22, 0.82);
+  color: #f4e6c2;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-editor-event-type-list button.active,
+.skill-editor-logical-events button.active,
+.skill-editor-event-select:hover {
+  border-color: rgba(222, 191, 127, 0.92);
+  background: rgba(57, 43, 24, 0.9);
+}
+
+.skill-editor-event-panel,
+.skill-editor-bottom-bar,
+.skill-editor-run-log {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(116, 109, 91, 0.62);
+  background: rgba(9, 10, 11, 0.56);
+  padding: 10px;
+}
+
+.skill-editor-event-select {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-editor-projectile-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-editor-bottom-bar {
+  padding: 14px;
+  background: rgba(17, 18, 19, 0.94);
+}
+
+.skill-editor-bottom-feedback {
+  display: grid;
+  gap: 8px;
+}
+
+.skill-editor-run-log strong,
+.skill-editor-run-log span {
+  color: #d8cfbd;
 }
 
 .skill-editor-list {
@@ -2861,6 +3116,16 @@ h3 {
 
   .skill-editor-body {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skill-editor-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skill-editor-left-pane,
+  .skill-editor-middle-pane {
+    border-right: 0;
+    border-bottom: 1px solid rgba(210, 190, 142, 0.2);
   }
 
   .skill-editor-list {

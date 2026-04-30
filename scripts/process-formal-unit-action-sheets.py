@@ -136,7 +136,7 @@ def remove_small_alpha_islands(image: Image.Image) -> Image.Image:
         vertical_overlap = min(component["bottom"], main["bottom"]) - max(component["top"], main["top"])
         overlaps_body = vertical_overlap > 0
         large_action_part = component["area"] >= largest_area * 0.18
-        if large_action_part or (overlaps_body and component["area"] >= max(64, largest_area * 0.012)):
+        if large_action_part or (overlaps_body and component["area"] >= max(96, largest_area * 0.03)):
             keep.append(component)
 
     cleaned = Image.new("RGBA", image.size, (0, 0, 0, 0))
@@ -293,7 +293,7 @@ def slice_sheet_components(image: Image.Image, rows: int, cols: int) -> list[lis
     return grid
 
 
-def normalize_sheet(frames: list[Image.Image], padding_x: int, padding_y: int, anchor_x: float, anchor_y: float) -> tuple[Image.Image, int, int]:
+def normalize_frame_row(frames: list[Image.Image], padding_x: int, padding_y: int, anchor_x: float, anchor_y: float) -> tuple[Image.Image, int, int]:
     frame_w = FIXED_FRAME_SIZE
     frame_h = FIXED_FRAME_SIZE
     anchor_px = round(frame_w * anchor_x)
@@ -304,6 +304,18 @@ def normalize_sheet(frames: list[Image.Image], padding_x: int, padding_y: int, a
         top = anchor_py - round(frame.height * anchor_y)
         sheet.alpha_composite(frame, (left, top))
     return sheet, frame_w, frame_h
+
+
+def normalize_action_sheet(rows: list[tuple[str, list[Image.Image]]], unit: UnitSpec) -> tuple[Image.Image, int, int, dict[str, int]]:
+    frame_w = FIXED_FRAME_SIZE
+    frame_h = FIXED_FRAME_SIZE
+    sheet = Image.new("RGBA", (frame_w * 4, frame_h * len(rows)), (0, 0, 0, 0))
+    frame_rows: dict[str, int] = {}
+    for row_index, (direction, frames) in enumerate(rows):
+        row_sheet, _, _ = normalize_frame_row(frames, unit.frame_padding_x, unit.frame_padding_y, unit.anchor_x, unit.anchor_y)
+        sheet.alpha_composite(row_sheet, (0, row_index * frame_h))
+        frame_rows[direction] = row_index
+    return sheet, frame_w, frame_h, frame_rows
 
 
 def fixed_frame_fit_ratio(frames: list[Image.Image]) -> float:
@@ -340,6 +352,87 @@ def scale_frames_to_body_height(frames: list[Image.Image], max_body_height: int)
     return scaled
 
 
+def offset_alpha_region(image: Image.Image, box: tuple[int, int, int, int], dx: int, dy: int = 0) -> Image.Image:
+    if dx == 0 and dy == 0:
+        return image
+    left, top, right, bottom = box
+    region = image.crop(box)
+    base = image.copy()
+    clear = Image.new("RGBA", region.size, (0, 0, 0, 0))
+    base.paste(clear, box, region)
+    base.alpha_composite(region, (left + dx, top + dy))
+    return trim_alpha(base)
+
+
+def synthesize_walk_stride(frames: list[Image.Image], direction: str) -> list[Image.Image]:
+    """Make four-frame side-view walks read as alternating feet.
+
+    The imagegen source often keeps the same leading foot in every cell. This
+    small lower-body phase pass preserves the authored torso/head art while
+    moving the lower-left and lower-right foot regions in opposite directions.
+    """
+    if not frames:
+        return frames
+    phased: list[Image.Image] = []
+    facing = 1 if direction == "right" else -1
+    phase_offsets = [-3, 3, 3, -3]
+    lift_offsets = [0, -1, 0, -1]
+    for index, frame in enumerate(frames):
+        image = frame.copy()
+        bbox = image.getchannel("A").getbbox()
+        if not bbox:
+            phased.append(image)
+            continue
+        left, top, right, bottom = bbox
+        width = right - left
+        height = bottom - top
+        lower_top = top + round(height * 0.62)
+        mid_x = left + width // 2
+        stride = phase_offsets[index % len(phase_offsets)] * facing
+        lift = lift_offsets[index % len(lift_offsets)]
+        front_box = (mid_x, lower_top, right, bottom)
+        back_box = (left, lower_top, mid_x, bottom)
+        image = offset_alpha_region(image, front_box, stride, lift)
+        image = offset_alpha_region(image, back_box, -stride, 0)
+        phased.append(trim_alpha(image))
+    return phased
+
+
+def synthesize_attack_action(frames: list[Image.Image], direction: str) -> list[Image.Image]:
+    """Build clean attack motion from body art only, with no generated VFX."""
+    clean = [remove_small_alpha_islands(trim_alpha(frame)) for frame in frames]
+    fallback_source = next((frame for frame in clean if frame.getchannel("A").getbbox()), None)
+    if fallback_source is None:
+        return clean
+    while len(clean) < 4:
+        clean.append(fallback_source.copy())
+
+    facing = 1 if direction == "right" else -1
+    transforms = [
+        {"scale": 0.98, "rotate": -4 * facing, "dx": -3 * facing, "dy": 1},
+        {"scale": 1.03, "rotate": 6 * facing, "dx": 5 * facing, "dy": -1},
+        {"scale": 1.08, "rotate": 10 * facing, "dx": 10 * facing, "dy": -1},
+        {"scale": 1.0, "rotate": 0, "dx": 0, "dy": 0},
+    ]
+    action_frames: list[Image.Image] = []
+    for index, spec in enumerate(transforms):
+        source = clean[min(index, len(clean) - 1)]
+        if not source.getchannel("A").getbbox():
+            source = fallback_source
+        scale = float(spec["scale"])
+        resized = source.resize(
+            (max(1, round(source.width * scale)), max(1, round(source.height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+        rotated = resized.rotate(float(spec["rotate"]), resample=Image.Resampling.BICUBIC, expand=True)
+        canvas_w = rotated.width + 28
+        canvas_h = rotated.height + 18
+        canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        canvas.alpha_composite(rotated, (14 + int(spec["dx"]), 9 + int(spec["dy"])))
+        action_frames.append(remove_small_alpha_islands(trim_alpha(canvas)))
+    return action_frames
+
+
 def write_contact_sheet(entries: list[dict[str, object]]) -> None:
     samples = [entry for entry in entries if entry["direction"] in DIRECTIONS_LR]
     cell_w = max(int(entry["frameWidth"]) for entry in samples) + 52
@@ -350,7 +443,8 @@ def write_contact_sheet(entries: list[dict[str, object]]) -> None:
     draw = ImageDraw.Draw(contact)
     for index, entry in enumerate(samples):
         sheet = Image.open(ROOT / str(entry["path"]).lstrip("/")).convert("RGBA")
-        frame = sheet.crop((0, 0, int(entry["frameWidth"]), int(entry["frameHeight"])))
+        frame_y = int(entry.get("frameRow", 0)) * int(entry["frameHeight"])
+        frame = sheet.crop((0, frame_y, int(entry["frameWidth"]), frame_y + int(entry["frameHeight"])))
         col = index % cols
         row = index // cols
         left = col * cell_w + (cell_w - frame.width) // 2
@@ -364,46 +458,62 @@ def write_contact_sheet(entries: list[dict[str, object]]) -> None:
     contact.save(MANIFEST_DIR / "formal-unit-actions-contact-sheet.png")
 
 
-def append_animation_entry(
-    entries: list[dict[str, object]],
-    unit: UnitSpec,
+def prepare_animation_frames(
+    asset_id: str,
     state: str,
     direction: str,
     frames: list[Image.Image],
-    source_raw: Path,
+    unit: UnitSpec,
     fit_ratio: float,
-) -> None:
-    asset_id = f"{ID_PREFIX[(unit.unit_id, state)]}_{direction}"
+) -> list[Image.Image]:
+    if state == "walk":
+        frames = synthesize_walk_stride(frames, direction)
+    elif state == "attack":
+        frames = synthesize_attack_action(frames, direction)
     frames = scale_frames_with_ratio(scale_frames_to_body_height(frames, unit.max_body_height), fit_ratio)
     for frame_index, frame in enumerate(frames):
         frame.save(FORMAL_CROPPED_DIR / f"{asset_id}_f{frame_index:02d}.png")
-    sheet, frame_w, frame_h = normalize_sheet(frames, unit.frame_padding_x, unit.frame_padding_y, unit.anchor_x, unit.anchor_y)
-    output = SHEETS_DIR / f"{asset_id}.png"
+    return frames
+
+
+def append_animation_entries(
+    entries: list[dict[str, object]],
+    unit: UnitSpec,
+    state: str,
+    direction_frames: dict[str, list[Image.Image]],
+    source_raw: Path,
+) -> None:
+    asset_prefix = ID_PREFIX[(unit.unit_id, state)]
+    rows = [(direction, direction_frames[direction]) for direction in ("right", "left")]
+    sheet, frame_w, frame_h, frame_rows = normalize_action_sheet(rows, unit)
+    output = SHEETS_DIR / f"{asset_prefix}.png"
     sheet.save(output)
-    entries.append(
-        {
-            "unitId": unit.unit_id,
-            "state": state,
-            "direction": direction,
-            "id": asset_id,
-            "path": "/" + output.relative_to(ROOT).as_posix(),
-            "frameCount": 4,
-            "fps": unit.fps[state],
-            "loop": unit.loop[state],
-            "durationMs": round(4 / unit.fps[state] * 1000),
-            "frameWidth": frame_w,
-            "frameHeight": frame_h,
-            "width": sheet.width,
-            "height": sheet.height,
-            "anchorX": unit.anchor_x,
-            "anchorY": unit.anchor_y,
-            "scale": unit.scale,
-            "fallbackState": "idle" if state != "idle" else None,
-            "fallbackDirection": "right",
-            "playbackRate": 1,
-            "sourceRaw": f"/{source_raw.relative_to(ROOT).as_posix()}",
-        }
-    )
+    for direction in ("right", "left"):
+        entries.append(
+            {
+                "unitId": unit.unit_id,
+                "state": state,
+                "direction": direction,
+                "id": f"{asset_prefix}_{direction}",
+                "path": "/" + output.relative_to(ROOT).as_posix(),
+                "frameCount": 4,
+                "fps": unit.fps[state],
+                "loop": unit.loop[state],
+                "durationMs": round(4 / unit.fps[state] * 1000),
+                "frameWidth": frame_w,
+                "frameHeight": frame_h,
+                "frameRow": frame_rows[direction],
+                "width": sheet.width,
+                "height": sheet.height,
+                "anchorX": unit.anchor_x,
+                "anchorY": unit.anchor_y,
+                "scale": unit.scale,
+                "fallbackState": "idle" if state != "idle" else None,
+                "fallbackDirection": "right",
+                "playbackRate": 1,
+                "sourceRaw": f"/{source_raw.relative_to(ROOT).as_posix()}",
+            }
+        )
 
 
 def main() -> int:
@@ -412,6 +522,9 @@ def main() -> int:
     MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
     FORMAL_CROPPED_DIR.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, object]] = []
+    for prefix in sorted(set(ID_PREFIX.values())):
+        for old_sheet in SHEETS_DIR.glob(f"{prefix}_*.png"):
+            old_sheet.unlink()
     for unit in UNITS:
         raw = Image.open(RAW_DIR / unit.raw_file).convert("RGBA")
         grid = slice_sheet_grid(raw, unit.source_rows, 4)
@@ -420,10 +533,32 @@ def main() -> int:
         left_frame_sets = [[ImageOps.mirror(frame) for frame in frames] for frames in right_frame_sets]
         fit_ratio = fixed_frame_fit_ratio([frame for frames in [*right_frame_sets, *left_frame_sets] for frame in frames])
         for row_index, (state, _direction) in enumerate(unit.rows):
-            right_frames = right_frame_sets[row_index]
-            append_animation_entry(entries, unit, state, "right", right_frames, RAW_DIR / unit.raw_file, fit_ratio)
-            left_frames = left_frame_sets[row_index]
-            append_animation_entry(entries, unit, state, "left", left_frames, RAW_DIR / unit.raw_file, fit_ratio)
+            source_row_index = 0 if state == "attack" else row_index
+            right_asset_id = f"{ID_PREFIX[(unit.unit_id, state)]}_right"
+            left_asset_id = f"{ID_PREFIX[(unit.unit_id, state)]}_left"
+            right_frames = prepare_animation_frames(
+                right_asset_id,
+                state,
+                "right",
+                right_frame_sets[source_row_index],
+                unit,
+                fit_ratio,
+            )
+            left_frames = prepare_animation_frames(
+                left_asset_id,
+                state,
+                "left",
+                left_frame_sets[source_row_index],
+                unit,
+                fit_ratio,
+            )
+            append_animation_entries(
+                entries,
+                unit,
+                state,
+                {"right": right_frames, "left": left_frames},
+                RAW_DIR / unit.raw_file,
+            )
         raw.close()
 
     manifest = {

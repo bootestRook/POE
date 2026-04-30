@@ -46,7 +46,7 @@ export function resolveDirection(vector: { x: number; y: number }, fallbackDirec
 }
 
 export function resolveAnimationPlaybackRate(context: Pick<UnitAnimationContext, "requestedState" | "baseMoveSpeed" | "currentMoveSpeed">) {
-  if (context.requestedState !== "walk") return 1;
+  if (context.requestedState !== "walk" && context.requestedState !== "run") return 1;
   return animationSpeedMultiplier(context);
 }
 

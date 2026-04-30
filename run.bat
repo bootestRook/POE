@@ -2,6 +2,7 @@
 setlocal
 
 cd /d "%~dp0"
+set PORT=8766
 
 echo ========================================
 echo V1 WebApp runner
@@ -40,8 +41,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Stopping stale WebApp server on port %PORT%...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$targets = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -like '*tools\webapp_server.py --port %PORT%*' }; foreach ($p in $targets) { Stop-Process -Id $p.ProcessId -Force }"
+if errorlevel 1 (
+  echo Failed to stop stale WebApp server.
+  pause
+  exit /b 1
+)
+
 echo Starting WebApp...
-echo Browser URL: http://127.0.0.1:8000
-python tools\webapp_server.py --open
+echo Browser URL: http://127.0.0.1:%PORT%
+python tools\webapp_server.py --port %PORT% --open
 
 endlocal

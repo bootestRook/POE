@@ -49,11 +49,23 @@ class SkillEffectTest(unittest.TestCase):
         packages = load_skill_packages(self.config_root)
         templates = load_skill_templates(self.config_root)
 
-        self.assertEqual(set(packages), {"active_fire_bolt"})
+        self.assertEqual(set(packages), {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova"})
         self.assertEqual(packages["active_fire_bolt"]["behavior"]["template"], "projectile")
+        self.assertEqual(packages["active_ice_shards"]["behavior"]["template"], "fan_projectile")
+        self.assertEqual(packages["active_penetrating_shot"]["behavior"]["template"], "projectile")
+        self.assertEqual(packages["active_frost_nova"]["behavior"]["template"], "player_nova")
+        self.assertEqual(packages["active_penetrating_shot"]["behavior"]["params"]["hit_policy"], "pierce")
         self.assertEqual(templates["skill_fire_bolt"].skill_package_id, "active_fire_bolt")
         self.assertEqual(templates["skill_fire_bolt"].behavior_template, "projectile")
-        self.assertEqual(templates["skill_ice_shards"].skill_package_id, "")
+        self.assertEqual(templates["skill_ice_shards"].skill_package_id, "active_ice_shards")
+        self.assertEqual(templates["skill_ice_shards"].behavior_template, "fan_projectile")
+        self.assertEqual(templates["skill_ice_shards"].damage_type, "cold")
+        self.assertEqual(templates["skill_penetrating_shot"].skill_package_id, "active_penetrating_shot")
+        self.assertEqual(templates["skill_penetrating_shot"].behavior_template, "projectile")
+        self.assertEqual(templates["skill_penetrating_shot"].damage_type, "physical")
+        self.assertEqual(templates["skill_frost_nova"].skill_package_id, "active_frost_nova")
+        self.assertEqual(templates["skill_frost_nova"].behavior_template, "player_nova")
+        self.assertEqual(templates["skill_frost_nova"].damage_type, "cold")
 
     def test_skill_package_schema_rejects_missing_required_field(self) -> None:
         package = deepcopy(load_skill_packages(self.config_root)["active_fire_bolt"])
@@ -82,6 +94,82 @@ class SkillEffectTest(unittest.TestCase):
         package["behavior"]["params"]["script"] = "deal_damage()"
 
         with self.assertRaisesRegex(ValueError, "script"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+    def test_fan_projectile_schema_rejects_unknown_fields_and_invalid_values(self) -> None:
+        package = deepcopy(load_skill_packages(self.config_root)["active_ice_shards"])
+        package["behavior"]["params"]["forbidden_param"] = 1
+
+        with self.assertRaisesRegex(ValueError, "unsupported parameter"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_ice_shards"])
+        package["behavior"]["params"]["projectile_count"] = 0
+        with self.assertRaisesRegex(ValueError, "projectile_count"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_ice_shards"])
+        package["behavior"]["params"]["spread_angle"] = 181
+        with self.assertRaisesRegex(ValueError, "spread_angle"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_ice_shards"])
+        package["behavior"]["params"]["hit_policy"] = "chain"
+        with self.assertRaisesRegex(ValueError, "hit_policy"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+    def test_player_nova_schema_rejects_unknown_fields_and_invalid_values(self) -> None:
+        package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
+        package["behavior"]["params"]["forbidden_param"] = 1
+
+        with self.assertRaisesRegex(ValueError, "unsupported parameter"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
+        package["behavior"]["params"]["radius"] = 0
+        with self.assertRaisesRegex(ValueError, "radius"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
+        package["behavior"]["params"]["hit_at_ms"] = package["behavior"]["params"]["expand_duration_ms"] + 1
+        with self.assertRaisesRegex(ValueError, "hit_at_ms"):
+            validate_skill_package_data(
+                package,
+                load_skill_schema(self.config_root),
+                load_behavior_templates(self.config_root),
+            )
+
+        package = deepcopy(load_skill_packages(self.config_root)["active_frost_nova"])
+        package["behavior"]["params"]["center_policy"] = "target_point"
+        with self.assertRaisesRegex(ValueError, "center_policy"):
             validate_skill_package_data(
                 package,
                 load_skill_schema(self.config_root),
@@ -203,7 +291,11 @@ class SkillEffectTest(unittest.TestCase):
 
         final_skill = self.calculator.calculate_all()[0]
         self.assertEqual(final_skill.base_gem_id, "active_ice_shards")
-        self.assertEqual(final_skill.projectile_count, 2)
+        self.assertEqual(final_skill.skill_package_id, "active_ice_shards")
+        self.assertEqual(final_skill.behavior_template, "fan_projectile")
+        self.assertEqual(final_skill.projectile_count, 4)
+        expected_spread_angle = load_skill_packages(self.config_root)["active_ice_shards"]["behavior"]["params"]["spread_angle"]
+        self.assertEqual(final_skill.runtime_params["spread_angle"], expected_spread_angle)
         self.assertGreater(final_skill.final_cooldown_ms, 0)
         self.assertGreater(final_skill.area_multiplier, 0)
         self.assertIsInstance(final_skill.applied_modifiers, tuple)

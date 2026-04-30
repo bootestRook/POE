@@ -123,6 +123,17 @@ class GemInventory:
         self._instances[instance.instance_id] = instance
         return instance
 
+    def update_definitions(self, definitions: dict[str, GemDefinition]) -> None:
+        self._definitions = definitions
+        for instance in self._instances.values():
+            definition = self._definitions.get(instance.base_gem_id)
+            if definition is None:
+                continue
+            instance.gem_type = definition.gem_type
+            instance.gem_kind = definition.gem_kind
+            instance.sudoku_digit = definition.sudoku_digit
+            instance.tags = definition.tags
+
     def get(self, instance_id: str) -> GemInstance | None:
         return self._instances.get(instance_id)
 

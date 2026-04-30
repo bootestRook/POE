@@ -39,8 +39,6 @@ ACTIVE_SKILL_ORDER = (
     "active_lava_orb",
     "active_fungal_petards",
 )
-OPENABLE_SKILL_PACKAGES = frozenset({"active_fire_bolt"})
-EDITABLE_SKILL_PACKAGES = frozenset({"active_fire_bolt"})
 TESTABLE_SKILL_ID = "active_fire_bolt"
 TEST_ACTIVE_INSTANCE_ID = "skill_editor_test_active_fire_bolt"
 POWER_MIN = 0.0
@@ -98,8 +96,12 @@ TEST_ARENA_SCENES = (
         ),
     },
 )
+TEST_ARENA_SCENE_ALIASES = {
+    "three_target_row": "three_horizontal",
+}
 TIMELINE_EVENT_TYPES = (
     "cast_start",
+    "area_spawn",
     "projectile_spawn",
     "projectile_hit",
     "damage",
@@ -126,9 +128,18 @@ NESTED_KEY_ORDER = {
     "cast": ("mode", "target_selector", "search_range", "cooldown_ms", "windup_ms", "recovery_ms"),
     "behavior": ("template", "params"),
     "params": (
+        "radius",
+        "expand_duration_ms",
+        "hit_at_ms",
+        "ring_width",
+        "center_policy",
+        "damage_falloff_by_distance",
+        "status_chance_scale",
         "projectile_count",
         "burst_interval_ms",
         "spread_angle_deg",
+        "spread_angle",
+        "angle_step",
         "projectile_speed",
         "projectile_width",
         "projectile_height",
@@ -137,6 +148,8 @@ NESTED_KEY_ORDER = {
         "pierce_count",
         "collision_radius",
         "spawn_offset",
+        "spawn_pattern",
+        "per_projectile_damage_scale",
         "projectile_radius",
         "impact_radius",
         "max_targets",
@@ -206,13 +219,13 @@ class SkillEditorService:
             definition = definitions.get(skill_id)
             package_result = package_results.get(skill_id)
             name_text = localization.get(definition.name_key, skill_id) if definition else skill_id
-            if package_result and skill_id in OPENABLE_SKILL_PACKAGES:
+            if package_result:
                 entries.append(self._migrated_entry(skill_id, name_text, package_result))
             else:
                 entries.append(self._unmigrated_entry(skill_id, name_text))
 
         return {
-            "title_text": "技能编辑器 V0",
+            "title_text": "技能编辑器初版",
             "subtitle_text": "模块化编辑已迁移技能包",
             "selected_id": "active_fire_bolt",
             "entries": entries,
@@ -222,8 +235,6 @@ class SkillEditorService:
         }
 
     def save_package(self, skill_id: str, package: dict[str, Any]) -> dict[str, Any]:
-        if skill_id not in EDITABLE_SKILL_PACKAGES:
-            return self._save_result(False, "该技能尚未迁移，当前不可编辑。")
         if not isinstance(package, dict):
             return self._save_result(False, "保存内容格式错误，必须是技能包对象。")
         if package.get("id") != skill_id:
@@ -247,7 +258,7 @@ class SkillEditorService:
 
     def modifier_stack_view(self) -> dict[str, Any]:
         return {
-            "panel_title_text": "测试 Modifier 栈",
+            "panel_title_text": "测试词缀栈",
             "available_title_text": "可测试辅助效果",
             "selected_title_text": "已选择效果",
             "notice_text": "仅用于测试，不会写入技能文件、宝石实例、库存或随机词缀。",
@@ -268,8 +279,8 @@ class SkillEditorService:
     def preview_modifier_stack(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             skill_id = str(payload.get("skill_id", TESTABLE_SKILL_ID))
-            if skill_id != TESTABLE_SKILL_ID:
-                raise ValueError("当前测试栈只支持已迁移的火焰弹。")
+            if not self._package_path(skill_id).is_file():
+                raise ValueError("当前测试栈只支持已迁移的技能包。")
             selected_ids = payload.get("modifier_ids", [])
             if not isinstance(selected_ids, list) or not all(isinstance(item, str) for item in selected_ids):
                 raise ValueError("测试效果列表格式错误。")
@@ -278,6 +289,7 @@ class SkillEditorService:
             target_power = self._validated_power(payload.get("target_power", 1.0), "target_power")
             conduit_power = self._validated_power(payload.get("conduit_power", 1.0), "conduit_power")
             baseline, tested = self._build_modifier_stack_preview(
+                skill_id=skill_id,
                 selected_ids=selected_ids,
                 relation=relation,
                 source_power=source_power,
@@ -289,7 +301,7 @@ class SkillEditorService:
                 "message_text": "测试栈已应用，结果仅用于预览。",
                 "preview": {
                     "skill_id": skill_id,
-                    "skill_name_text": self._localized_text("gem.active_fire_bolt.name"),
+                    "skill_name_text": self._localized_text(f"gem.{skill_id}.name"),
                     "relation": relation,
                     "relation_text": RELATION_TEXT[relation],
                     "source_power": source_power,
@@ -323,7 +335,7 @@ class SkillEditorService:
                 definition = definitions.get(skill_id)
                 package_result = package_results.get(skill_id)
                 name_text = localization.get(definition.name_key, skill_id) if definition else skill_id
-                if package_result and skill_id in OPENABLE_SKILL_PACKAGES:
+                if package_result:
                     entries.append(self._migrated_entry(skill_id, name_text, package_result))
                 else:
                     entries.append(self._unmigrated_entry(skill_id, name_text))
@@ -335,8 +347,8 @@ class SkillEditorService:
                 {
                     "id": entry["id"],
                     "name_text": entry["name_text"],
-                    "testable": entry["id"] == TESTABLE_SKILL_ID and bool(entry["openable"]),
-                    "status_text": "可测试" if entry["id"] == TESTABLE_SKILL_ID and bool(entry["openable"]) else "未迁移 / 不可测试",
+                    "testable": bool(entry["openable"]),
+                    "status_text": "可测试" if bool(entry["openable"]) else "未迁移 / 不可测试",
                 }
                 for entry in entries
             ],
@@ -346,11 +358,11 @@ class SkillEditorService:
     def run_test_arena(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             skill_id = str(payload.get("skill_id", TESTABLE_SKILL_ID))
-            if skill_id != TESTABLE_SKILL_ID:
-                raise ValueError("当前测试场只允许运行已迁移的火焰弹技能包。")
+            if not self._package_path(skill_id).is_file():
+                raise ValueError("当前测试场只允许运行已迁移的技能包。")
             scene_id = str(payload.get("scene_id", "single_dummy"))
             scene = self._require_scene(scene_id)
-            package = self._package_for_test_payload(payload)
+            package = self._package_for_test_payload(payload, skill_id)
             use_modifier_stack = bool(payload.get("use_modifier_stack", False))
             relation = self._normalize_relation(str(payload.get("relation", "adjacent")))
             source_power = self._validated_power(payload.get("source_power", 1.0), "source_power")
@@ -361,6 +373,7 @@ class SkillEditorService:
                 raise ValueError("测试效果列表格式错误。")
 
             baseline, final_skill = self._build_test_final_skill(
+                skill_id=skill_id,
                 package=package,
                 selected_ids=selected_ids if use_modifier_stack else [],
                 relation=relation,
@@ -383,6 +396,7 @@ class SkillEditorService:
             )
             result = self._test_arena_result(
                 scene=scene,
+                skill_id=skill_id,
                 enemies=enemies,
                 events=events,
                 baseline=baseline,
@@ -467,17 +481,19 @@ class SkillEditorService:
     def _build_modifier_stack_preview(
         self,
         *,
+        skill_id: str,
         selected_ids: list[str],
         relation: str,
         source_power: float,
         target_power: float,
         conduit_power: float,
     ) -> tuple[FinalSkillInstance, FinalSkillInstance]:
-        calculator, active = self._test_calculator()
-        template = load_skill_templates(self.config_root)["skill_fire_bolt"]
+        calculator, active = self._test_calculator(skill_id)
+        template = load_skill_templates(self.config_root)[_legacy_template_id(skill_id)]
         baseline = calculator.calculate_for_active(active)
         modifiers = tuple(
             self._test_applied_modifiers(
+                skill_id=skill_id,
                 selected_ids=selected_ids,
                 relation=relation,
                 source_power=source_power,
@@ -491,6 +507,7 @@ class SkillEditorService:
     def _build_test_final_skill(
         self,
         *,
+        skill_id: str,
         package: dict[str, Any],
         selected_ids: list[str],
         relation: str,
@@ -498,11 +515,12 @@ class SkillEditorService:
         target_power: float,
         conduit_power: float,
     ) -> tuple[FinalSkillInstance, FinalSkillInstance]:
-        calculator, active = self._test_calculator()
+        calculator, active = self._test_calculator(skill_id)
         template = _skill_template_from_package(package)
         baseline = calculator._build_final_skill(active, template, ())
         modifiers = tuple(
             self._test_applied_modifiers(
+                skill_id=skill_id,
                 selected_ids=selected_ids,
                 relation=relation,
                 source_power=source_power,
@@ -516,6 +534,7 @@ class SkillEditorService:
     def _test_applied_modifiers(
         self,
         *,
+        skill_id: str,
         selected_ids: list[str],
         relation: str,
         source_power: float,
@@ -525,7 +544,7 @@ class SkillEditorService:
         definitions = load_gem_definitions(self.config_root)
         scaling_rules = load_skill_scaling_rules(self.config_root)
         relation_coefficients = load_relation_coefficients(self.config_root)
-        active_definition = definitions[TESTABLE_SKILL_ID]
+        active_definition = definitions[skill_id]
         support_modifiers: dict[str, list[SupportBaseModifier]] = {}
         for modifier in scaling_rules.support_base_modifiers:
             support_modifiers.setdefault(modifier.support_id, []).append(modifier)
@@ -547,6 +566,7 @@ class SkillEditorService:
                 selected_conduit_multiplier *= conduit_by_support[support_id]
                 modifiers.append(
                     self._test_modifier(
+                        skill_id=skill_id,
                         support_id=support_id,
                         stat="conduit_multiplier",
                         value=conduit_by_support[support_id],
@@ -559,6 +579,7 @@ class SkillEditorService:
             elif support_id in conduit_relations:
                 modifiers.append(
                     self._test_modifier(
+                        skill_id=skill_id,
                         support_id=support_id,
                         stat="conduit_multiplier",
                         value=1.0,
@@ -572,13 +593,14 @@ class SkillEditorService:
         for support_id in selected_ids:
             definition = definitions.get(support_id)
             if definition is None or not definition.is_support:
-                modifiers.append(self._ignored_unknown_modifier(support_id, relation))
+                modifiers.append(self._ignored_unknown_modifier(skill_id, support_id, relation))
                 continue
             base_modifiers = support_modifiers.get(support_id, [])
             if not base_modifiers:
                 if support_id not in conduit_by_support:
                     modifiers.append(
                         self._test_modifier(
+                            skill_id=skill_id,
                             support_id=support_id,
                             stat="unknown",
                             value=0,
@@ -593,6 +615,7 @@ class SkillEditorService:
                 for base_modifier in base_modifiers:
                     modifiers.append(
                         self._test_modifier(
+                            skill_id=skill_id,
                             support_id=support_id,
                             stat=base_modifier.stat,
                             value=base_modifier.value,
@@ -607,6 +630,7 @@ class SkillEditorService:
                 if base_modifier.stat not in scaling_rules.stat_layers:
                     modifiers.append(
                         self._test_modifier(
+                            skill_id=skill_id,
                             support_id=support_id,
                             stat=base_modifier.stat,
                             value=base_modifier.value,
@@ -617,10 +641,11 @@ class SkillEditorService:
                         )
                     )
                     continue
-                dedupe_key = (support_id, TEST_ACTIVE_INSTANCE_ID, base_modifier.stat)
+                dedupe_key = (support_id, _test_active_instance_id(skill_id), base_modifier.stat)
                 if dedupe_key in dedupe:
                     modifiers.append(
                         self._test_modifier(
+                            skill_id=skill_id,
                             support_id=support_id,
                             stat=base_modifier.stat,
                             value=base_modifier.value,
@@ -634,6 +659,7 @@ class SkillEditorService:
                 dedupe.add(dedupe_key)
                 modifiers.append(
                     self._test_modifier(
+                        skill_id=skill_id,
                         support_id=support_id,
                         stat=base_modifier.stat,
                         value=base_modifier.value * relation_scale * selected_conduit_multiplier,
@@ -645,11 +671,11 @@ class SkillEditorService:
                 )
         return modifiers
 
-    def _test_calculator(self) -> tuple[SkillEffectCalculator, Any]:
+    def _test_calculator(self, skill_id: str) -> tuple[SkillEffectCalculator, Any]:
         definitions = load_gem_definitions(self.config_root)
         inventory = GemInventory(definitions)
         board = SudokuGemBoard(load_board_rules(self.config_root), inventory)
-        active = inventory.add_instance(TEST_ACTIVE_INSTANCE_ID, TESTABLE_SKILL_ID)
+        active = inventory.add_instance(_test_active_instance_id(skill_id), skill_id)
         calculator = SkillEffectCalculator(
             board=board,
             definitions=definitions,
@@ -663,6 +689,7 @@ class SkillEditorService:
     def _test_modifier(
         self,
         *,
+        skill_id: str,
         support_id: str,
         stat: str,
         value: float,
@@ -675,9 +702,9 @@ class SkillEditorService:
         definition = definitions.get(support_id)
         return AppliedModifier(
             source_instance_id=f"test_modifier:{support_id}",
-            source_base_gem_id=support_id if support_id in definitions else TESTABLE_SKILL_ID,
-            target_instance_id=TEST_ACTIVE_INSTANCE_ID,
-            target_base_gem_id=TESTABLE_SKILL_ID,
+            source_base_gem_id=support_id if support_id in definitions else skill_id,
+            target_instance_id=_test_active_instance_id(skill_id),
+            target_base_gem_id=skill_id,
             stat=stat,
             value=float(value),
             layer=layer,
@@ -687,12 +714,12 @@ class SkillEditorService:
             shape_effect=definition.shape_effect if definition is not None else "",
         )
 
-    def _ignored_unknown_modifier(self, support_id: str, relation: str) -> AppliedModifier:
+    def _ignored_unknown_modifier(self, skill_id: str, support_id: str, relation: str) -> AppliedModifier:
         return AppliedModifier(
             source_instance_id=f"test_modifier:{support_id}",
-            source_base_gem_id=TESTABLE_SKILL_ID,
-            target_instance_id=TEST_ACTIVE_INSTANCE_ID,
-            target_base_gem_id=TESTABLE_SKILL_ID,
+            source_base_gem_id=skill_id,
+            target_instance_id=_test_active_instance_id(skill_id),
+            target_base_gem_id=skill_id,
             stat="unknown",
             value=0.0,
             layer="ignored",
@@ -708,27 +735,31 @@ class SkillEditorService:
             "final_cooldown_ms": final_skill.final_cooldown_ms,
             "projectile_count": final_skill.projectile_count,
             "projectile_speed": runtime_params.get("projectile_speed", 0),
+            "radius": runtime_params.get("radius", 0),
+            "expand_duration_ms": runtime_params.get("expand_duration_ms", 0),
+            "hit_at_ms": runtime_params.get("hit_at_ms", 0),
         }
 
-    def _package_for_test_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _package_for_test_payload(self, payload: dict[str, Any], skill_id: str) -> dict[str, Any]:
         package = payload.get("package")
         if package is None:
-            result = self._read_active_skill_packages().get(TESTABLE_SKILL_ID)
+            result = self._read_active_skill_packages().get(skill_id)
             if result is None or not result.is_valid:
-                raise ValueError("火焰弹技能包未通过校验，无法运行测试场。")
+                raise ValueError("技能包未通过校验，无法运行测试场。")
             package = result.data
         if not isinstance(package, dict):
             raise ValueError("测试技能包内容格式错误。")
-        if package.get("id") != TESTABLE_SKILL_ID:
-            raise ValueError("测试场第一版只允许运行 active_fire_bolt。")
+        if package.get("id") != skill_id:
+            raise ValueError("测试场只能运行当前选择的技能包。")
         package_to_test = deepcopy(package)
         schema = load_skill_schema(self.config_root)
         behavior_templates = load_behavior_templates(self.config_root)
-        validate_skill_package_data(package_to_test, schema, behavior_templates, self._package_path(TESTABLE_SKILL_ID))
+        validate_skill_package_data(package_to_test, schema, behavior_templates, self._package_path(skill_id))
         self._validate_localization_references(package_to_test)
         return package_to_test
 
     def _require_scene(self, scene_id: str) -> dict[str, Any]:
+        scene_id = TEST_ARENA_SCENE_ALIASES.get(scene_id, scene_id)
         for scene in TEST_ARENA_SCENES:
             if scene["scene_id"] == scene_id:
                 return scene
@@ -755,6 +786,7 @@ class SkillEditorService:
         self,
         *,
         scene: dict[str, Any],
+        skill_id: str,
         enemies: list[dict[str, Any]],
         events: tuple[SkillEvent, ...],
         baseline: FinalSkillInstance,
@@ -772,8 +804,8 @@ class SkillEditorService:
         first_damage_delay = min((event.delay_ms for event in damage_events), default=0)
         spawn_stage = stages[0] if stages else final_stage
         return {
-            "skill_id": TESTABLE_SKILL_ID,
-            "skill_name_text": self._localized_text("gem.active_fire_bolt.name"),
+            "skill_id": skill_id,
+            "skill_name_text": self._localized_text(f"gem.{skill_id}.name"),
             "scene_id": scene["scene_id"],
             "scene_name_text": scene["name_text"],
             "modifier_stack_enabled": use_modifier_stack,
@@ -790,6 +822,7 @@ class SkillEditorService:
             "event_count": len(events),
             "event_counts": event_counts,
             "has_projectile_spawn": event_counts.get("projectile_spawn", 0) > 0,
+            "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
             "has_damage": event_counts.get("damage", 0) > 0,
             "has_hit_vfx": event_counts.get("hit_vfx", 0) > 0,
             "has_floating_text": event_counts.get("floating_text", 0) > 0,
@@ -908,7 +941,7 @@ class SkillEditorService:
             "name_text": name_text,
             "migrated": True,
             "openable": result.is_valid,
-            "editable": result.is_valid and skill_id in EDITABLE_SKILL_PACKAGES,
+            "editable": result.is_valid,
             "status_text": "已迁移，可编辑" if result.is_valid else "已迁移，需修复",
             "skill_yaml_path": relative_path,
             "behavior_template": str(behavior.get("template", "")),
@@ -984,6 +1017,18 @@ def _support_description_values(
     return values
 
 
+def _legacy_template_id(skill_id: str) -> str:
+    if skill_id.startswith("active_"):
+        return f"skill_{skill_id[len('active_'):]}"
+    return skill_id
+
+
+def _test_active_instance_id(skill_id: str) -> str:
+    if skill_id == TESTABLE_SKILL_ID:
+        return TEST_ACTIVE_INSTANCE_ID
+    return f"skill_editor_test_{skill_id}"
+
+
 def _format_description(template: str, values: dict[str, str]) -> str:
     try:
         return template.format(**values)
@@ -1042,7 +1087,16 @@ def skill_editor_options() -> dict[str, Any]:
             {"value": "first_hit", "text": "首次命中"},
             {"value": "pierce", "text": "贯穿"},
         ],
-        "damage_timings": [{"value": "on_projectile_hit", "text": "投射物命中时"}],
+        "spawn_patterns": [
+            {"value": "centered_fan", "text": "居中扇形"},
+            {"value": "edge_to_edge", "text": "边缘展开"},
+        ],
+        "damage_timings": [
+            {"value": "on_projectile_hit", "text": "投射物命中时"},
+            {"value": "on_area_hit", "text": "范围命中时"},
+        ],
+        "center_policies": [{"value": "player_center", "text": "玩家中心"}],
+        "damage_falloff_modes": [{"value": "none", "text": "无衰减"}],
         "target_policies": [
             {"value": "selected_target", "text": "当前目标"},
             {"value": "nearest_enemy", "text": "最近敌人"},
@@ -1202,7 +1256,7 @@ def _chinese_modifier_stack_error(error: Exception) -> str:
     message = str(error)
     if _contains_cjk(message):
         return message
-    return "测试 Modifier 栈计算失败，请检查选择的效果和测试参数。"
+    return "测试词缀栈计算失败，请检查选择的效果和测试参数。"
 
 
 def _chinese_test_arena_error(error: Exception) -> str:
@@ -1213,8 +1267,9 @@ def _chinese_test_arena_error(error: Exception) -> str:
 
 
 def _arena_stages(enemies: list[dict[str, Any]], events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
-    spawn_events = tuple(event for event in events if event.type == "projectile_spawn")
-    stages = [_arena_stage("投射物飞行中", enemies, events, spawn_events)]
+    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "area_spawn"})
+    stage_name = "技能生效前" if any(event.type == "area_spawn" for event in spawn_events) else "投射物飞行中"
+    stages = [_arena_stage(stage_name, enemies, events, spawn_events)]
     damage_delays = sorted({event.delay_ms for event in events if event.type == "damage"})
     for delay in damage_delays:
         stage_events = tuple(event for event in events if event.delay_ms <= delay)
@@ -1272,6 +1327,7 @@ def _event_summary(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
             "target_entity": event.target_entity,
             "amount": event.amount,
             "projectile_index": event.payload.get("projectile_index"),
+            "area_id": event.payload.get("area_id"),
         }
         for event in sorted(events, key=lambda item: (item.delay_ms, _event_sort_order(item.type), item.event_id))
     ]
@@ -1290,45 +1346,84 @@ def _event_timeline(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
 
 def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list[dict[str, Any]]) -> dict[str, Any]:
     event_counts = _event_counts(events)
-    spawn_times = [event.timestamp_ms for event in events if event.type == "projectile_spawn"]
+    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "area_spawn"}]
+    projectile_spawn_times = [event.timestamp_ms for event in events if event.type == "projectile_spawn"]
+    area_spawn_events = [event for event in events if event.type == "area_spawn"]
     damage_times = [event.timestamp_ms for event in events if event.type == "damage"]
     damage_after_spawn = bool(spawn_times and damage_times and min(damage_times) >= min(spawn_times))
+    damage_after_area_hit = bool(
+        not area_spawn_events
+        or (
+            damage_times
+            and all(
+                min(damage_times) >= area_event.timestamp_ms + int(area_event.payload.get("hit_at_ms", 0))
+                for area_event in area_spawn_events
+            )
+        )
+    )
+    area_center_passed = bool(
+        not area_spawn_events
+        or all(event.payload.get("center") == event.position for event in area_spawn_events)
+    )
     flight_no_damage = all(
         monster["current_life"] == monster["max_life"]
         for monster in flight_stage_monsters
     )
     basic_timing_passed = (
-        event_counts.get("projectile_spawn", 0) > 0
+        (event_counts.get("projectile_spawn", 0) > 0 or event_counts.get("area_spawn", 0) > 0)
         and event_counts.get("damage", 0) > 0
         and event_counts.get("hit_vfx", 0) > 0
         and event_counts.get("floating_text", 0) > 0
         and damage_after_spawn
+        and damage_after_area_hit
         and flight_no_damage
     )
     return {
         "has_projectile_spawn": event_counts.get("projectile_spawn", 0) > 0,
+        "has_multiple_projectile_spawn": event_counts.get("projectile_spawn", 0) > 1,
+        "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
+        "has_projectile_hit": event_counts.get("projectile_hit", 0) > 0,
         "has_damage": event_counts.get("damage", 0) > 0,
         "has_hit_vfx": event_counts.get("hit_vfx", 0) > 0,
         "has_floating_text": event_counts.get("floating_text", 0) > 0,
         "damage_after_or_at_projectile_spawn": damage_after_spawn,
+        "damage_after_or_at_area_hit": damage_after_area_hit,
+        "area_center_passed": area_center_passed,
         "flight_no_damage_passed": flight_no_damage,
+        "fan_direction_passed": _has_fan_directions(events),
         "basic_timing_passed": basic_timing_passed,
     }
 
 
 def _event_sort_order(event_type: str) -> int:
     order = {
+        "cast_start": -1,
+        "area_spawn": 0,
         "projectile_spawn": 0,
-        "damage": 1,
-        "hit_vfx": 2,
-        "floating_text": 3,
+        "projectile_hit": 1,
+        "damage": 2,
+        "hit_vfx": 3,
+        "floating_text": 4,
     }
     return order.get(event_type, 99)
+
+
+def _has_fan_directions(events: tuple[SkillEvent, ...]) -> bool:
+    directions = {
+        (
+            round(float(event.direction.get("x", 0.0)), 4),
+            round(float(event.direction.get("y", 0.0)), 4),
+        )
+        for event in events
+        if event.type == "projectile_spawn"
+    }
+    return len(directions) > 1
 
 
 def _event_type_text(event_type: str) -> str:
     return {
         "cast_start": "释放开始",
+        "area_spawn": "范围生成",
         "projectile_spawn": "投射物生成",
         "projectile_hit": "投射物命中",
         "damage": "伤害结算",

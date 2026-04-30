@@ -44,7 +44,7 @@ class SkillEditorTest(unittest.TestCase):
         entries = self.entries_by_id()
         fire_bolt = entries["active_fire_bolt"]
 
-        self.assertEqual(self.view["title_text"], "技能编辑器 V0")
+        self.assertEqual(self.view["title_text"], "技能编辑器初版")
         self.assertEqual(fire_bolt["name_text"], "火焰弹")
         self.assertTrue(fire_bolt["migrated"])
         self.assertTrue(fire_bolt["openable"])
@@ -62,6 +62,92 @@ class SkillEditorTest(unittest.TestCase):
         self.assertEqual(fire_bolt["detail"]["base_damage"], 12)
         self.assertGreater(fire_bolt["package_data"]["behavior"]["params"]["projectile_speed"], 0)
 
+    def test_skill_editor_view_exposes_active_ice_shards_fan_projectile_package(self) -> None:
+        entries = self.entries_by_id()
+        ice_shards = entries["active_ice_shards"]
+
+        self.assertTrue(ice_shards["migrated"])
+        self.assertTrue(ice_shards["openable"])
+        self.assertTrue(ice_shards["editable"])
+        self.assertEqual(ice_shards["skill_yaml_path"], "configs/skills/active/active_ice_shards/skill.yaml")
+        self.assertEqual(ice_shards["behavior_template"], "fan_projectile")
+        self.assertTrue(ice_shards["schema_status"]["is_valid"])
+        self.assertEqual(ice_shards["detail"]["damage_type"], "cold")
+        params = ice_shards["package_data"]["behavior"]["params"]
+        self.assertEqual(params["projectile_count"], 3)
+        for field in [
+            "projectile_count",
+            "projectile_speed",
+            "projectile_width",
+            "projectile_height",
+            "spread_angle",
+            "angle_step",
+            "max_distance",
+            "hit_policy",
+            "collision_radius",
+            "spawn_pattern",
+            "per_projectile_damage_scale",
+        ]:
+            self.assertIn(field, params)
+
+    def test_skill_editor_view_exposes_active_penetrating_shot_projectile_package(self) -> None:
+        entries = self.entries_by_id()
+        penetrating_shot = entries["active_penetrating_shot"]
+        params = penetrating_shot["package_data"]["behavior"]["params"]
+
+        self.assertTrue(penetrating_shot["migrated"])
+        self.assertTrue(penetrating_shot["openable"])
+        self.assertTrue(penetrating_shot["editable"])
+        self.assertEqual(penetrating_shot["skill_yaml_path"], "configs/skills/active/active_penetrating_shot/skill.yaml")
+        self.assertEqual(penetrating_shot["behavior_template"], "projectile")
+        self.assertTrue(penetrating_shot["schema_status"]["is_valid"])
+        self.assertEqual(penetrating_shot["detail"]["damage_type"], "physical")
+        self.assertEqual(penetrating_shot["detail"]["damage_form"], "attack")
+        self.assertEqual(params["hit_policy"], "pierce")
+        self.assertEqual(params["pierce_count"], 3)
+        self.assertIn("spread_angle_deg", params)
+        self.assertIn("angle_step", params)
+
+    def test_skill_editor_view_exposes_active_frost_nova_player_nova_package(self) -> None:
+        entries = self.entries_by_id()
+        frost_nova = entries["active_frost_nova"]
+        params = frost_nova["package_data"]["behavior"]["params"]
+
+        self.assertTrue(frost_nova["migrated"])
+        self.assertTrue(frost_nova["openable"])
+        self.assertTrue(frost_nova["editable"])
+        self.assertEqual(frost_nova["skill_yaml_path"], "configs/skills/active/active_frost_nova/skill.yaml")
+        self.assertEqual(frost_nova["behavior_template"], "player_nova")
+        self.assertTrue(frost_nova["schema_status"]["is_valid"])
+        self.assertEqual(frost_nova["detail"]["damage_type"], "cold")
+        for field in [
+            "radius",
+            "expand_duration_ms",
+            "hit_at_ms",
+            "max_targets",
+            "center_policy",
+            "damage_falloff_by_distance",
+            "ring_width",
+            "status_chance_scale",
+        ]:
+            self.assertIn(field, params)
+
+    def test_migrated_skill_packages_are_openable_without_manual_whitelist(self) -> None:
+        entries = self.entries_by_id()
+        migrated_ids = {
+            "active_fire_bolt",
+            "active_ice_shards",
+            "active_penetrating_shot",
+            "active_frost_nova",
+        }
+
+        for skill_id in migrated_ids:
+            with self.subTest(skill_id=skill_id):
+                self.assertTrue(entries[skill_id]["migrated"])
+                self.assertTrue(entries[skill_id]["openable"])
+                self.assertTrue(entries[skill_id]["editable"])
+                self.assertIsNotNone(entries[skill_id]["package_data"])
+
     def test_skill_editor_options_cover_phase7_modules(self) -> None:
         options = self.view["options"]
 
@@ -70,6 +156,7 @@ class SkillEditorTest(unittest.TestCase):
         self.assertIn({"value": "spell", "text": "法术"}, options["cast_modes"])
         self.assertIn({"value": "nearest_enemy", "text": "最近敌人"}, options["target_selectors"])
         self.assertIn({"value": "first_hit", "text": "首次命中"}, options["hit_policies"])
+        self.assertIn({"value": "centered_fan", "text": "居中扇形"}, options["spawn_patterns"])
         self.assertIn({"value": "on_projectile_hit", "text": "投射物命中时"}, options["damage_timings"])
         self.assertIn({"value": "final_damage", "text": "最终伤害"}, options["preview_fields"])
 
@@ -77,7 +164,7 @@ class SkillEditorTest(unittest.TestCase):
         entries = self.entries_by_id()
         self.assertEqual(tuple(entries), ACTIVE_SKILL_ORDER)
         for skill_id in ACTIVE_SKILL_ORDER:
-            if skill_id == "active_fire_bolt":
+            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova"}:
                 continue
             self.assertFalse(entries[skill_id]["migrated"])
             self.assertFalse(entries[skill_id]["openable"])
@@ -90,7 +177,7 @@ class SkillEditorTest(unittest.TestCase):
         modifier_stack = self.view["modifier_stack"]
         modifiers = {modifier["id"]: modifier for modifier in modifier_stack["available_modifiers"]}
 
-        self.assertEqual(modifier_stack["panel_title_text"], "测试 Modifier 栈")
+        self.assertEqual(modifier_stack["panel_title_text"], "测试词缀栈")
         self.assertIn("仅用于测试", modifier_stack["notice_text"])
         self.assertIn({"value": "adjacent", "text": "相邻"}, modifier_stack["relation_options"])
         self.assertIn({"value": "same_row", "text": "同行"}, modifier_stack["relation_options"])
@@ -236,8 +323,11 @@ class SkillEditorTest(unittest.TestCase):
 
         self.assertEqual(arena["panel_title_text"], "技能测试场")
         self.assertTrue(skills["active_fire_bolt"]["testable"])
+        self.assertTrue(skills["active_ice_shards"]["testable"])
+        self.assertTrue(skills["active_penetrating_shot"]["testable"])
+        self.assertTrue(skills["active_frost_nova"]["testable"])
         for skill_id in ACTIVE_SKILL_ORDER:
-            if skill_id == "active_fire_bolt":
+            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova"}:
                 continue
             self.assertFalse(skills[skill_id]["testable"])
             self.assertEqual(skills[skill_id]["status_text"], "未迁移 / 不可测试")
@@ -281,6 +371,7 @@ class SkillEditorTest(unittest.TestCase):
         self.assertEqual(timeline, sorted(timeline, key=lambda event: (event["timestamp_ms"], event["original_index"])))
         self.assertEqual({item["type"] for item in arena["timeline_supported_types"]}, {
             "cast_start",
+            "area_spawn",
             "projectile_spawn",
             "projectile_hit",
             "damage",
@@ -371,6 +462,126 @@ class SkillEditorTest(unittest.TestCase):
             strong["result"]["damage_results"][0]["amount"],
         )
 
+    def test_ice_shards_test_arena_validates_fan_projectile_scenarios(self) -> None:
+        service = SkillEditorService(self.config_root)
+        base_package = deepcopy(self.entries_by_id()["active_ice_shards"]["package_data"])
+        base_package["behavior"]["params"]["spread_angle"] = 20
+        base_package["behavior"]["params"]["angle_step"] = 10
+
+        single = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "single_dummy", "package": base_package})
+        row = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "three_target_row", "package": base_package})
+        dense = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "dense_pack", "package": base_package})
+
+        self.assertTrue(single["ok"], single["message_text"])
+        self.assertTrue(row["ok"], row["message_text"])
+        self.assertTrue(dense["ok"], dense["message_text"])
+        self.assertTrue(single["result"]["flight_no_damage_passed"])
+        self.assertEqual(row["result"]["event_counts"]["projectile_spawn"], base_package["behavior"]["params"]["projectile_count"])
+        self.assertTrue(row["result"]["timeline_checks"]["has_multiple_projectile_spawn"])
+        self.assertTrue(row["result"]["timeline_checks"]["fan_direction_passed"])
+        self.assertGreaterEqual(len(row["result"]["hit_targets"]), 2)
+        self.assertGreaterEqual(len(dense["result"]["hit_targets"]), 2)
+
+        more_projectiles = deepcopy(base_package)
+        more_projectiles["behavior"]["params"]["projectile_count"] = 5
+        count_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "three_target_row", "package": more_projectiles})
+        self.assertEqual(count_result["result"]["event_counts"]["projectile_spawn"], 5)
+
+        narrow = deepcopy(base_package)
+        wide = deepcopy(base_package)
+        narrow["behavior"]["params"]["spread_angle"] = 10
+        narrow["behavior"]["params"]["angle_step"] = 5
+        wide["behavior"]["params"]["spread_angle"] = 40
+        wide["behavior"]["params"]["angle_step"] = 20
+        narrow_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "three_target_row", "package": narrow})
+        wide_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "three_target_row", "package": wide})
+        narrow_dirs = [
+            event["direction"]
+            for event in narrow_result["result"]["event_timeline"]
+            if event["type"] == "projectile_spawn"
+        ]
+        wide_dirs = [
+            event["direction"]
+            for event in wide_result["result"]["event_timeline"]
+            if event["type"] == "projectile_spawn"
+        ]
+        self.assertNotEqual(narrow_dirs, wide_dirs)
+
+        slow = deepcopy(base_package)
+        fast = deepcopy(base_package)
+        slow["behavior"]["params"]["projectile_speed"] = 240
+        fast["behavior"]["params"]["projectile_speed"] = 720
+        slow_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "single_dummy", "package": slow})
+        fast_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "single_dummy", "package": fast})
+        self.assertGreater(slow_result["result"]["flight_duration_ms"], fast_result["result"]["flight_duration_ms"])
+
+        modified = service.run_test_arena(
+            {
+                "skill_id": "active_ice_shards",
+                "scene_id": "three_target_row",
+                "use_modifier_stack": True,
+                "modifier_ids": ["support_extra_projectile", "support_projectile_speed"],
+                "relation": "same_row",
+            }
+        )
+        self.assertGreater(modified["result"]["tested"]["projectile_count"], modified["result"]["baseline"]["projectile_count"])
+        self.assertGreater(modified["result"]["tested"]["projectile_speed"], modified["result"]["baseline"]["projectile_speed"])
+
+    def test_frost_nova_test_arena_validates_player_center_nova(self) -> None:
+        service = SkillEditorService(self.config_root)
+        base_package = deepcopy(self.entries_by_id()["active_frost_nova"]["package_data"])
+
+        single = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "single_dummy", "package": base_package})
+        row = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "three_target_row", "package": base_package})
+        dense = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "dense_pack", "package": base_package})
+
+        self.assertTrue(single["ok"], single["message_text"])
+        self.assertTrue(row["ok"], row["message_text"])
+        self.assertTrue(dense["ok"], dense["message_text"])
+        self.assertTrue(dense["result"]["has_area_spawn"])
+        self.assertTrue(dense["result"]["timeline_checks"]["area_center_passed"])
+        self.assertTrue(dense["result"]["timeline_checks"]["damage_after_or_at_area_hit"])
+        self.assertTrue(dense["result"]["flight_no_damage_passed"])
+        self.assertGreaterEqual(len(dense["result"]["hit_targets"]), 2)
+
+        small = deepcopy(base_package)
+        large = deepcopy(base_package)
+        small["behavior"]["params"]["radius"] = 220
+        large["behavior"]["params"]["radius"] = 430
+        small_result = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "three_target_row", "package": small})
+        large_result = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "three_target_row", "package": large})
+        self.assertLess(len(small_result["result"]["hit_targets"]), len(large_result["result"]["hit_targets"]))
+
+        short = deepcopy(base_package)
+        long = deepcopy(base_package)
+        short["behavior"]["params"]["expand_duration_ms"] = 320
+        long["behavior"]["params"]["expand_duration_ms"] = 720
+        short_result = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "single_dummy", "package": short})
+        long_result = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "single_dummy", "package": long})
+        short_area = next(event for event in short_result["result"]["event_timeline"] if event["type"] == "area_spawn")
+        long_area = next(event for event in long_result["result"]["event_timeline"] if event["type"] == "area_spawn")
+        self.assertLess(short_area["duration_ms"], long_area["duration_ms"])
+
+        early = deepcopy(base_package)
+        late = deepcopy(base_package)
+        early["behavior"]["params"]["hit_at_ms"] = 120
+        late["behavior"]["params"]["hit_at_ms"] = 360
+        early_result = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "single_dummy", "package": early})
+        late_result = service.run_test_arena({"skill_id": "active_frost_nova", "scene_id": "single_dummy", "package": late})
+        self.assertLess(early_result["result"]["flight_duration_ms"], late_result["result"]["flight_duration_ms"])
+
+        modified = service.run_test_arena(
+            {
+                "skill_id": "active_frost_nova",
+                "scene_id": "dense_pack",
+                "use_modifier_stack": True,
+                "modifier_ids": ["support_cold_mastery", "support_area_magnify"],
+                "relation": "same_row",
+            }
+        )
+        self.assertGreater(modified["result"]["tested"]["final_damage"], modified["result"]["baseline"]["final_damage"])
+        self.assertGreater(modified["result"]["tested"]["radius"], modified["result"]["baseline"]["radius"])
+
     def test_skill_test_arena_modifier_stack_changes_result_without_writing_file(self) -> None:
         config_root = self.temp_config_root()
         service = SkillEditorService(config_root)
@@ -412,6 +623,22 @@ class SkillEditorTest(unittest.TestCase):
         self.assertTrue(result["ok"], result["message_text"])
         self.assertGreaterEqual(len(result["result"]["hit_targets"]), 2)
 
+    def test_penetrating_shot_test_arena_uses_unified_projectile_params(self) -> None:
+        service = SkillEditorService(self.config_root)
+        package = deepcopy(self.entries_by_id()["active_penetrating_shot"]["package_data"])
+
+        result = service.run_test_arena(
+            {"skill_id": "active_penetrating_shot", "scene_id": "vertical_queue", "package": package}
+        )
+
+        self.assertTrue(result["ok"], result["message_text"])
+        arena = result["result"]
+        self.assertTrue(arena["has_projectile_spawn"])
+        self.assertTrue(arena["has_damage"])
+        self.assertGreaterEqual(len(arena["hit_targets"]), 2)
+        self.assertEqual(arena["event_counts"]["projectile_spawn"], package["behavior"]["params"]["projectile_count"])
+        self.assertTrue(all(event["payload"].get("hit_policy") == "pierce" for event in arena["event_timeline"] if event["type"] == "damage"))
+
     def test_id_field_is_readonly_and_file_is_not_written(self) -> None:
         service, package, path = self.temp_service_and_package()
         before = path.read_text(encoding="utf-8")
@@ -452,6 +679,15 @@ class SkillEditorTest(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(self.package_from_view(path.parents[3])["behavior"]["params"]["projectile_speed"], 900)
 
+    def test_save_fire_bolt_angle_step_success_and_reload(self) -> None:
+        service, package, path = self.temp_service_and_package()
+
+        package["behavior"]["params"]["angle_step"] = 15
+        result = service.save_package("active_fire_bolt", package)
+
+        self.assertTrue(result["ok"], result["message_text"])
+        self.assertEqual(self.package_from_view(path.parents[3])["behavior"]["params"]["angle_step"], 15)
+
     def test_save_base_damage_success_and_reload(self) -> None:
         service, package, path = self.temp_service_and_package()
 
@@ -479,6 +715,58 @@ class SkillEditorTest(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertIn("行为参数不在模板白名单内", result["message_text"])
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+    def test_fan_projectile_invalid_fields_fail_with_chinese_errors(self) -> None:
+        config_root = self.temp_config_root()
+        service = SkillEditorService(config_root)
+        entries = {entry["id"]: entry for entry in service.view()["entries"]}
+        path = config_root / "skills" / "active" / "active_ice_shards" / "skill.yaml"
+        before = path.read_text(encoding="utf-8")
+
+        package = deepcopy(entries["active_ice_shards"]["package_data"])
+        package["behavior"]["params"]["projectile_count"] = 0
+        result = service.save_package("active_ice_shards", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("projectile_count", result["message_text"])
+
+        package = deepcopy(entries["active_ice_shards"]["package_data"])
+        package["behavior"]["params"]["spread_angle"] = 181
+        result = service.save_package("active_ice_shards", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("spread_angle", result["message_text"])
+
+        package = deepcopy(entries["active_ice_shards"]["package_data"])
+        package["behavior"]["params"]["hit_policy"] = "chain"
+        result = service.save_package("active_ice_shards", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("hit_policy", result["message_text"])
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+    def test_player_nova_invalid_fields_fail_with_chinese_errors(self) -> None:
+        config_root = self.temp_config_root()
+        service = SkillEditorService(config_root)
+        entries = {entry["id"]: entry for entry in service.view()["entries"]}
+        path = config_root / "skills" / "active" / "active_frost_nova" / "skill.yaml"
+        before = path.read_text(encoding="utf-8")
+
+        package = deepcopy(entries["active_frost_nova"]["package_data"])
+        package["behavior"]["params"]["radius"] = 0
+        result = service.save_package("active_frost_nova", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("radius", result["message_text"])
+
+        package = deepcopy(entries["active_frost_nova"]["package_data"])
+        package["behavior"]["params"]["hit_at_ms"] = package["behavior"]["params"]["expand_duration_ms"] + 1
+        result = service.save_package("active_frost_nova", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("hit_at_ms", result["message_text"])
+
+        package = deepcopy(entries["active_frost_nova"]["package_data"])
+        package["behavior"]["params"]["center_policy"] = "target_point"
+        result = service.save_package("active_frost_nova", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("center_policy", result["message_text"])
         self.assertEqual(path.read_text(encoding="utf-8"), before)
 
     def test_invalid_enum_fails_with_chinese_error_without_writing_file(self) -> None:

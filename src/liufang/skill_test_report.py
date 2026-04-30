@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ from .skill_editor import SkillEditorService
 
 EXPECTED_PLAYER_DESCRIPTIONS = {
     "active_fire_bolt": "发射一枚火球，命中敌人造成火焰伤害。",
+    "active_ice_shards": "自动向最近敌人方向射出多枚冰霜冰棱，冰棱以扇形展开飞行，命中后造成冰霜伤害，并显示冰霜命中特效与伤害浮字。",
+    "active_frost_nova": "自动以玩家自身为中心释放一圈向外扩散的冰霜新星，命中范围内敌人后造成冰霜伤害，并显示冰霜范围爆发特效与伤害浮字。",
 }
 
 
@@ -38,22 +41,9 @@ def generate_skill_test_report(config_root: Path, request: SkillTestReportReques
     service = SkillEditorService(config_root)
     editor_view = service.view()
     entry = _require_skill_entry(editor_view, request.skill_id)
-    arena_payload = {
-        "skill_id": request.skill_id,
-        "scene_id": request.scenario_id,
-        "use_modifier_stack": request.use_modifier_stack,
-        "modifier_ids": list(request.modifier_ids),
-        "relation": request.relation,
-        "source_power": request.source_power,
-        "target_power": request.target_power,
-        "conduit_power": request.conduit_power,
-    }
-    arena_response = service.run_test_arena(arena_payload)
-    if not arena_response["ok"] or arena_response["result"] is None:
-        raise ValueError(arena_response["message_text"])
-    arena_result = arena_response["result"]
+    arena_result = _run_arena(service, request)
     modifier_stack = _modifier_stack_summary(editor_view, request, arena_result)
-    checks = _report_checks(arena_result)
+    checks = _report_checks(service, entry, request, arena_result)
     conclusion, reasons = _conclusion(checks)
     inconsistencies = tuple(reason for reason in reasons if reason)
     suggestions = _suggestions(inconsistencies)
@@ -92,6 +82,24 @@ def write_skill_test_report(
     return output_path
 
 
+def _run_arena(service: SkillEditorService, request: SkillTestReportRequest, package: dict[str, Any] | None = None) -> dict[str, Any]:
+    arena_payload = {
+        "skill_id": request.skill_id,
+        "scene_id": request.scenario_id,
+        "package": package,
+        "use_modifier_stack": request.use_modifier_stack if package is None else False,
+        "modifier_ids": list(request.modifier_ids) if package is None else [],
+        "relation": request.relation,
+        "source_power": request.source_power,
+        "target_power": request.target_power,
+        "conduit_power": request.conduit_power,
+    }
+    arena_response = service.run_test_arena(arena_payload)
+    if not arena_response["ok"] or arena_response["result"] is None:
+        raise ValueError(arena_response["message_text"])
+    return arena_response["result"]
+
+
 def _require_skill_entry(editor_view: dict[str, Any], skill_id: str) -> dict[str, Any]:
     for entry in editor_view["entries"]:
         if entry["id"] == skill_id and entry["openable"]:
@@ -104,10 +112,7 @@ def _modifier_stack_summary(
     request: SkillTestReportRequest,
     arena_result: dict[str, Any],
 ) -> dict[str, Any]:
-    available = {
-        modifier["id"]: modifier
-        for modifier in editor_view["modifier_stack"]["available_modifiers"]
-    }
+    available = {modifier["id"]: modifier for modifier in editor_view["modifier_stack"]["available_modifiers"]}
     selected = [
         {
             "id": modifier_id,
@@ -128,44 +133,166 @@ def _modifier_stack_summary(
     }
 
 
-def _report_checks(arena_result: dict[str, Any]) -> dict[str, bool]:
+def _report_checks(
+    service: SkillEditorService,
+    entry: dict[str, Any],
+    request: SkillTestReportRequest,
+    arena_result: dict[str, Any],
+) -> dict[str, bool]:
     timeline_checks = arena_result["timeline_checks"]
     damage_results = arena_result["damage_results"]
     damage_events = [event for event in arena_result["event_timeline"] if event["type"] == "damage"]
-    life_reduced = any(
-        monster["current_life"] < monster["max_life"]
-        for monster in arena_result["monsters"]
-    )
+    spawn_events = [event for event in arena_result["event_timeline"] if event["type"] == "projectile_spawn"]
+    area_events = [event for event in arena_result["event_timeline"] if event["type"] == "area_spawn"]
+    uses_area_nova = entry.get("behavior_template") == "player_nova"
+    expected_damage_type = "cold" if request.skill_id in {"active_ice_shards", "active_frost_nova"} else "fire"
+    life_reduced = any(monster["current_life"] < monster["max_life"] for monster in arena_result["monsters"])
     modifier_changed = (
         arena_result["baseline"]["final_damage"] != arena_result["tested"]["final_damage"]
         or arena_result["baseline"]["final_cooldown_ms"] != arena_result["tested"]["final_cooldown_ms"]
         or arena_result["baseline"]["projectile_count"] != arena_result["tested"]["projectile_count"]
         or arena_result["baseline"]["projectile_speed"] != arena_result["tested"]["projectile_speed"]
+        or arena_result["baseline"].get("radius") != arena_result["tested"].get("radius")
     )
     return {
+        "uses_area_nova": uses_area_nova,
+        "expected_damage_type": expected_damage_type,
         "has_projectile_spawn": bool(timeline_checks["has_projectile_spawn"]),
+        "has_multiple_projectile_spawn": request.skill_id != "active_ice_shards" or bool(timeline_checks.get("has_multiple_projectile_spawn")),
+        "fan_direction_passed": request.skill_id != "active_ice_shards" or bool(timeline_checks.get("fan_direction_passed")),
+        "has_area_spawn": (not uses_area_nova) or bool(timeline_checks.get("has_area_spawn")),
+        "area_center_passed": (not uses_area_nova) or bool(timeline_checks.get("area_center_passed")),
+        "damage_after_or_at_area_hit": (not uses_area_nova) or bool(timeline_checks.get("damage_after_or_at_area_hit")),
+        "area_range_targets_passed": (not uses_area_nova) or _area_range_targets_passed(area_events, damage_events),
+        "has_projectile_hit": bool(timeline_checks.get("has_projectile_hit")),
         "has_damage": bool(timeline_checks["has_damage"]),
         "has_hit_vfx": bool(timeline_checks["has_hit_vfx"]),
         "has_floating_text": bool(timeline_checks["has_floating_text"]),
         "damage_after_or_at_projectile_spawn": bool(timeline_checks["damage_after_or_at_projectile_spawn"]),
         "flight_no_damage_passed": bool(timeline_checks["flight_no_damage_passed"]),
         "life_reduced_after_damage": life_reduced,
-        "damage_type_fire": bool(damage_events) and all(event["damage_type"] == "fire" for event in damage_events),
+        "damage_type_expected": bool(damage_events) and all(event["damage_type"] == expected_damage_type for event in damage_events),
         "hit_target_exists": bool(arena_result["hit_targets"]) and bool(damage_results),
         "modifier_stack_changed_result": (not arena_result["modifier_stack_enabled"]) or modifier_changed,
+        **_parameter_variant_checks(service, entry, request, spawn_events),
     }
 
 
-def _conclusion(checks: dict[str, bool]) -> tuple[str, tuple[str, ...]]:
-    critical = (
-        "has_projectile_spawn",
-        "has_damage",
-        "damage_after_or_at_projectile_spawn",
-        "flight_no_damage_passed",
-        "life_reduced_after_damage",
-        "damage_type_fire",
-        "hit_target_exists",
+def _area_range_targets_passed(area_events: list[dict[str, Any]], damage_events: list[dict[str, Any]]) -> bool:
+    if not area_events or not damage_events:
+        return False
+    area = area_events[0]
+    payload = area.get("payload", {})
+    center = payload.get("center", area.get("position", {})) if isinstance(payload, dict) else area.get("position", {})
+    radius = float(payload.get("radius", 0)) if isinstance(payload, dict) else 0.0
+    if not isinstance(center, dict) or radius <= 0:
+        return False
+    for event in damage_events:
+        event_payload = event.get("payload", {})
+        target = event_payload.get("target_world_position", event.get("position", {})) if isinstance(event_payload, dict) else event.get("position", {})
+        if not isinstance(target, dict):
+            return False
+        target_distance = (
+            (float(target.get("x", 0.0)) - float(center.get("x", 0.0))) ** 2
+            + (float(target.get("y", 0.0)) - float(center.get("y", 0.0))) ** 2
+        ) ** 0.5
+        if target_distance > radius:
+            return False
+    return True
+
+
+def _parameter_variant_checks(
+    service: SkillEditorService,
+    entry: dict[str, Any],
+    request: SkillTestReportRequest,
+    baseline_spawns: list[dict[str, Any]],
+) -> dict[str, bool]:
+    if request.skill_id == "active_frost_nova":
+        package = entry.get("package_data")
+        if not isinstance(package, dict):
+            return {
+                "projectile_count_changes_events": True,
+                "spread_angle_changes_directions": True,
+                "radius_changes_hit_targets": False,
+            }
+        radius_package = deepcopy(package)
+        radius_params = radius_package["behavior"]["params"]
+        radius_params["radius"] = max(1.0, float(radius_params.get("radius", 1.0)) * 0.4)
+        base_result = _run_arena(service, request, package)
+        radius_result = _run_arena(service, request, radius_package)
+        return {
+            "projectile_count_changes_events": True,
+            "spread_angle_changes_directions": True,
+            "radius_changes_hit_targets": len(base_result.get("hit_targets", [])) != len(radius_result.get("hit_targets", [])),
+        }
+    if request.skill_id != "active_ice_shards":
+        return {"projectile_count_changes_events": True, "spread_angle_changes_directions": True}
+    package = entry.get("package_data")
+    if not isinstance(package, dict):
+        return {"projectile_count_changes_events": False, "spread_angle_changes_directions": False}
+
+    count_package = deepcopy(package)
+    count_params = count_package["behavior"]["params"]
+    count_params["projectile_count"] = int(count_params.get("projectile_count", 1)) + 1
+    count_result = _run_arena(service, request, count_package)
+
+    angle_package = deepcopy(package)
+    angle_params = angle_package["behavior"]["params"]
+    base_spread_angle = float(angle_params.get("spread_angle", 0.0))
+    base_angle_step = float(angle_params.get("angle_step", 0.0))
+    angle_params["spread_angle"] = base_spread_angle - 10.0 if base_spread_angle >= 180.0 else min(180.0, max(1.0, base_spread_angle + 10.0))
+    angle_params["angle_step"] = base_angle_step - 5.0 if base_angle_step >= 90.0 else min(90.0, max(1.0, base_angle_step + 5.0))
+    angle_result = _run_arena(service, request, angle_package)
+
+    baseline_directions = _spawn_directions(baseline_spawns)
+    changed_directions = _spawn_directions(
+        [event for event in angle_result.get("event_timeline", []) if event.get("type") == "projectile_spawn"]
     )
+    return {
+        "projectile_count_changes_events": int(count_result.get("event_counts", {}).get("projectile_spawn", 0)) != len(baseline_spawns),
+        "spread_angle_changes_directions": bool(baseline_directions and changed_directions and baseline_directions != changed_directions),
+    }
+
+
+def _spawn_directions(events: list[dict[str, Any]]) -> tuple[tuple[float, float], ...]:
+    return tuple(
+        (
+            round(float(event.get("direction", {}).get("x", 0.0)), 4),
+            round(float(event.get("direction", {}).get("y", 0.0)), 4),
+        )
+        for event in events
+    )
+
+
+def _conclusion(checks: dict[str, bool]) -> tuple[str, tuple[str, ...]]:
+    if checks.get("uses_area_nova"):
+        critical = (
+            "has_area_spawn",
+            "area_center_passed",
+            "has_damage",
+            "damage_after_or_at_area_hit",
+            "flight_no_damage_passed",
+            "life_reduced_after_damage",
+            "damage_type_expected",
+            "hit_target_exists",
+            "area_range_targets_passed",
+            "radius_changes_hit_targets",
+        )
+    else:
+        critical = (
+            "has_projectile_spawn",
+            "has_multiple_projectile_spawn",
+            "fan_direction_passed",
+            "has_projectile_hit",
+            "has_damage",
+            "damage_after_or_at_projectile_spawn",
+            "flight_no_damage_passed",
+            "life_reduced_after_damage",
+            "damage_type_expected",
+            "hit_target_exists",
+            "projectile_count_changes_events",
+            "spread_angle_changes_directions",
+        )
     presentation = ("has_hit_vfx", "has_floating_text")
     failed_critical = [key for key in critical if not checks[key]]
     failed_presentation = [key for key in presentation if not checks[key]]
@@ -181,12 +308,22 @@ def _conclusion(checks: dict[str, bool]) -> tuple[str, tuple[str, ...]]:
 def _check_failure_text(key: str) -> str:
     return {
         "has_projectile_spawn": "缺少投射物生成事件。",
+        "has_multiple_projectile_spawn": "缺少多枚投射物生成事件。",
+        "fan_direction_passed": "投射物方向没有形成扇形分布。",
+        "has_projectile_hit": "缺少投射物命中事件。",
         "has_damage": "缺少伤害结算事件。",
         "damage_after_or_at_projectile_spawn": "伤害结算早于投射物生成。",
         "flight_no_damage_passed": "投射物飞行期间发生了扣血。",
         "life_reduced_after_damage": "伤害事件后目标生命没有减少。",
-        "damage_type_fire": "伤害类型不是火焰。",
+        "damage_type_expected": "伤害类型与技能期望不一致。",
         "hit_target_exists": "没有实际命中目标。",
+        "projectile_count_changes_events": "修改 projectile_count 后投射物事件数量没有变化。",
+        "spread_angle_changes_directions": "修改 spread_angle 后投射物方向没有变化。",
+        "has_area_spawn": "缺少范围生成 area_spawn 事件。",
+        "area_center_passed": "area_spawn 中心不是玩家或释放源位置。",
+        "damage_after_or_at_area_hit": "damage 早于 hit_at_ms 结算。",
+        "area_range_targets_passed": "范围命中目标与 radius 判断不一致。",
+        "radius_changes_hit_targets": "修改 radius 后命中目标没有变化。",
         "has_hit_vfx": "缺少命中特效事件。",
         "has_floating_text": "缺少伤害浮字事件。",
         "modifier_stack_changed_result": "测试 Modifier 栈开启后最终伤害或关键参数没有变化。",
@@ -199,7 +336,7 @@ def _suggestions(inconsistencies: tuple[str, ...]) -> tuple[str, ...]:
     suggestions = []
     for item in inconsistencies:
         if "投射物" in item or "伤害结算" in item:
-            suggestions.append("检查 projectile 行为模板和 SkillRuntime 事件生成顺序。")
+            suggestions.append("检查 fan_projectile 行为模板和 SkillRuntime 事件生成顺序。")
         elif "生命" in item:
             suggestions.append("检查测试场 damage 事件消费与怪物生命结算。")
         elif "特效" in item or "浮字" in item:
@@ -252,17 +389,27 @@ def _markdown_report(
         *_damage_lines(arena_result),
         "",
         "## 表现完整性检查",
+        f"- area_spawn：{_pass_text(checks.get('has_area_spawn', True))}",
+        f"- 玩家中心：{_pass_text(checks.get('area_center_passed', True))}",
         f"- projectile_spawn：{_pass_text(checks['has_projectile_spawn'])}",
+        f"- 多枚 projectile_spawn：{_pass_text(checks['has_multiple_projectile_spawn'])}",
+        f"- 扇形方向：{_pass_text(checks['fan_direction_passed'])}",
+        f"- projectile_hit：{_pass_text(checks['has_projectile_hit'])}",
         f"- damage：{_pass_text(checks['has_damage'])}",
         f"- hit_vfx：{_pass_text(checks['has_hit_vfx'])}",
         f"- floating_text：{_pass_text(checks['has_floating_text'])}",
         "",
         "## 伤害时机一致性检查",
         f"- damage 不早于 projectile_spawn：{_pass_text(checks['damage_after_or_at_projectile_spawn'])}",
+        f"- damage 不早于 hit_at_ms：{_pass_text(checks.get('damage_after_or_at_area_hit', True))}",
         f"- 投射物飞行期间未扣血：{_pass_text(checks['flight_no_damage_passed'])}",
         f"- damage 后目标生命减少：{_pass_text(checks['life_reduced_after_damage'])}",
-        f"- damage_type 为 fire：{_pass_text(checks['damage_type_fire'])}",
+        f"- damage_type 为 {checks['expected_damage_type']}：{_pass_text(checks['damage_type_expected'])}",
         f"- 存在命中目标：{_pass_text(checks['hit_target_exists'])}",
+        f"- projectile_count 修改后事件数量变化：{_pass_text(checks['projectile_count_changes_events'])}",
+        f"- spread_angle 修改后方向变化：{_pass_text(checks['spread_angle_changes_directions'])}",
+        f"- radius 修改后命中目标变化：{_pass_text(checks.get('radius_changes_hit_targets', True))}",
+        f"- 范围内外命中判断：{_pass_text(checks.get('area_range_targets_passed', True))}",
         f"- 测试 Modifier Stack 变化检查：{_pass_text(checks['modifier_stack_changed_result'])}",
         "",
         "## 描述一致性结论",
@@ -305,9 +452,10 @@ def _event_lines(events: list[dict[str, Any]]) -> list[str]:
         (
             f"- {event['type_text']}（`{event['type']}`）："
             f"事件时间 {event['timestamp_ms']} 毫秒，延迟 {event['delay_ms']} 毫秒，"
-            f"目标 `{event['target_entity'] or '无'}`，数值 {event['amount'] if event['amount'] is not None else '无'}，"
-            f"伤害类型 `{event['damage_type'] or '无'}`，原因 `{event['reason_key'] or '无'}`，"
-            f"附加数据 `{event['payload_text']}`"
+            f"持续 {event['duration_ms']} 毫秒，目标 `{event['target_entity'] or '无'}`，"
+            f"数值 {event['amount'] if event['amount'] is not None else '无'}，"
+            f"伤害类型 `{event['damage_type'] or '无'}`，特效 `{event['vfx_key'] or '无'}`，"
+            f"原因 `{event['reason_key'] or '无'}`，附加数据 `{event['payload_text']}`"
         )
         for event in events
     ]
@@ -343,7 +491,7 @@ def _pass_text(value: bool) -> str:
 
 def _conclusion_reason(conclusion: str, inconsistencies: tuple[str, ...]) -> str:
     if conclusion == "通过":
-        return "核心事件、伤害时机、生命变化和表现事件均符合期望描述。"
+        return "核心事件、伤害时机、生命变化、扇形方向和表现事件均符合期望描述。"
     return "；".join(inconsistencies)
 
 

@@ -59,6 +59,45 @@ class SkillTestReportTest(unittest.TestCase):
         self.assertTrue(report.source_result["event_timeline"])
         self.assertGreater(report.source_result["damage_results"][0]["amount"], 0)
 
+    def test_generate_ice_shards_report_from_three_target_row(self) -> None:
+        report = generate_skill_test_report(
+            self.config_root,
+            SkillTestReportRequest(skill_id="active_ice_shards", scenario_id="three_target_row"),
+        )
+
+        markdown = report.markdown
+        self.assertEqual(report.conclusion, "通过")
+        self.assertIn("测试技能 ID：`active_ice_shards`", markdown)
+        self.assertIn("behavior_template：`fan_projectile`", markdown)
+        self.assertIn("自动向最近敌人方向射出多枚冰霜冰棱", markdown)
+        self.assertIn("多枚 projectile_spawn：通过", markdown)
+        self.assertIn("扇形方向：通过", markdown)
+        self.assertIn("projectile_hit：通过", markdown)
+        self.assertIn("damage_type 为 cold：通过", markdown)
+        self.assertIn("projectile_count 修改后事件数量变化：通过", markdown)
+        self.assertIn("spread_angle 修改后方向变化：通过", markdown)
+        self.assertTrue(report.source_result["timeline_checks"]["has_multiple_projectile_spawn"])
+        self.assertTrue(report.source_result["timeline_checks"]["fan_direction_passed"])
+
+    def test_generate_frost_nova_report_from_dense_pack(self) -> None:
+        report = generate_skill_test_report(
+            self.config_root,
+            SkillTestReportRequest(skill_id="active_frost_nova", scenario_id="dense_pack"),
+        )
+
+        markdown = report.markdown
+        self.assertEqual(report.conclusion, "通过")
+        self.assertIn("active_frost_nova", markdown)
+        self.assertIn("behavior_template：`player_nova`", markdown)
+        self.assertIn("自动以玩家自身为中心释放一圈向外扩散的冰霜新星", markdown)
+        self.assertIn("area_spawn：通过", markdown)
+        self.assertIn("玩家中心：通过", markdown)
+        self.assertIn("damage 不早于 hit_at_ms：通过", markdown)
+        self.assertIn("damage_type 为 cold：通过", markdown)
+        self.assertIn("radius 修改后命中目标变化：通过", markdown)
+        self.assertTrue(report.source_result["timeline_checks"]["has_area_spawn"])
+        self.assertTrue(report.source_result["timeline_checks"]["area_center_passed"])
+
     def test_report_with_modifier_stack_uses_changed_real_amount(self) -> None:
         base = generate_skill_test_report(
             self.config_root,
