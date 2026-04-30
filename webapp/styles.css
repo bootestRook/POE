@@ -101,6 +101,22 @@ button {
     conic-gradient(from calc(var(--arc-angle) / -2), rgba(236, 226, 202, 0.72) 0deg, rgba(172, 178, 168, 0.18) var(--arc-angle), transparent var(--arc-angle), transparent 360deg);
 }
 
+.chain-segment-vfx {
+  position: absolute;
+  height: 5px;
+  transform-origin: 0 50%;
+  pointer-events: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(244, 250, 255, 0.92), rgba(95, 204, 255, 0.82), rgba(189, 246, 255, 0.18));
+  box-shadow: 0 0 14px rgba(92, 199, 255, 0.92), 0 0 4px rgba(255, 255, 255, 0.9);
+  mix-blend-mode: screen;
+}
+
+.chain-segment-vfx-lightning,
+.chain-segment-vfx-base {
+  background: linear-gradient(90deg, rgba(251, 255, 255, 0.96), rgba(83, 207, 255, 0.88), rgba(192, 247, 255, 0.2));
+}
+
 .damage-zone-vfx {
   position: absolute;
   pointer-events: none;
@@ -1528,6 +1544,104 @@ button {
   pointer-events: auto;
 }
 
+.skill-editor-overlay-adjusting {
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+
+.skill-editor-adjustment-toolbar {
+  position: fixed;
+  left: 50%;
+  top: 18px;
+  z-index: 82;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  max-width: min(620px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid rgba(222, 191, 127, 0.78);
+  border-radius: 6px;
+  background: rgba(16, 18, 20, 0.94);
+  color: #f6e6bd;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+  transform: translateX(-50%);
+}
+
+.skill-editor-adjustment-toolbar > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.skill-editor-adjustment-toolbar strong {
+  font-size: 15px;
+}
+
+.skill-editor-adjustment-toolbar span {
+  color: #ccb98e;
+  font-size: 12px;
+}
+
+.skill-editor-adjustment-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.skill-editor-adjustment-actions button,
+.skill-editor-inline-action {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid rgba(222, 191, 127, 0.76);
+  border-radius: 4px;
+  background: rgba(42, 31, 18, 0.92);
+  color: #ffe8a8;
+  cursor: pointer;
+}
+
+.skill-editor-adjustment-actions button:hover,
+.skill-editor-inline-action:hover:not(:disabled) {
+  background: rgba(72, 50, 24, 0.96);
+}
+
+.skill-editor-inline-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.skill-editor-launch-drag-handle {
+  position: fixed;
+  z-index: 81;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: rgba(255, 76, 76, 0.28);
+  box-shadow: 0 0 0 4px rgba(255, 76, 76, 0.18), 0 0 24px rgba(255, 76, 76, 0.45);
+  cursor: grab;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+
+.skill-editor-launch-drag-handle.dragging {
+  cursor: grabbing;
+  border-color: #44d7ff;
+  box-shadow: 0 0 0 5px rgba(68, 215, 255, 0.2), 0 0 26px rgba(68, 215, 255, 0.55);
+}
+
+.skill-editor-launch-drag-handle span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4c4c;
+  transform: translate(-50%, -50%);
+}
+
 .skill-editor-shell {
   width: min(1080px, calc(100vw - 56px));
   max-height: calc(100vh - 56px);
@@ -2284,6 +2398,10 @@ button {
 
 .skill-event-melee_arc {
   border-left-color: #d8caa8;
+}
+
+.skill-event-chain_segment {
+  border-left-color: #64d4ff;
 }
 
 .skill-event-damage_zone {

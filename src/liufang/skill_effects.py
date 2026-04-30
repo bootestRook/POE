@@ -568,6 +568,8 @@ class SkillEffectCalculator:
             runtime_params["projectile_speed"] = float(runtime_params["projectile_speed"]) * speed_multiplier
         if "radius" in runtime_params:
             runtime_params["radius"] = float(runtime_params["radius"]) * area_multiplier
+        if "chain_radius" in runtime_params:
+            runtime_params["chain_radius"] = float(runtime_params["chain_radius"]) * area_multiplier
         if "arc_radius" in runtime_params:
             runtime_params["arc_radius"] = float(runtime_params["arc_radius"]) * area_multiplier
         if "length" in runtime_params:
@@ -583,7 +585,8 @@ class SkillEffectCalculator:
             1,
             base_projectile_count + round(additive.get("projectile_count_add", 0.0)),
         )
-        runtime_params["max_targets"] = max(1, int(runtime_params.get("max_targets", 1)))
+        if runtime_params.get("max_targets") != "unlimited":
+            runtime_params["max_targets"] = max(1, int(runtime_params.get("max_targets", 1)))
 
         return FinalSkillInstance(
             active_gem_instance_id=active.instance_id,

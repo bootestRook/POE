@@ -92,8 +92,19 @@ class SkillRuntime:
     ) -> tuple[SkillEvent, ...]:
         if not skill.uses_skill_event_pipeline:
             raise SkillRuntimeError("skill does not use the SkillEvent pipeline")
-        if skill.behavior_template not in {"projectile", "fan_projectile", "player_nova", "melee_arc", "damage_zone"}:
+        if skill.behavior_template not in {"projectile", "chain", "player_nova", "melee_arc", "damage_zone"}:
             raise SkillRuntimeError(f"unsupported behavior template: {skill.behavior_template}")
+        if skill.behavior_template == "chain":
+            targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
+                _RuntimeTarget(target_entity, _position_dict(target_position)),
+            )
+            return self._chain_events(
+                skill,
+                source_entity=source_entity,
+                source_position=_position_dict(source_position),
+                targets=targets,
+                timestamp_ms=timestamp_ms,
+            )
         if skill.behavior_template == "damage_zone":
             targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
                 _RuntimeTarget(target_entity, _position_dict(target_position)),
@@ -286,6 +297,157 @@ class SkillRuntime:
                     )
                 )
                 next_index += 1
+        return _sorted_events(events)
+
+    def _chain_events(
+        self,
+        skill: FinalSkillInstance,
+        *,
+        source_entity: str,
+        source_position: dict[str, float],
+        targets: tuple[_RuntimeTarget, ...],
+        timestamp_ms: int,
+    ) -> tuple[SkillEvent, ...]:
+        runtime_params = skill.runtime_params or {}
+        presentation = skill.presentation_keys or {}
+        origin = dict(source_position)
+        chain_count = max(1, int(runtime_params.get("chain_count", 1)))
+        chain_radius = max(1.0, float(runtime_params.get("chain_radius", skill.hit.get("hit_radius", 180.0) if skill.hit else 180.0)))
+        chain_delay_ms = max(0, int(runtime_params.get("chain_delay_ms", 0)))
+        initial_delay_ms = max(
+            0,
+            int(skill.cast.get("windup_ms", 0) if skill.cast else 0),
+            int(skill.hit.get("hit_delay_ms", 0) if skill.hit else 0),
+        )
+        damage_falloff_per_chain = max(0.0, min(1.0, float(runtime_params.get("damage_falloff_per_chain", 0.0))))
+        target_policy = str(runtime_params.get("target_policy", "nearest_not_hit"))
+        allow_repeat_target = bool(runtime_params.get("allow_repeat_target", False))
+        max_targets = _max_targets(runtime_params.get("max_targets"), chain_count)
+        vfx_key = str(runtime_params.get("segment_vfx_key") or presentation.get("vfx", skill.visual_effect))
+        hit_vfx_key = presentation.get("hit_vfx_key", vfx_key)
+        sfx_key = presentation.get("sfx", "")
+        floating_key = presentation.get("floating_text", "skill_event.lightning_chain.floating_text")
+        reason_key = _damage_reason_key(skill)
+        primary_target = _nearest_target(origin, targets) or _RuntimeTarget("", origin)
+        cast_direction = _direction(origin, primary_target.position)
+        chain_targets = _chain_target_sequence(
+            origin,
+            targets,
+            chain_radius=chain_radius,
+            chain_count=chain_count,
+            max_targets=max_targets,
+            allow_repeat_target=allow_repeat_target,
+            target_policy=target_policy,
+        )
+        events: list[SkillEvent] = [
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 0, "cast_start"),
+                type="cast_start",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=cast_direction,
+                delay_ms=0,
+                duration_ms=initial_delay_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=presentation.get("cast_vfx_key", vfx_key),
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={
+                    "skill_id": skill.skill_package_id or skill.skill_template_id,
+                    "target_policy": target_policy,
+                    "chain_count": chain_count,
+                    "chain_radius": chain_radius,
+                    "windup_ms": initial_delay_ms,
+                },
+            )
+        ]
+        next_index = 1
+        previous_entity = source_entity
+        previous_position = origin
+        for segment_index, target in enumerate(chain_targets):
+            delay_ms = initial_delay_ms + chain_delay_ms * segment_index
+            damage_scale = max(0.0, 1.0 - damage_falloff_per_chain * segment_index)
+            damage_amount = skill.final_damage * damage_scale
+            direction = _direction(previous_position, target.position)
+            segment_id = f"{skill.active_gem_instance_id}.{timestamp_ms}.chain.{segment_index}"
+            segment_payload = {
+                "segment_id": segment_id,
+                "skill_id": skill.skill_package_id or skill.skill_template_id,
+                "segment_index": segment_index,
+                "from_target": previous_entity,
+                "to_target": target.entity_id,
+                "start_position": dict(previous_position),
+                "end_position": dict(target.position),
+                "target_world_position": dict(target.position),
+                "chain_radius": chain_radius,
+                "chain_delay_ms": chain_delay_ms,
+                "windup_ms": initial_delay_ms,
+                "chain_count": chain_count,
+                "target_policy": target_policy,
+                "allow_repeat_target": allow_repeat_target,
+                "max_targets": runtime_params.get("max_targets", max_targets),
+                "damage_scale": damage_scale,
+                "damage_type": skill.damage_type,
+                "vfx_key": vfx_key,
+                "skill_name": skill.skill_package_id or skill.skill_template_id,
+            }
+            events.append(
+                SkillEvent(
+                    event_id=_event_id(skill, timestamp_ms, next_index, "chain_segment"),
+                    type="chain_segment",
+                    timestamp_ms=timestamp_ms + delay_ms,
+                    source_entity=source_entity,
+                    target_entity=target.entity_id,
+                    position=dict(target.position),
+                    direction=direction,
+                    delay_ms=delay_ms,
+                    duration_ms=chain_delay_ms,
+                    amount=None,
+                    damage_type=skill.damage_type,
+                    skill_instance_id=skill.active_gem_instance_id,
+                    vfx_key=vfx_key,
+                    sfx_key=sfx_key,
+                    reason_key="",
+                    payload=segment_payload,
+                )
+            )
+            next_index += 1
+            floating_text = _damage_text(damage_amount, skill.damage_type)
+            for event_type, amount, duration, vfx, reason, position in (
+                ("damage", damage_amount, 0, hit_vfx_key, reason_key, target.position),
+                ("hit_vfx", None, 420, hit_vfx_key, reason_key, target.position),
+                ("floating_text", damage_amount, 800, hit_vfx_key, floating_key, {"x": target.position["x"], "y": target.position["y"] - 28.0}),
+            ):
+                payload = {**segment_payload}
+                if event_type == "floating_text":
+                    payload["text"] = floating_text
+                events.append(
+                    SkillEvent(
+                        event_id=_event_id(skill, timestamp_ms, next_index, event_type),
+                        type=event_type,
+                        timestamp_ms=timestamp_ms + delay_ms,
+                        source_entity=source_entity,
+                        target_entity=target.entity_id,
+                        position=dict(position),
+                        direction=direction,
+                        delay_ms=delay_ms,
+                        duration_ms=duration,
+                        amount=amount,
+                        damage_type=skill.damage_type,
+                        skill_instance_id=skill.active_gem_instance_id,
+                        vfx_key=vfx,
+                        sfx_key=sfx_key,
+                        reason_key=reason,
+                        payload=payload,
+                    )
+                )
+                next_index += 1
+            previous_entity = target.entity_id
+            previous_position = target.position
         return _sorted_events(events)
 
     def _melee_arc_events(
@@ -611,7 +773,7 @@ class SkillRuntime:
         burst_interval_ms = max(0, int(runtime_params.get("burst_interval_ms", 0)))
         spread_angle_deg = _spread_angle_deg(runtime_params, skill.behavior_template)
         angle_step_deg = _angle_step_deg(runtime_params, skill.behavior_template)
-        damage_amount = skill.final_damage * _per_projectile_damage_scale(runtime_params, skill.behavior_template)
+        damage_amount = skill.final_damage
         max_distance = max(1.0, float(runtime_params.get("max_distance", 520.0)))
         pierce_count = max(0, int(runtime_params.get("pierce_count", 0)))
         hit_policy = str(runtime_params.get("hit_policy", "first_hit"))
@@ -694,9 +856,7 @@ class SkillRuntime:
                     "fan_angle": spread_angle_deg,
                     "burst_interval_ms": burst_interval_ms,
                     "spread_angle_deg": spread_angle_deg,
-                    "spread_angle": spread_angle_deg,
                     "angle_step": angle_step_deg,
-                    "spawn_pattern": runtime_params.get("spawn_pattern", "centered_fan"),
                     "projectile_radius": runtime_params.get("projectile_radius", 0),
                     "impact_radius": runtime_params.get("impact_radius", 0),
                 },
@@ -828,7 +988,7 @@ class SkillRuntime:
         burst_interval_ms = max(0, int(runtime_params.get("burst_interval_ms", 0)))
         spread_angle_deg = _spread_angle_deg(runtime_params, skill.behavior_template)
         angle_step_deg = _angle_step_deg(runtime_params, skill.behavior_template)
-        damage_amount = skill.final_damage * _per_projectile_damage_scale(runtime_params, skill.behavior_template)
+        damage_amount = skill.final_damage
         max_distance = max(1.0, float(runtime_params.get("max_distance", 520.0)))
         collision_radius = max(
             1.0,
@@ -936,9 +1096,7 @@ class SkillRuntime:
                         "fan_angle": spread_angle_deg,
                         "burst_interval_ms": burst_interval_ms,
                         "spread_angle_deg": spread_angle_deg,
-                        "spread_angle": spread_angle_deg,
                         "angle_step": angle_step_deg,
-                        "spawn_pattern": runtime_params.get("spawn_pattern", "centered_fan"),
                         "projectile_radius": runtime_params.get("projectile_radius", 0),
                         "impact_radius": runtime_params.get("impact_radius", 0),
                     },
@@ -1082,6 +1240,7 @@ def _runtime_event_sort_order(event_type: str) -> int:
     return {
         "cast_start": 0,
         "area_spawn": 1,
+        "chain_segment": 1,
         "melee_arc": 1,
         "damage_zone": 1,
         "projectile_spawn": 1,
@@ -1217,6 +1376,57 @@ def _nearest_target(source: dict[str, float], targets: tuple[_RuntimeTarget, ...
     )
 
 
+def _max_targets(value: Any, default: int) -> int:
+    if value == "unlimited":
+        return max(1, default)
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return max(1, default)
+
+
+def _chain_target_sequence(
+    origin: dict[str, float],
+    targets: tuple[_RuntimeTarget, ...],
+    *,
+    chain_radius: float,
+    chain_count: int,
+    max_targets: int,
+    allow_repeat_target: bool,
+    target_policy: str,
+) -> tuple[_RuntimeTarget, ...]:
+    if not targets:
+        return ()
+    selected: list[_RuntimeTarget] = []
+    hit_ids: set[str] = set()
+    current_position = origin
+    first_target = _nearest_target(origin, targets)
+    if first_target is None:
+        return ()
+    selected.append(first_target)
+    hit_ids.add(first_target.entity_id)
+    current_position = first_target.position
+    while len(selected) < chain_count and len(selected) < max_targets:
+        candidates = []
+        for target in targets:
+            if not allow_repeat_target and target.entity_id in hit_ids:
+                continue
+            if selected and target.entity_id == selected[-1].entity_id:
+                continue
+            distance = hypot(target.position["x"] - current_position["x"], target.position["y"] - current_position["y"])
+            if distance <= chain_radius:
+                candidates.append((target, distance))
+        if not candidates:
+            break
+        if target_policy != "nearest_not_hit":
+            break
+        next_target = sorted(candidates, key=lambda item: (item[1], item[0].entity_id))[0][0]
+        selected.append(next_target)
+        hit_ids.add(next_target.entity_id)
+        current_position = next_target.position
+    return tuple(selected)
+
+
 def _melee_arc_hit_targets(
     source: dict[str, float],
     facing_direction: dict[str, float],
@@ -1293,19 +1503,11 @@ def _direction_angle_deg(direction: dict[str, float]) -> float:
 
 
 def _spread_angle_deg(runtime_params: dict[str, Any], behavior_template: str) -> float:
-    if behavior_template == "fan_projectile":
-        return max(0.0, float(runtime_params.get("spread_angle", 0.0)))
     return max(0.0, float(runtime_params.get("spread_angle_deg", 0.0)))
 
 
 def _angle_step_deg(runtime_params: dict[str, Any], behavior_template: str) -> float:
     return max(0.0, float(runtime_params.get("angle_step", 0.0)))
-
-
-def _per_projectile_damage_scale(runtime_params: dict[str, Any], behavior_template: str) -> float:
-    if behavior_template != "fan_projectile":
-        return 1.0
-    return max(0.01, float(runtime_params.get("per_projectile_damage_scale", 1.0)))
 
 
 def _damage_reason_key(skill: FinalSkillInstance) -> str:

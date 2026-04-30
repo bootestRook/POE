@@ -119,6 +119,27 @@ class SkillTestReportTest(unittest.TestCase):
         self.assertTrue(report.source_result["timeline_checks"]["has_damage_zone"])
         self.assertTrue(report.source_result["timeline_checks"]["damage_zone_origin_passed"])
 
+    def test_generate_lightning_chain_report_from_dense_pack(self) -> None:
+        report = generate_skill_test_report(
+            self.config_root,
+            SkillTestReportRequest(skill_id="active_lightning_chain", scenario_id="dense_pack"),
+        )
+
+        markdown = report.markdown
+        self.assertEqual(report.conclusion, "通过")
+        self.assertIn("active_lightning_chain", markdown)
+        self.assertIn("behavior_template：`chain`", markdown)
+        self.assertIn("自动向最近敌人释放闪电链", markdown)
+        self.assertIn("chain_segment：通过", markdown)
+        self.assertIn("多段 chain_segment：通过", markdown)
+        self.assertIn("damage_type 为 lightning：通过", markdown)
+        self.assertIn("chain_count 修改后链段数量变化：通过", markdown)
+        self.assertIn("chain_radius 修改后可跳跃目标变化：通过", markdown)
+        self.assertIn("chain_delay_ms 修改后链段间隔变化：通过", markdown)
+        self.assertIn("damage_falloff_per_chain 修改后后续伤害变化：通过", markdown)
+        self.assertTrue(report.source_result["timeline_checks"]["has_chain_segment"])
+        self.assertTrue(report.source_result["timeline_checks"]["chain_no_repeat_targets"])
+
     def test_report_with_modifier_stack_uses_changed_real_amount(self) -> None:
         base = generate_skill_test_report(
             self.config_root,

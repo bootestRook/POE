@@ -62,7 +62,7 @@ class SkillEditorTest(unittest.TestCase):
         self.assertEqual(fire_bolt["detail"]["base_damage"], 12)
         self.assertGreater(fire_bolt["package_data"]["behavior"]["params"]["projectile_speed"], 0)
 
-    def test_skill_editor_view_exposes_active_ice_shards_fan_projectile_package(self) -> None:
+    def test_skill_editor_view_exposes_active_ice_shards_projectile_package(self) -> None:
         entries = self.entries_by_id()
         ice_shards = entries["active_ice_shards"]
 
@@ -70,7 +70,7 @@ class SkillEditorTest(unittest.TestCase):
         self.assertTrue(ice_shards["openable"])
         self.assertTrue(ice_shards["editable"])
         self.assertEqual(ice_shards["skill_yaml_path"], "configs/skills/active/active_ice_shards/skill.yaml")
-        self.assertEqual(ice_shards["behavior_template"], "fan_projectile")
+        self.assertEqual(ice_shards["behavior_template"], "projectile")
         self.assertTrue(ice_shards["schema_status"]["is_valid"])
         self.assertEqual(ice_shards["detail"]["damage_type"], "cold")
         params = ice_shards["package_data"]["behavior"]["params"]
@@ -80,13 +80,11 @@ class SkillEditorTest(unittest.TestCase):
             "projectile_speed",
             "projectile_width",
             "projectile_height",
-            "spread_angle",
+            "spread_angle_deg",
             "angle_step",
             "max_distance",
             "hit_policy",
             "collision_radius",
-            "spawn_pattern",
-            "per_projectile_damage_scale",
         ]:
             self.assertIn(field, params)
 
@@ -161,6 +159,31 @@ class SkillEditorTest(unittest.TestCase):
         ]:
             self.assertIn(field, params)
 
+    def test_skill_editor_view_exposes_active_lightning_chain_chain_package(self) -> None:
+        entries = self.entries_by_id()
+        lightning_chain = entries["active_lightning_chain"]
+        params = lightning_chain["package_data"]["behavior"]["params"]
+
+        self.assertTrue(lightning_chain["migrated"])
+        self.assertTrue(lightning_chain["openable"])
+        self.assertTrue(lightning_chain["editable"])
+        self.assertEqual(lightning_chain["skill_yaml_path"], "configs/skills/active/active_lightning_chain/skill.yaml")
+        self.assertEqual(lightning_chain["behavior_template"], "chain")
+        self.assertTrue(lightning_chain["schema_status"]["is_valid"])
+        self.assertEqual(lightning_chain["detail"]["damage_type"], "lightning")
+        self.assertEqual(lightning_chain["detail"]["damage_form"], "spell")
+        for field in [
+            "chain_count",
+            "chain_radius",
+            "chain_delay_ms",
+            "damage_falloff_per_chain",
+            "target_policy",
+            "allow_repeat_target",
+            "max_targets",
+            "segment_vfx_key",
+        ]:
+            self.assertIn(field, params)
+
     def test_migrated_skill_packages_are_openable_without_manual_whitelist(self) -> None:
         entries = self.entries_by_id()
         migrated_ids = {
@@ -169,6 +192,7 @@ class SkillEditorTest(unittest.TestCase):
             "active_penetrating_shot",
             "active_frost_nova",
             "active_puncture",
+            "active_lightning_chain",
         }
 
         for skill_id in migrated_ids:
@@ -194,7 +218,7 @@ class SkillEditorTest(unittest.TestCase):
         entries = self.entries_by_id()
         self.assertEqual(tuple(entries), ACTIVE_SKILL_ORDER)
         for skill_id in ACTIVE_SKILL_ORDER:
-            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture"}:
+            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain"}:
                 continue
             self.assertFalse(entries[skill_id]["migrated"])
             self.assertFalse(entries[skill_id]["openable"])
@@ -357,8 +381,9 @@ class SkillEditorTest(unittest.TestCase):
         self.assertTrue(skills["active_penetrating_shot"]["testable"])
         self.assertTrue(skills["active_frost_nova"]["testable"])
         self.assertTrue(skills["active_puncture"]["testable"])
+        self.assertTrue(skills["active_lightning_chain"]["testable"])
         for skill_id in ACTIVE_SKILL_ORDER:
-            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture"}:
+            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain"}:
                 continue
             self.assertFalse(skills[skill_id]["testable"])
             self.assertEqual(skills[skill_id]["status_text"], "未迁移 / 不可测试")
@@ -454,6 +479,56 @@ class SkillEditorTest(unittest.TestCase):
         self.assertTrue(modified["ok"], modified["message_text"])
         self.assertGreaterEqual(modified["result"]["tested"]["final_damage"], modified["result"]["baseline"]["final_damage"])
 
+    def test_skill_test_arena_active_lightning_chain_uses_chain_events(self) -> None:
+        service = SkillEditorService(self.config_root)
+        result = service.run_test_arena({"skill_id": "active_lightning_chain", "scene_id": "dense_pack"})
+
+        self.assertTrue(result["ok"], result["message_text"])
+        arena = result["result"]
+        timeline = arena["event_timeline"]
+        event_types = [event["type"] for event in timeline]
+        self.assertIn("cast_start", event_types)
+        self.assertIn("chain_segment", event_types)
+        self.assertIn("damage", event_types)
+        self.assertIn("hit_vfx", event_types)
+        self.assertIn("floating_text", event_types)
+        self.assertTrue(arena["has_chain_segment"])
+        self.assertTrue(arena["timeline_checks"]["has_multiple_chain_segment"])
+        self.assertTrue(arena["timeline_checks"]["chain_no_repeat_targets"])
+        self.assertTrue(arena["timeline_checks"]["damage_after_or_at_chain_segment"])
+        self.assertGreaterEqual(len(arena["hit_targets"]), 2)
+        segments = [event for event in timeline if event["type"] == "chain_segment"]
+        self.assertEqual([event["payload"]["segment_index"] for event in segments], list(range(len(segments))))
+        self.assertTrue(all(event["damage_type"] == "lightning" for event in timeline if event["type"] == "damage"))
+
+        package = deepcopy(self.entries_by_id()["active_lightning_chain"]["package_data"])
+        package["behavior"]["params"]["chain_count"] = 2
+        limited = service.run_test_arena({"skill_id": "active_lightning_chain", "scene_id": "dense_pack", "package": package})
+        self.assertEqual(limited["result"]["event_counts"]["chain_segment"], 2)
+
+        package = deepcopy(self.entries_by_id()["active_lightning_chain"]["package_data"])
+        package["behavior"]["params"]["chain_radius"] = 10
+        short = service.run_test_arena({"skill_id": "active_lightning_chain", "scene_id": "dense_pack", "package": package})
+        self.assertLess(len(short["result"]["hit_targets"]), len(arena["hit_targets"]))
+
+        package = deepcopy(self.entries_by_id()["active_lightning_chain"]["package_data"])
+        package["behavior"]["params"]["chain_delay_ms"] = 250
+        delayed = service.run_test_arena({"skill_id": "active_lightning_chain", "scene_id": "dense_pack", "package": package})
+        delays = [event["delay_ms"] for event in delayed["result"]["event_timeline"] if event["type"] == "chain_segment"]
+        self.assertEqual(delays[:3], [80, 330, 580])
+
+        modified = service.run_test_arena(
+            {
+                "skill_id": "active_lightning_chain",
+                "scene_id": "dense_pack",
+                "use_modifier_stack": True,
+                "modifier_ids": ["support_lightning_mastery", "support_area_magnify"],
+                "relation": "same_row",
+            }
+        )
+        self.assertTrue(modified["ok"], modified["message_text"])
+        self.assertGreaterEqual(modified["result"]["tested"]["final_damage"], modified["result"]["baseline"]["final_damage"])
+
     def test_skill_event_timeline_exposes_real_events_and_required_fields(self) -> None:
         result = SkillEditorService(self.config_root).run_test_arena(
             {"skill_id": "active_fire_bolt", "scene_id": "single_dummy"}
@@ -467,6 +542,7 @@ class SkillEditorTest(unittest.TestCase):
             "cast_start",
             "damage_zone",
             "melee_arc",
+            "chain_segment",
             "area_spawn",
             "projectile_spawn",
             "projectile_hit",
@@ -558,10 +634,10 @@ class SkillEditorTest(unittest.TestCase):
             strong["result"]["damage_results"][0]["amount"],
         )
 
-    def test_ice_shards_test_arena_validates_fan_projectile_scenarios(self) -> None:
+    def test_ice_shards_test_arena_validates_projectile_spread_scenarios(self) -> None:
         service = SkillEditorService(self.config_root)
         base_package = deepcopy(self.entries_by_id()["active_ice_shards"]["package_data"])
-        base_package["behavior"]["params"]["spread_angle"] = 20
+        base_package["behavior"]["params"]["spread_angle_deg"] = 20
         base_package["behavior"]["params"]["angle_step"] = 10
 
         single = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "single_dummy", "package": base_package})
@@ -585,9 +661,9 @@ class SkillEditorTest(unittest.TestCase):
 
         narrow = deepcopy(base_package)
         wide = deepcopy(base_package)
-        narrow["behavior"]["params"]["spread_angle"] = 10
+        narrow["behavior"]["params"]["spread_angle_deg"] = 10
         narrow["behavior"]["params"]["angle_step"] = 5
-        wide["behavior"]["params"]["spread_angle"] = 40
+        wide["behavior"]["params"]["spread_angle_deg"] = 40
         wide["behavior"]["params"]["angle_step"] = 20
         narrow_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "three_target_row", "package": narrow})
         wide_result = service.run_test_arena({"skill_id": "active_ice_shards", "scene_id": "three_target_row", "package": wide})
@@ -813,7 +889,7 @@ class SkillEditorTest(unittest.TestCase):
         self.assertIn("行为参数不在模板白名单内", result["message_text"])
         self.assertEqual(path.read_text(encoding="utf-8"), before)
 
-    def test_fan_projectile_invalid_fields_fail_with_chinese_errors(self) -> None:
+    def test_ice_shards_projectile_invalid_fields_fail_with_chinese_errors(self) -> None:
         config_root = self.temp_config_root()
         service = SkillEditorService(config_root)
         entries = {entry["id"]: entry for entry in service.view()["entries"]}
@@ -827,10 +903,10 @@ class SkillEditorTest(unittest.TestCase):
         self.assertIn("projectile_count", result["message_text"])
 
         package = deepcopy(entries["active_ice_shards"]["package_data"])
-        package["behavior"]["params"]["spread_angle"] = 181
+        package["behavior"]["params"]["spread_angle_deg"] = 181
         result = service.save_package("active_ice_shards", package)
         self.assertFalse(result["ok"])
-        self.assertIn("spread_angle", result["message_text"])
+        self.assertIn("spread_angle_deg", result["message_text"])
 
         package = deepcopy(entries["active_ice_shards"]["package_data"])
         package["behavior"]["params"]["hit_policy"] = "chain"
@@ -863,6 +939,37 @@ class SkillEditorTest(unittest.TestCase):
         result = service.save_package("active_frost_nova", package)
         self.assertFalse(result["ok"])
         self.assertIn("shape", result["message_text"])
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+    def test_chain_invalid_fields_fail_with_chinese_errors(self) -> None:
+        config_root = self.temp_config_root()
+        service = SkillEditorService(config_root)
+        entries = {entry["id"]: entry for entry in service.view()["entries"]}
+        path = config_root / "skills" / "active" / "active_lightning_chain" / "skill.yaml"
+        before = path.read_text(encoding="utf-8")
+
+        invalid_cases = [
+            ("chain_count", 0),
+            ("chain_radius", 0),
+            ("chain_delay_ms", -1),
+            ("damage_falloff_per_chain", 2),
+            ("target_policy", "nearest_enemy"),
+            ("allow_repeat_target", "false"),
+            ("segment_vfx_key", "not a key"),
+        ]
+        for key, value in invalid_cases:
+            with self.subTest(key=key):
+                package = deepcopy(entries["active_lightning_chain"]["package_data"])
+                package["behavior"]["params"][key] = value
+                result = service.save_package("active_lightning_chain", package)
+                self.assertFalse(result["ok"])
+                self.assertIn(key, result["message_text"])
+
+        package = deepcopy(entries["active_lightning_chain"]["package_data"])
+        package["behavior"]["params"]["forbidden_param"] = 1
+        result = service.save_package("active_lightning_chain", package)
+        self.assertFalse(result["ok"])
+        self.assertIn("forbidden_param", result["message_text"])
         self.assertEqual(path.read_text(encoding="utf-8"), before)
 
     def test_invalid_enum_fails_with_chinese_error_without_writing_file(self) -> None:

@@ -12,7 +12,6 @@ GEM_KINDS = frozenset({"active_skill", "passive_skill", "support"})
 ALLOWED_SKILL_BEHAVIOR_TEMPLATES = frozenset(
     {
         "projectile",
-        "fan_projectile",
         "chain",
         "player_nova",
         "melee_arc",
@@ -583,6 +582,8 @@ def validate_skill_package_data(
             and hit_at_ms < windup_ms
         ):
             raise ValueError(f"skill package behavior.params.hit_at_ms must not be earlier than windup_ms: {package_id}")
+    if behavior_template == "chain":
+        _validate_chain_params(params, package_id)
     if behavior_template == "damage_zone":
         _validate_damage_zone_params(params, behavior_templates[behavior_template], package_id)
 
@@ -592,7 +593,7 @@ def validate_skill_package_data(
         raise ValueError(f"skill package hit.base_damage must be non-negative: {package_id}")
     if not isinstance(hit["can_crit"], bool) or not isinstance(hit["can_apply_status"], bool):
         raise ValueError(f"skill package hit crit/status fields must be booleans: {package_id}")
-    if "damage_timing" in hit and hit["damage_timing"] not in {"on_projectile_hit", "on_area_hit", "on_melee_hit", "on_damage_zone_hit"}:
+    if "damage_timing" in hit and hit["damage_timing"] not in {"on_projectile_hit", "on_area_hit", "on_melee_hit", "on_damage_zone_hit", "on_chain_hit"}:
         raise ValueError(f"skill package hit.damage_timing is invalid: {package_id}")
     if "hit_delay_ms" in hit and (not _is_integer(hit["hit_delay_ms"]) or hit["hit_delay_ms"] < 0):
         raise ValueError(f"skill package hit.hit_delay_ms must be a non-negative integer: {package_id}")
@@ -660,10 +661,21 @@ def _validate_behavior_param(param_name: str, param_value: Any, constraint: Any,
             raise ValueError(f"skill package behavior.params.{param_name} must be an integer: {package_id}")
         _validate_minimum(param_name, param_value, constraint, package_id)
         return
+    if expected_type == "integer_or_unlimited":
+        if param_value == "unlimited":
+            return
+        if not _is_integer(param_value):
+            raise ValueError(f"skill package behavior.params.{param_name} must be a positive integer or unlimited: {package_id}")
+        _validate_minimum(param_name, param_value, constraint, package_id)
+        return
     if expected_type == "number":
         if not _is_number(param_value):
             raise ValueError(f"skill package behavior.params.{param_name} must be a number: {package_id}")
         _validate_minimum(param_name, param_value, constraint, package_id)
+        return
+    if expected_type == "boolean":
+        if not isinstance(param_value, bool):
+            raise ValueError(f"skill package behavior.params.{param_name} must be a boolean: {package_id}")
         return
     if expected_type == "string":
         if not isinstance(param_value, str):
@@ -723,6 +735,26 @@ def _validate_damage_zone_params(params: dict[str, Any], template: dict[str, Any
         raise ValueError(f"skill package behavior.params.facing_policy must be none for circle: {package_id}")
     if shape == "rectangle" and params.get("facing_policy") == "none":
         raise ValueError(f"skill package behavior.params.facing_policy must choose a target direction for rectangle: {package_id}")
+
+
+def _validate_chain_params(params: dict[str, Any], package_id: str) -> None:
+    required = {
+        "chain_count",
+        "chain_radius",
+        "chain_delay_ms",
+        "damage_falloff_per_chain",
+        "target_policy",
+        "allow_repeat_target",
+        "max_targets",
+        "segment_vfx_key",
+    }
+    missing = sorted(required - set(params))
+    if missing:
+        raise ValueError(f"skill package behavior.params missing chain fields {missing}: {package_id}")
+    if params.get("target_policy") != "nearest_not_hit":
+        raise ValueError(f"skill package behavior.params.target_policy has invalid enum value: {package_id}")
+    if not isinstance(params.get("allow_repeat_target"), bool):
+        raise ValueError(f"skill package behavior.params.allow_repeat_target must be a boolean: {package_id}")
 
 
 def _validate_minimum(param_name: str, param_value: int | float, constraint: dict[str, Any], package_id: str) -> None:

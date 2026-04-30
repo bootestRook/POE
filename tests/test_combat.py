@@ -135,7 +135,7 @@ class CombatTest(unittest.TestCase):
             self.assertEqual(second_events, ())
 
     def test_non_packaged_active_skills_keep_legacy_immediate_path(self) -> None:
-        self.inventory.add_instance("active", "active_lightning_chain")
+        self.inventory.add_instance("active", "active_lava_orb")
         self.board.mount_gem("active", 0, 0)
         session = CombatSession.start(
             player=self.player(),

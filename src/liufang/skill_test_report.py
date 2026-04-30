@@ -15,6 +15,7 @@ EXPECTED_PLAYER_DESCRIPTIONS = {
     "active_ice_shards": "自动向最近敌人方向射出多枚冰霜冰棱，冰棱以扇形展开飞行，命中后造成冰霜伤害，并显示冰霜命中特效与伤害浮字。",
     "active_frost_nova": "自动以玩家自身为中心释放一圈向外扩散的冰霜新星，命中范围内敌人后造成冰霜伤害，并显示冰霜范围爆发特效与伤害浮字。",
     "active_puncture": "自动朝锁定敌人的方向发出一列地刺，命中矩形范围内敌人后造成物理伤害，并显示地刺命中特效与伤害浮字。",
+    "active_lightning_chain": "自动向最近敌人释放闪电链，命中初始目标后，在一定半径内跳跃到附近未命中的敌人，造成多段闪电伤害，并显示连续电弧、命中特效与伤害浮字。",
 }
 
 
@@ -148,10 +149,12 @@ def _report_checks(
     area_events = [event for event in arena_result["event_timeline"] if event["type"] == "area_spawn"]
     melee_events = [event for event in arena_result["event_timeline"] if event["type"] == "melee_arc"]
     zone_events = [event for event in arena_result["event_timeline"] if event["type"] == "damage_zone"]
+    chain_events = [event for event in arena_result["event_timeline"] if event["type"] == "chain_segment"]
     uses_area_nova = entry.get("behavior_template") == "player_nova"
     uses_melee_arc = entry.get("behavior_template") == "melee_arc"
     uses_damage_zone = entry.get("behavior_template") == "damage_zone"
-    expected_damage_type = "physical" if request.skill_id == "active_puncture" else ("cold" if request.skill_id in {"active_ice_shards", "active_frost_nova"} else "fire")
+    uses_chain = entry.get("behavior_template") == "chain"
+    expected_damage_type = "lightning" if request.skill_id == "active_lightning_chain" else ("physical" if request.skill_id == "active_puncture" else ("cold" if request.skill_id in {"active_ice_shards", "active_frost_nova"} else "fire"))
     life_reduced = any(monster["current_life"] < monster["max_life"] for monster in arena_result["monsters"])
     modifier_changed = (
         arena_result["baseline"]["final_damage"] != arena_result["tested"]["final_damage"]
@@ -166,6 +169,7 @@ def _report_checks(
         "uses_area_nova": uses_area_nova,
         "uses_melee_arc": uses_melee_arc,
         "uses_damage_zone": uses_damage_zone,
+        "uses_chain": uses_chain,
         "expected_damage_type": expected_damage_type,
         "has_projectile_spawn": bool(timeline_checks["has_projectile_spawn"]),
         "has_multiple_projectile_spawn": request.skill_id != "active_ice_shards" or bool(timeline_checks.get("has_multiple_projectile_spawn")),
@@ -184,6 +188,12 @@ def _report_checks(
         "damage_zone_faces_nearest_target": (not uses_damage_zone) or _damage_zone_faces_nearest_target(zone_events, arena_result["initial_monsters"]),
         "damage_after_or_at_damage_zone_hit": (not uses_damage_zone) or bool(timeline_checks.get("damage_after_or_at_damage_zone_hit")),
         "damage_zone_targets_passed": (not uses_damage_zone) or _damage_zone_targets_passed(zone_events, damage_events),
+        "has_chain_segment": (not uses_chain) or bool(timeline_checks.get("has_chain_segment")),
+        "has_multiple_chain_segment": (not uses_chain) or bool(timeline_checks.get("has_multiple_chain_segment")),
+        "chain_hits_multiple_targets": (not uses_chain) or bool(timeline_checks.get("chain_hits_multiple_targets")),
+        "chain_no_repeat_targets": (not uses_chain) or bool(timeline_checks.get("chain_no_repeat_targets")),
+        "damage_after_or_at_chain_segment": (not uses_chain) or bool(timeline_checks.get("damage_after_or_at_chain_segment")),
+        "chain_targets_passed": (not uses_chain) or _chain_targets_passed(chain_events, damage_events),
         "has_projectile_hit": bool(timeline_checks.get("has_projectile_hit")),
         "has_damage": bool(timeline_checks["has_damage"]),
         "has_hit_vfx": bool(timeline_checks["has_hit_vfx"]),
@@ -312,6 +322,29 @@ def _damage_zone_targets_passed(zone_events: list[dict[str, Any]], damage_events
     return False
 
 
+def _chain_targets_passed(chain_events: list[dict[str, Any]], damage_events: list[dict[str, Any]]) -> bool:
+    if not chain_events or not damage_events:
+        return False
+    damage_by_segment = {
+        (event.get("target_entity"), event.get("payload", {}).get("segment_index"))
+        for event in damage_events
+        if isinstance(event.get("payload", {}), dict)
+    }
+    for segment in chain_events:
+        payload = segment.get("payload", {})
+        if not isinstance(payload, dict):
+            return False
+        start = payload.get("start_position")
+        end = payload.get("end_position") or payload.get("target_world_position")
+        if not isinstance(start, dict) or not isinstance(end, dict):
+            return False
+        if float(payload.get("chain_radius", 0.0)) <= 0:
+            return False
+        if (segment.get("target_entity"), payload.get("segment_index")) not in damage_by_segment:
+            return False
+    return True
+
+
 def _damage_target_position(event: dict[str, Any]) -> dict[str, Any]:
     payload = event.get("payload", {})
     target = payload.get("target_world_position", event.get("position", {})) if isinstance(payload, dict) else event.get("position", {})
@@ -340,6 +373,38 @@ def _parameter_variant_checks(
     request: SkillTestReportRequest,
     baseline_spawns: list[dict[str, Any]],
 ) -> dict[str, bool]:
+    if request.skill_id == "active_lightning_chain":
+        package = entry.get("package_data")
+        if not isinstance(package, dict):
+            return {
+                "projectile_count_changes_events": True,
+                "spread_angle_changes_directions": True,
+                "chain_count_changes_segments": False,
+                "chain_radius_changes_targets": False,
+                "chain_delay_changes_timing": False,
+                "damage_falloff_changes_damage": False,
+            }
+        base_result = _run_arena(service, request, package)
+        count_package = deepcopy(package)
+        count_package["behavior"]["params"]["chain_count"] = max(1, int(count_package["behavior"]["params"].get("chain_count", 1)) - 2)
+        count_result = _run_arena(service, request, count_package)
+        radius_package = deepcopy(package)
+        radius_package["behavior"]["params"]["chain_radius"] = max(1.0, float(radius_package["behavior"]["params"].get("chain_radius", 1.0)) * 0.1)
+        radius_result = _run_arena(service, request, radius_package)
+        delay_package = deepcopy(package)
+        delay_package["behavior"]["params"]["chain_delay_ms"] = int(delay_package["behavior"]["params"].get("chain_delay_ms", 0)) + 75
+        delay_result = _run_arena(service, request, delay_package)
+        falloff_package = deepcopy(package)
+        falloff_package["behavior"]["params"]["damage_falloff_per_chain"] = min(1.0, float(falloff_package["behavior"]["params"].get("damage_falloff_per_chain", 0.0)) + 0.35)
+        falloff_result = _run_arena(service, request, falloff_package)
+        return {
+            "projectile_count_changes_events": True,
+            "spread_angle_changes_directions": True,
+            "chain_count_changes_segments": _event_count(base_result, "chain_segment") != _event_count(count_result, "chain_segment"),
+            "chain_radius_changes_targets": _hit_target_ids(base_result) != _hit_target_ids(radius_result),
+            "chain_delay_changes_timing": _chain_segment_delays(base_result) != _chain_segment_delays(delay_result),
+            "damage_falloff_changes_damage": _damage_amounts(base_result) != _damage_amounts(falloff_result),
+        }
     if request.skill_id == "active_puncture":
         package = entry.get("package_data")
         if not isinstance(package, dict):
@@ -401,9 +466,10 @@ def _parameter_variant_checks(
 
     angle_package = deepcopy(package)
     angle_params = angle_package["behavior"]["params"]
-    base_spread_angle = float(angle_params.get("spread_angle", 0.0))
+    spread_key = "spread_angle_deg" if "spread_angle_deg" in angle_params else "spread_angle"
+    base_spread_angle = float(angle_params.get(spread_key, 0.0))
     base_angle_step = float(angle_params.get("angle_step", 0.0))
-    angle_params["spread_angle"] = base_spread_angle - 10.0 if base_spread_angle >= 180.0 else min(180.0, max(1.0, base_spread_angle + 10.0))
+    angle_params[spread_key] = base_spread_angle - 10.0 if base_spread_angle >= 180.0 else min(180.0, max(1.0, base_spread_angle + 10.0))
     angle_params["angle_step"] = base_angle_step - 5.0 if base_angle_step >= 90.0 else min(90.0, max(1.0, base_angle_step + 5.0))
     angle_result = _run_arena(service, request, angle_package)
 
@@ -431,8 +497,42 @@ def _hit_target_ids(arena_result: dict[str, Any]) -> tuple[str, ...]:
     return tuple(target["enemy_id"] for target in arena_result.get("hit_targets", []))
 
 
+def _event_count(arena_result: dict[str, Any], event_type: str) -> int:
+    return int(arena_result.get("event_counts", {}).get(event_type, 0))
+
+
+def _chain_segment_delays(arena_result: dict[str, Any]) -> tuple[int, ...]:
+    return tuple(
+        int(event.get("delay_ms", 0))
+        for event in arena_result.get("event_timeline", [])
+        if event.get("type") == "chain_segment"
+    )
+
+
+def _damage_amounts(arena_result: dict[str, Any]) -> tuple[float, ...]:
+    return tuple(round(float(item.get("amount", 0.0)), 4) for item in arena_result.get("damage_results", []))
+
+
 def _conclusion(checks: dict[str, bool]) -> tuple[str, tuple[str, ...]]:
-    if checks.get("uses_damage_zone"):
+    if checks.get("uses_chain"):
+        critical = (
+            "has_chain_segment",
+            "has_multiple_chain_segment",
+            "chain_hits_multiple_targets",
+            "chain_no_repeat_targets",
+            "has_damage",
+            "damage_after_or_at_chain_segment",
+            "flight_no_damage_passed",
+            "life_reduced_after_damage",
+            "damage_type_expected",
+            "hit_target_exists",
+            "chain_targets_passed",
+            "chain_count_changes_segments",
+            "chain_radius_changes_targets",
+            "chain_delay_changes_timing",
+            "damage_falloff_changes_damage",
+        )
+    elif checks.get("uses_damage_zone"):
         critical = (
             "has_damage_zone",
             "damage_zone_origin_passed",
@@ -516,7 +616,7 @@ def _check_failure_text(key: str) -> str:
         "damage_type_expected": "伤害类型与技能期望不一致。",
         "hit_target_exists": "没有实际命中目标。",
         "projectile_count_changes_events": "修改 projectile_count 后投射物事件数量没有变化。",
-        "spread_angle_changes_directions": "修改 spread_angle 后投射物方向没有变化。",
+        "spread_angle_changes_directions": "修改 spread_angle_deg 后投射物方向没有变化。",
         "has_area_spawn": "缺少范围生成 area_spawn 事件。",
         "area_center_passed": "area_spawn 中心不是玩家或释放源位置。",
         "damage_after_or_at_area_hit": "damage 早于 hit_at_ms 结算。",
@@ -536,6 +636,16 @@ def _check_failure_text(key: str) -> str:
         "damage_zone_targets_passed": "伤害区域内外或距离命中判断不一致。",
         "length_changes_hit_targets": "修改 length 后命中目标没有变化。",
         "width_changes_hit_targets": "修改 width 后命中目标没有变化。",
+        "has_chain_segment": "缺少连锁段 chain_segment 事件。",
+        "has_multiple_chain_segment": "缺少多段 chain_segment 事件。",
+        "chain_hits_multiple_targets": "连锁闪电没有命中多个目标。",
+        "chain_no_repeat_targets": "连锁闪电默认重复命中了同一目标。",
+        "damage_after_or_at_chain_segment": "damage 早于对应 chain_segment。",
+        "chain_targets_passed": "连锁段目标、起止点或半径数据不完整。",
+        "chain_count_changes_segments": "修改 chain_count 后链段数量没有变化。",
+        "chain_radius_changes_targets": "修改 chain_radius 后可跳跃目标没有变化。",
+        "chain_delay_changes_timing": "修改 chain_delay_ms 后链段时间间隔没有变化。",
+        "damage_falloff_changes_damage": "修改 damage_falloff_per_chain 后后续伤害没有变化。",
         "has_hit_vfx": "缺少命中特效事件。",
         "has_floating_text": "缺少伤害浮字事件。",
         "modifier_stack_changed_result": "测试 Modifier 栈开启后最终伤害或关键参数没有变化。",
@@ -547,8 +657,10 @@ def _suggestions(inconsistencies: tuple[str, ...]) -> tuple[str, ...]:
         return ("暂无修复建议，当前测试结果与期望描述一致。",)
     suggestions = []
     for item in inconsistencies:
-        if "投射物" in item or "伤害结算" in item:
-            suggestions.append("检查 fan_projectile 行为模板和 SkillRuntime 事件生成顺序。")
+        if "连锁" in item or "chain_" in item:
+            suggestions.append("检查 chain 行为模板、SkillRuntime 链段选择和 SkillEvent 时序。")
+        elif "投射物" in item or "伤害结算" in item:
+            suggestions.append("检查 projectile 行为模板和 SkillRuntime 事件生成顺序。")
         elif "生命" in item:
             suggestions.append("检查测试场 damage 事件消费与怪物生命结算。")
         elif "特效" in item or "浮字" in item:
@@ -609,6 +721,10 @@ def _markdown_report(
         f"- melee_arc：{_pass_text(checks.get('has_melee_arc', True))}",
         f"- 近战扇形起点：{_pass_text(checks.get('melee_arc_origin_passed', True))}",
         f"- 朝向最近目标：{_pass_text(checks.get('melee_arc_faces_nearest_target', True))}",
+        f"- chain_segment：{_pass_text(checks.get('has_chain_segment', True))}",
+        f"- 多段 chain_segment：{_pass_text(checks.get('has_multiple_chain_segment', True))}",
+        f"- 连锁命中多个目标：{_pass_text(checks.get('chain_hits_multiple_targets', True))}",
+        f"- 默认不重复命中：{_pass_text(checks.get('chain_no_repeat_targets', True))}",
         f"- projectile_spawn：{_pass_text(checks['has_projectile_spawn'])}",
         f"- 多枚 projectile_spawn：{_pass_text(checks['has_multiple_projectile_spawn'])}",
         f"- 扇形方向：{_pass_text(checks['fan_direction_passed'])}",
@@ -622,15 +738,20 @@ def _markdown_report(
         f"- damage 不早于 hit_at_ms：{_pass_text(checks.get('damage_after_or_at_area_hit', True))}",
         f"- damage 不早于 melee_arc hit_at_ms：{_pass_text(checks.get('damage_after_or_at_melee_hit', True))}",
         f"- damage 不早于 damage_zone hit_at_ms：{_pass_text(checks.get('damage_after_or_at_damage_zone_hit', True))}",
+        f"- damage 不早于 chain_segment：{_pass_text(checks.get('damage_after_or_at_chain_segment', True))}",
         f"- 投射物飞行期间未扣血：{_pass_text(checks['flight_no_damage_passed'])}",
         f"- damage 后目标生命减少：{_pass_text(checks['life_reduced_after_damage'])}",
         f"- damage_type 为 {checks['expected_damage_type']}：{_pass_text(checks['damage_type_expected'])}",
         f"- 存在命中目标：{_pass_text(checks['hit_target_exists'])}",
         f"- projectile_count 修改后事件数量变化：{_pass_text(checks['projectile_count_changes_events'])}",
-        f"- spread_angle 修改后方向变化：{_pass_text(checks['spread_angle_changes_directions'])}",
+        f"- spread_angle_deg 修改后方向变化：{_pass_text(checks['spread_angle_changes_directions'])}",
         f"- radius 修改后命中目标变化：{_pass_text(checks.get('radius_changes_hit_targets', True))}",
         f"- length 修改后命中目标变化：{_pass_text(checks.get('length_changes_hit_targets', True))}",
         f"- width 修改后命中目标变化：{_pass_text(checks.get('width_changes_hit_targets', True))}",
+        f"- chain_count 修改后链段数量变化：{_pass_text(checks.get('chain_count_changes_segments', True))}",
+        f"- chain_radius 修改后可跳跃目标变化：{_pass_text(checks.get('chain_radius_changes_targets', True))}",
+        f"- chain_delay_ms 修改后链段间隔变化：{_pass_text(checks.get('chain_delay_changes_timing', True))}",
+        f"- damage_falloff_per_chain 修改后后续伤害变化：{_pass_text(checks.get('damage_falloff_changes_damage', True))}",
         f"- 范围内外命中判断：{_pass_text(checks.get('area_range_targets_passed', True))}",
         f"- 伤害区域命中判断：{_pass_text(checks.get('damage_zone_targets_passed', True))}",
         f"- arc_radius 修改后命中目标变化：{_pass_text(checks.get('arc_radius_changes_hit_targets', True))}",

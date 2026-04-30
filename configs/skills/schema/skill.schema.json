@@ -59,7 +59,6 @@
         "template": {
           "enum": [
             "projectile",
-            "fan_projectile",
             "chain",
             "player_nova",
             "melee_arc",
@@ -77,14 +76,11 @@
             "projectile_count": { "type": "integer", "minimum": 1 },
             "burst_interval_ms": { "type": "integer", "minimum": 0 },
             "spread_angle_deg": { "type": "number", "minimum": 0, "maximum": 180 },
-            "spread_angle": { "type": "number", "minimum": 0, "maximum": 180 },
             "angle_step": { "type": "number", "minimum": 0, "maximum": 90 },
             "projectile_width": { "type": "number", "minimum": 1 },
             "projectile_height": { "type": "number", "minimum": 1 },
             "max_distance": { "type": "number", "minimum": 1 },
             "hit_policy": { "enum": ["first_hit", "pierce"] },
-            "spawn_pattern": { "enum": ["centered_fan", "edge_to_edge"] },
-            "per_projectile_damage_scale": { "type": "number", "minimum": 0.01, "maximum": 10 },
             "pierce_count": { "type": "integer", "minimum": 0 },
             "collision_radius": { "type": "number", "minimum": 0 },
             "spawn_offset": {
@@ -120,6 +116,12 @@
             "length": { "type": "number", "minimum": 1 },
             "width": { "type": "number", "minimum": 1 },
             "angle_offset_deg": { "type": "number", "minimum": -180, "maximum": 180 }
+            ,"chain_count": { "type": "integer", "minimum": 1 },
+            "chain_radius": { "type": "number", "minimum": 1 },
+            "chain_delay_ms": { "type": "integer", "minimum": 0 },
+            "damage_falloff_per_chain": { "type": "number", "minimum": 0, "maximum": 1 },
+            "allow_repeat_target": { "type": "boolean" },
+            "segment_vfx_key": { "$ref": "#/$defs/localization_key" }
           }
         }
       }
@@ -132,7 +134,7 @@
         "base_damage": { "type": "number", "minimum": 0 },
         "can_crit": { "type": "boolean" },
         "can_apply_status": { "type": "boolean" },
-        "damage_timing": { "enum": ["on_projectile_hit", "on_area_hit", "on_melee_hit", "on_damage_zone_hit"] },
+        "damage_timing": { "enum": ["on_projectile_hit", "on_area_hit", "on_melee_hit", "on_damage_zone_hit", "on_chain_hit"] },
         "hit_delay_ms": { "type": "integer", "minimum": 0 },
         "hit_radius": { "type": "number", "minimum": 0 },
         "target_policy": { "enum": ["selected_target", "nearest_enemy"] }

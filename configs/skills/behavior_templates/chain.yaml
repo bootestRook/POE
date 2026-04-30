@@ -1,0 +1,28 @@
+id: chain
+allowed_params: ["chain_count", "chain_radius", "chain_delay_ms", "damage_falloff_per_chain", "target_policy", "allow_repeat_target", "max_targets", "segment_vfx_key"]
+param_constraints:
+  chain_count:
+    type: integer
+    minimum: 1
+  chain_radius:
+    type: number
+    minimum: 1
+  chain_delay_ms:
+    type: integer
+    minimum: 0
+  damage_falloff_per_chain:
+    type: number
+    minimum: 0
+    maximum: 1
+  target_policy:
+    type: string
+    enum: ["nearest_not_hit"]
+  allow_repeat_target:
+    type: boolean
+  max_targets:
+    type: integer_or_unlimited
+    minimum: 1
+  segment_vfx_key:
+    type: key
+events: ["cast_start", "chain_segment", "damage", "hit_vfx", "floating_text"]
+damage_timing: on_chain_hit

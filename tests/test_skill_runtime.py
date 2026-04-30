@@ -424,11 +424,91 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertLess(len(narrow_damage), len(long_damage))
         self.assertTrue(all(event.delay_ms == 260 for event in narrow_damage))
 
-    def test_ice_shards_fan_projectile_outputs_real_fan_events(self) -> None:
+    def test_lightning_chain_outputs_ordered_chain_segments_and_timed_lightning_damage(self) -> None:
+        self.inventory.add_instance("active", "active_lightning_chain")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="near",
+            target_position=Position(120, 0),
+            timestamp_ms=10,
+            target_entities=[
+                {"entity_id": "near", "position": {"x": 120, "y": 0}},
+                {"entity_id": "next", "position": {"x": 210, "y": 0}},
+                {"entity_id": "third", "position": {"x": 300, "y": 0}},
+                {"entity_id": "far", "position": {"x": 620, "y": 0}},
+            ],
+        )
+
+        event_types = [event.type for event in events]
+        segments = [event for event in events if event.type == "chain_segment"]
+        damage_events = [event for event in events if event.type == "damage"]
+        self.assertEqual(final_skill.skill_package_id, "active_lightning_chain")
+        self.assertEqual(final_skill.behavior_template, "chain")
+        self.assertIn("cast_start", event_types)
+        self.assertEqual(len(segments), 3)
+        self.assertEqual([event.target_entity for event in segments], ["near", "next", "third"])
+        self.assertEqual({event.target_entity for event in damage_events}, {"near", "next", "third"})
+        self.assertNotIn("far", {event.target_entity for event in damage_events})
+        self.assertTrue(all(event.damage_type == "lightning" for event in damage_events))
+        self.assertTrue(all(event.delay_ms >= final_skill.cast["windup_ms"] for event in damage_events))
+        self.assertEqual([event.payload["segment_index"] for event in segments], [0, 1, 2])
+        self.assertEqual([event.delay_ms for event in segments], [80, 200, 320])
+        self.assertEqual([event.delay_ms for event in damage_events], [80, 200, 320])
+        self.assertEqual(segments[0].payload["start_position"], {"x": 0, "y": 0})
+        self.assertEqual(segments[1].payload["from_target"], "near")
+        self.assertLess(damage_events[1].amount, damage_events[0].amount)
+        self.assertTrue(any(event.type == "hit_vfx" for event in events))
+        self.assertTrue(any(event.type == "floating_text" for event in events))
+
+    def test_lightning_chain_params_change_count_radius_delay_and_falloff(self) -> None:
+        self.inventory.add_instance("active", "active_lightning_chain")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        targets = [
+            {"entity_id": "near", "position": {"x": 120, "y": 0}},
+            {"entity_id": "next", "position": {"x": 180, "y": 0}},
+            {"entity_id": "third", "position": {"x": 240, "y": 0}},
+        ]
+
+        def run(**params: float | int) -> tuple:
+            tested = replace(final_skill, runtime_params={**(final_skill.runtime_params or {}), **params})
+            return SkillRuntime().execute(
+                tested,
+                source_entity="player_1",
+                source_position=Position(0, 0),
+                target_entity="near",
+                target_position=Position(120, 0),
+                timestamp_ms=0,
+                target_entities=targets,
+            )
+
+        one = run(chain_count=1)
+        three = run(chain_count=3)
+        short_radius = run(chain_radius=30)
+        long_radius = run(chain_radius=180)
+        slow = run(chain_delay_ms=250)
+        strong_falloff = run(damage_falloff_per_chain=0.5)
+
+        self.assertEqual(len([event for event in one if event.type == "chain_segment"]), 1)
+        self.assertEqual(len([event for event in three if event.type == "chain_segment"]), 3)
+        self.assertLess(
+            len([event for event in short_radius if event.type == "damage"]),
+            len([event for event in long_radius if event.type == "damage"]),
+        )
+        self.assertEqual([event.delay_ms for event in slow if event.type == "chain_segment"], [80, 330, 580])
+        damage = [event for event in strong_falloff if event.type == "damage"]
+        self.assertLess(damage[1].amount, damage[0].amount)
+
+    def test_ice_shards_projectile_outputs_real_spread_events(self) -> None:
         self.inventory.add_instance("active", "active_ice_shards")
         self.board.mount_gem("active", 0, 0)
         final_skill = self.calculator.calculate_all()[0]
-        runtime_params = {**(final_skill.runtime_params or {}), "projectile_count": 3, "spread_angle": 20, "angle_step": 10}
+        runtime_params = {**(final_skill.runtime_params or {}), "projectile_count": 3, "spread_angle_deg": 20, "angle_step": 10}
         final_skill = replace(final_skill, projectile_count=3, runtime_params=runtime_params)
 
         events = SkillRuntime().execute(
@@ -453,7 +533,7 @@ class SkillRuntimeTest(unittest.TestCase):
         directions = {(round(event.direction["x"], 4), round(event.direction["y"], 4)) for event in spawn_events}
 
         self.assertEqual(final_skill.skill_package_id, "active_ice_shards")
-        self.assertEqual(final_skill.behavior_template, "fan_projectile")
+        self.assertEqual(final_skill.behavior_template, "projectile")
         self.assertEqual(final_skill.damage_type, "cold")
         self.assertEqual(len(spawn_events), final_skill.projectile_count)
         self.assertGreater(len(directions), 1)
@@ -481,7 +561,7 @@ class SkillRuntimeTest(unittest.TestCase):
             self.assertEqual(event.payload["hit_world_position"], event.position)
             self.assertEqual(event.payload["impact_world_position"], event.position)
 
-    def test_ice_shards_fan_projectile_params_change_count_direction_and_flight_time(self) -> None:
+    def test_ice_shards_projectile_params_change_count_direction_and_flight_time(self) -> None:
         self.inventory.add_instance("active", "active_ice_shards")
         self.board.mount_gem("active", 0, 0)
         final_skill = self.calculator.calculate_all()[0]
@@ -510,8 +590,8 @@ class SkillRuntimeTest(unittest.TestCase):
             )
 
         more_count_events = run(with_params(projectile_count=5))
-        narrow_events = run(with_params(projectile_count=3, spread_angle=10, angle_step=5))
-        wide_events = run(with_params(projectile_count=3, spread_angle=40, angle_step=20))
+        narrow_events = run(with_params(projectile_count=3, spread_angle_deg=10, angle_step=5))
+        wide_events = run(with_params(projectile_count=3, spread_angle_deg=40, angle_step=20))
         slow_events = run(with_params(projectile_speed=240))
         fast_events = run(with_params(projectile_speed=720))
 

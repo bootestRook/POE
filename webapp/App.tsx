@@ -1,10 +1,11 @@
 ﻿import { CSSProperties, DragEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { compareDimetricDepth, dimetricDepth } from "./isoDepth";
-import { addProjectionOffset, createIsoProjectionBounds, ISO_TILE_H, ISO_TILE_W, projectWorldToScreen } from "./isoProjection";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { addProjectionOffset, createIsoProjectionBounds, ISO_TILE_H, ISO_TILE_W, projectWorldToScreen, unprojectScreenToWorld } from "./isoProjection";
 import { edgeAssetsForTile } from "./mapDecorators";
 import { createProceduralSceneProps } from "./propPlacement";
 import { BATTLE_PROP_ASSETS, SceneProp } from "./sceneProps";
-import { BattleTerrainTileKind, terrainAssetForTile, tileHash } from "./terrainAssets";
+import { BattleTerrainTileKind, TerrainTileAssetId, terrainAssetForTile, tileHash } from "./terrainAssets";
 import { getAnimationFrame, resolveDirection, resolveUnitAnimation, UnitAnimationContext, UnitAnimationFrame } from "./unitAnimation";
 import {
   selectEnemyUnitType,
@@ -158,7 +159,6 @@ type SkillPackageData = {
       projectile_count?: number;
       burst_interval_ms?: number;
       spread_angle_deg?: number;
-      spread_angle?: number;
       angle_step?: number;
       projectile_speed?: number;
       projectile_width?: number;
@@ -168,8 +168,6 @@ type SkillPackageData = {
       pierce_count?: number;
       collision_radius?: number;
       spawn_offset?: { x: number; y: number };
-      spawn_pattern?: string;
-      per_projectile_damage_scale?: number;
       projectile_radius?: number;
       impact_radius?: number;
       max_targets?: number;
@@ -292,6 +290,8 @@ type SkillEditorModifierPreview = {
     projectile_count: number;
     projectile_speed: number;
     arc_radius?: number;
+    chain_radius?: number;
+    chain_count?: number;
     status_chance_scale?: number;
   };
   tested: {
@@ -300,6 +300,8 @@ type SkillEditorModifierPreview = {
     projectile_count: number;
     projectile_speed: number;
     arc_radius?: number;
+    chain_radius?: number;
+    chain_count?: number;
     status_chance_scale?: number;
   };
   applied_modifiers: SkillEditorPreviewModifier[];
@@ -342,6 +344,7 @@ type SkillTestArenaEventSummary = {
   target_entity: string;
   amount: number | null;
   projectile_index?: number;
+  segment_index?: number;
 };
 
 type SkillEventTimelineItem = {
@@ -372,6 +375,8 @@ type SkillEventTimelineChecks = {
   has_damage_zone?: boolean;
   has_area_spawn?: boolean;
   has_melee_arc?: boolean;
+  has_chain_segment?: boolean;
+  has_multiple_chain_segment?: boolean;
   has_projectile_hit: boolean;
   has_damage: boolean;
   has_hit_vfx: boolean;
@@ -380,6 +385,9 @@ type SkillEventTimelineChecks = {
   damage_after_or_at_area_hit?: boolean;
   damage_after_or_at_melee_hit?: boolean;
   damage_after_or_at_damage_zone_hit?: boolean;
+  damage_after_or_at_chain_segment?: boolean;
+  chain_no_repeat_targets?: boolean;
+  chain_hits_multiple_targets?: boolean;
   area_center_passed?: boolean;
   melee_arc_origin_passed?: boolean;
   damage_zone_origin_passed?: boolean;
@@ -394,6 +402,7 @@ type SkillTestArenaDamageResult = {
   amount: number;
   delay_ms: number;
   projectile_index?: number;
+  segment_index?: number;
 };
 
 type SkillTestArenaStage = {
@@ -428,6 +437,7 @@ type SkillTestArenaResult = {
   has_damage_zone?: boolean;
   has_area_spawn?: boolean;
   has_melee_arc?: boolean;
+  has_chain_segment?: boolean;
   has_damage: boolean;
   has_hit_vfx: boolean;
   has_floating_text: boolean;
@@ -475,6 +485,7 @@ type SkillEditorState = {
     hit_shapes: SkillEditorOption[];
     damage_falloff_modes: SkillEditorOption[];
     target_policies: SkillEditorOption[];
+    chain_target_policies: SkillEditorOption[];
     preview_fields: SkillEditorOption[];
   };
   modifier_stack: SkillEditorModifierStackView;
@@ -686,6 +697,21 @@ type MeleeArcVfx = {
   skillId?: string;
 };
 
+type ChainSegmentVfx = {
+  id: number;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  ttl: number;
+  duration: number;
+  damageType: string;
+  vfxKey: string;
+  segmentIndex: number;
+  segmentId?: string;
+  skillId?: string;
+};
+
 type DamageZoneVfx = {
   id: number;
   x: number;
@@ -782,6 +808,7 @@ type TilemapData = {
   height: number;
   tileSize: number;
   tiles: TileType[][];
+  terrainAssets: TerrainTileAssetId[][];
   spawnPoint: {
     tileX: number;
     tileY: number;
@@ -830,7 +857,7 @@ const TILE_RENDER_BY_TYPE: Record<TileType, { className: string }> = {
   object: { className: "tile-object-slot" }
 };
 
-const DEFAULT_TILEMAP = createDefaultTilemap(25, 15, 64);
+const DEFAULT_TILEMAP = createDefaultTilemap(15, 11, 64);
 const MAP_WIDTH = DEFAULT_TILEMAP.width * DEFAULT_TILEMAP.tileSize;
 const MAP_HEIGHT = DEFAULT_TILEMAP.height * DEFAULT_TILEMAP.tileSize;
 const BATTLE_PROJECTION_BOUNDS = createIsoProjectionBounds(DEFAULT_TILEMAP.width, DEFAULT_TILEMAP.height, DEFAULT_TILEMAP.tileSize);
@@ -839,9 +866,9 @@ const MAP_VISUAL_HEIGHT = BATTLE_PROJECTION_BOUNDS.height;
 const PLAYER_SPEED = 250;
 const FLOATING_TEXT_VISUAL_RISE_SPEED = 22;
 const DIMETRIC_GROUND_EFFECT_Y_SCALE = ISO_TILE_H / ISO_TILE_W;
-const BATTLE_CAMERA_ZOOM = 1.12;
+const BATTLE_CAMERA_ZOOM = 0.34;
 const BATTLE_CAMERA_ANCHOR_X = "50vw";
-const BATTLE_CAMERA_ANCHOR_Y = "58vh";
+const BATTLE_CAMERA_ANCHOR_Y = "54vh";
 const BATTLE_CAMERA_FOLLOW_OFFSET_Y = 0;
 const BATTLE_ENTITY_Z_INDEX_BASE = 10;
 const FIRE_BOLT_FAKE_Z = 22;
@@ -1458,6 +1485,7 @@ function GameApp() {
   const [bolts, setBolts] = useState<FireBolt[]>([]);
   const [areaNovas, setAreaNovas] = useState<AreaNova[]>([]);
   const [meleeArcs, setMeleeArcs] = useState<MeleeArcVfx[]>([]);
+  const [chainSegments, setChainSegments] = useState<ChainSegmentVfx[]>([]);
   const [damageZones, setDamageZones] = useState<DamageZoneVfx[]>([]);
   const [hitVfxs, setHitVfxs] = useState<HitVfx[]>([]);
   const [kills, setKills] = useState(0);
@@ -1479,6 +1507,7 @@ function GameApp() {
   const nextBoltId = useRef(1);
   const nextAreaNovaId = useRef(1);
   const nextMeleeArcId = useRef(1);
+  const nextChainSegmentId = useRef(1);
   const nextDamageZoneId = useRef(1);
   const nextHitVfxId = useRef(1);
   const nextPromptId = useRef(1);
@@ -1646,6 +1675,7 @@ function GameApp() {
     setBolts((current) => current.map((bolt) => ({ ...bolt, ttl: bolt.ttl - dt })).filter((bolt) => bolt.ttl > 0));
     setAreaNovas((current) => current.map((nova) => ({ ...nova, ttl: nova.ttl - dt })).filter((nova) => nova.ttl > 0));
     setMeleeArcs((current) => current.map((arc) => ({ ...arc, ttl: arc.ttl - dt })).filter((arc) => arc.ttl > 0));
+    setChainSegments((current) => current.map((segment) => ({ ...segment, ttl: segment.ttl - dt })).filter((segment) => segment.ttl > 0));
     setDamageZones((current) => current.map((zone) => ({ ...zone, ttl: zone.ttl - dt })).filter((zone) => zone.ttl > 0));
     setHitVfxs((current) => current.map((vfx) => ({ ...vfx, ttl: vfx.ttl - dt })).filter((vfx) => vfx.ttl > 0));
     consumeScheduledSkillEvents(dt);
@@ -1806,6 +1836,19 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     if (skill.behavior_template === "melee_arc") {
       const targets = selectMeleeArcTargets(current, skill, player);
       const skillEvents = createMeleeArcSkillEvents(skill, targets);
+      consumeImmediateSkillEvents(skillEvents);
+      for (const event of skillEvents) {
+        if (event.delay_ms > 0) {
+          scheduledSkillEvents.current.push({ event, remaining: event.delay_ms / 1000 });
+        }
+      }
+      setCombatLogs((logs) => [`${skill.name_text} 自动释放。`, ...logs].slice(0, 8));
+      return current;
+    }
+    if (skill.behavior_template === "chain") {
+      const targets = selectChainTargets(current, skill, player);
+      if (targets.length === 0) return current;
+      const skillEvents = createChainSkillEvents(skill, targets);
       consumeImmediateSkillEvents(skillEvents);
       for (const event of skillEvents) {
         if (event.delay_ms > 0) {
@@ -2063,6 +2106,93 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     ];
   }
 
+  function createChainSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
+    const runtimeParams = skill.runtime_params ?? {};
+    const origin = { x: player.x, y: player.y };
+    const chainRadius = Math.max(1, Number(runtimeParams.chain_radius ?? skill.cast?.search_range ?? 180));
+    const chainCount = Math.max(1, Math.round(Number(runtimeParams.chain_count ?? targets.length)));
+    const chainDelayMs = Math.max(0, Math.round(Number(runtimeParams.chain_delay_ms ?? 0)));
+    const damageFalloffPerChain = clamp(Number(runtimeParams.damage_falloff_per_chain ?? 0), 0, 1);
+    const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? chainCount)));
+    const selectedTargets = targets.slice(0, Math.min(chainCount, maxTargets));
+    const timestampMs = Math.round(elapsed * 1000);
+    const initialDelayMs = Math.max(0, Math.round(Number(skill.cast?.windup_ms ?? skill.hit?.hit_delay_ms ?? 0)));
+    const segmentVfxKey = String(runtimeParams.segment_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
+    const hitVfxKey = skill.presentation_keys?.hit_vfx_key ?? segmentVfxKey;
+    const sfxKey = skill.presentation_keys?.sfx ?? "";
+    const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
+    const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const targetPolicy = String(runtimeParams.target_policy ?? "nearest_not_hit");
+    const allowRepeatTarget = Boolean(runtimeParams.allow_repeat_target ?? false);
+    const base = {
+      timestamp_ms: timestampMs,
+      source_entity: "player",
+      target_entity: selectedTargets[0] ? String(selectedTargets[0].id) : "",
+      direction: selectedTargets[0] ? guideDirection(origin, selectedTargets[0]) : { x: 1, y: 0 },
+      damage_type: skill.damage_type,
+      skill_instance_id: skill.active_gem_instance_id,
+      sfx_key: sfxKey
+    };
+    return [
+      {
+        ...base,
+        event_id: `${skill.active_gem_instance_id}.cast_start.${timestampMs}`,
+        type: "cast_start" as const,
+        position: origin,
+        delay_ms: 0,
+        duration_ms: initialDelayMs,
+        amount: null,
+        vfx_key: skill.presentation_keys?.cast_vfx_key ?? segmentVfxKey,
+        reason_key: "",
+        payload: { skill_id: skill.skill_package_id ?? skill.skill_template_id, skill_name: skill.name_text }
+      },
+      ...selectedTargets.flatMap((target, index) => {
+        const previous = index === 0 ? origin : selectedTargets[index - 1];
+        const targetPosition = { x: target.x, y: target.y };
+        const startPosition = { x: previous.x, y: previous.y };
+        const delayMs = initialDelayMs + chainDelayMs * index;
+        const damageScale = Math.max(0, 1 - damageFalloffPerChain * index);
+        const amount = skill.final_damage * damageScale;
+        const direction = guideDirection(startPosition, targetPosition);
+        const segmentId = `${skill.active_gem_instance_id}.${timestampMs}.chain.${index}`;
+        const payload = {
+          segment_id: segmentId,
+          skill_id: skill.skill_package_id ?? skill.skill_template_id,
+          segment_index: index,
+          from_target: index === 0 ? "" : String(selectedTargets[index - 1].id),
+          to_target: String(target.id),
+          start_position: startPosition,
+          end_position: targetPosition,
+          target_world_position: targetPosition,
+          chain_radius: chainRadius,
+          chain_delay_ms: chainDelayMs,
+          chain_count: chainCount,
+          target_policy: targetPolicy,
+          allow_repeat_target: allowRepeatTarget,
+          max_targets: maxTargets,
+          damage_scale: damageScale,
+          damage_type: skill.damage_type,
+          vfx_key: segmentVfxKey,
+          skill_name: skill.name_text
+        };
+        const targetBase = {
+          ...base,
+          target_entity: String(target.id),
+          direction,
+          timestamp_ms: timestampMs + delayMs,
+          position: targetPosition,
+          delay_ms: delayMs
+        };
+        return [
+          { ...targetBase, event_id: `${segmentId}.segment`, type: "chain_segment" as const, position: startPosition, duration_ms: Math.max(80, chainDelayMs), amount: null, vfx_key: segmentVfxKey, reason_key: "", payload },
+          { ...targetBase, event_id: `${segmentId}.damage`, type: "damage" as const, duration_ms: 0, amount, vfx_key: hitVfxKey, reason_key: reasonKey, payload },
+          { ...targetBase, event_id: `${segmentId}.hit_vfx`, type: "hit_vfx" as const, duration_ms: FIRE_BOLT_IMPACT_DURATION_MS, amount: null, vfx_key: hitVfxKey, reason_key: reasonKey, payload },
+          { ...targetBase, event_id: `${segmentId}.floating_text`, type: "floating_text" as const, position: { x: target.x, y: target.y - 28 }, duration_ms: 800, amount, vfx_key: hitVfxKey, reason_key: floatingKey, payload: { ...payload, text: `${Math.round(amount)}点${damageTypeText(skill.damage_type)}伤害` } }
+        ];
+      })
+    ];
+  }
+
   function createPlayerNovaSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
     const runtimeParams = skill.runtime_params ?? {};
     const radius = Math.max(1, Number(runtimeParams.radius ?? 360));
@@ -2190,9 +2320,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const burstIntervalMs = Math.max(0, Math.round(Number(runtimeParams.burst_interval_ms ?? 0)));
     const spreadAngleDeg = projectileSpreadAngleDeg(skill.behavior_template, runtimeParams);
     const angleStepDeg = projectileAngleStepDeg(skill.behavior_template, runtimeParams);
-    const perProjectileDamageScale = skill.behavior_template === "fan_projectile"
-      ? Math.max(0, Number(runtimeParams.per_projectile_damage_scale ?? 1))
-      : 1;
+    const perProjectileDamageScale = 1;
     const baseLaunch = createFireBoltProjectileLaunch(skill, player, target, 0);
     const minDurationMs = Number(runtimeParams.min_duration_ms ?? 0);
     const maxDurationMs = optionalNumber(runtimeParams.max_duration_ms);
@@ -2260,10 +2388,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           projectile_count: projectileCount,
           burst_interval_ms: burstIntervalMs,
           spread_angle_deg: spreadAngleDeg,
-          spread_angle: spreadAngleDeg,
           angle_step: angleStepDeg,
-          spawn_pattern: String(runtimeParams.spawn_pattern ?? ""),
-          per_projectile_damage_scale: perProjectileDamageScale,
           skill_name: skill.name_text
         }
       };
@@ -2383,6 +2508,30 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
   }
 
   function consumeSkillEvent(event: SkillEvent) {
+    if (event.type === "chain_segment") {
+      const payload = event.payload ?? {};
+      const start = (payload.start_position ?? event.position) as { x?: number; y?: number };
+      const end = (payload.end_position ?? payload.target_world_position ?? event.position) as { x?: number; y?: number };
+      const duration = Math.max(0.16, event.duration_ms / 1000);
+      setChainSegments((items) => [
+        ...items,
+        {
+          id: nextChainSegmentId.current++,
+          startX: Number(start.x ?? event.position.x),
+          startY: Number(start.y ?? event.position.y),
+          endX: Number(end.x ?? event.position.x),
+          endY: Number(end.y ?? event.position.y),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          segmentIndex: Number(payload.segment_index ?? 0),
+          segmentId: typeof payload.segment_id === "string" ? payload.segment_id : event.event_id,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+        }
+      ]);
+      return;
+    }
     if (event.type === "damage_zone") {
       const payload = event.payload ?? {};
       const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
@@ -2781,6 +2930,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
             <DamageZoneLayer zones={damageZones} />
             <AreaNovaLayer novas={areaNovas} />
             <MeleeArcLayer arcs={meleeArcs} />
+            <ChainSegmentLayer segments={chainSegments} />
           </div>
           <div className="battle-entity-layer">
             {sortedRenderItems.map((item, index) => renderBattleRenderItem(item, index, battleAnimationContexts))}
@@ -2837,6 +2987,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           onSelect={setSelectedSkillEditorId}
           onState={setState}
           onPreviewPackage={setSkillEditorGuidePackage}
+          playerPosition={player}
+          battleCamera={battleCamera}
           debugOptions={skillEditorDebugOptions}
           onDebugOptionsChange={setSkillEditorDebugOptions}
           onClose={() => {
@@ -3528,6 +3680,8 @@ function SkillEditorPanel({
   onSelect,
   onState,
   onPreviewPackage,
+  playerPosition,
+  battleCamera,
   debugOptions,
   onDebugOptionsChange,
   onClose
@@ -3537,6 +3691,8 @@ function SkillEditorPanel({
   onSelect: (skillId: string) => void;
   onState: (state: AppState) => void;
   onPreviewPackage: (packageData: SkillPackageData | null) => void;
+  playerPosition: { x: number; y: number };
+  battleCamera: Camera2D;
   debugOptions: SkillEditorDebugOptions;
   onDebugOptionsChange: (options: SkillEditorDebugOptions) => void;
   onClose: () => void;
@@ -3568,6 +3724,7 @@ function SkillEditorPanel({
   const [selectedEventType, setSelectedEventType] = useState("projectile_spawn");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [runLogs, setRunLogs] = useState<string[]>([]);
+  const [launchAdjustmentSnapshot, setLaunchAdjustmentSnapshot] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const nextId = selectedEntry?.id ?? "";
@@ -3585,6 +3742,7 @@ function SkillEditorPanel({
     setSelectedEventType("projectile_spawn");
     setValidationErrors([]);
     setRunLogs([]);
+    setLaunchAdjustmentSnapshot(null);
   }, [selectedEntry?.id, selectedEntry?.package_data, draftSourceId]);
 
   useEffect(() => {
@@ -3605,7 +3763,7 @@ function SkillEditorPanel({
     if (!draft) return ["当前技能包对象不存在，无法保存。"];
     const errors: string[] = [];
     const params = draft.behavior.params ?? {};
-    const allowedTemplates = new Set(["projectile", "fan_projectile", "chain", "player_nova", "melee_arc", "damage_zone", "line_pierce", "orbit", "delayed_area"]);
+    const allowedTemplates = new Set(["projectile", "chain", "player_nova", "melee_arc", "damage_zone", "line_pierce", "orbit", "delayed_area"]);
     const projectileAllowedParams = new Set([
       "projectile_count",
       "burst_interval_ms",
@@ -3624,19 +3782,6 @@ function SkillEditorPanel({
       "max_targets",
       "min_duration_ms",
       "max_duration_ms"
-    ]);
-    const fanProjectileAllowedParams = new Set([
-      "projectile_count",
-      "projectile_speed",
-      "projectile_width",
-      "projectile_height",
-      "spread_angle",
-      "angle_step",
-      "max_distance",
-      "hit_policy",
-      "collision_radius",
-      "spawn_pattern",
-      "per_projectile_damage_scale"
     ]);
     const playerNovaAllowedParams = new Set([
       "radius",
@@ -3674,19 +3819,29 @@ function SkillEditorPanel({
       "expand_duration_ms",
       "ring_width"
     ]);
+    const chainAllowedParams = new Set([
+      "chain_count",
+      "chain_radius",
+      "chain_delay_ms",
+      "damage_falloff_per_chain",
+      "target_policy",
+      "allow_repeat_target",
+      "max_targets",
+      "segment_vfx_key"
+    ]);
     const allowedParams = draft.behavior.template === "player_nova"
       ? playerNovaAllowedParams
-      : draft.behavior.template === "fan_projectile"
-        ? fanProjectileAllowedParams
-        : draft.behavior.template === "melee_arc"
+      : draft.behavior.template === "melee_arc"
           ? meleeArcAllowedParams
           : draft.behavior.template === "damage_zone"
             ? damageZoneAllowedParams
-            : projectileAllowedParams;
+            : draft.behavior.template === "chain"
+              ? chainAllowedParams
+              : projectileAllowedParams;
 
     if (draft.id !== selectedEntry.id) errors.push("技能 ID 必须与当前选择的技能一致。");
     if (!allowedTemplates.has(draft.behavior.template)) errors.push("行为模板不在允许范围内。");
-    if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova" || draft.behavior.template === "melee_arc" || draft.behavior.template === "damage_zone") {
+    if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova" || draft.behavior.template === "melee_arc" || draft.behavior.template === "damage_zone" || draft.behavior.template === "chain") {
       for (const key of Object.keys(params)) {
         if (!allowedParams.has(key)) errors.push(`行为参数 ${key} 不属于当前行为模板。`);
       }
@@ -3743,27 +3898,37 @@ function SkillEditorPanel({
       if (typeof params.slash_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.slash_vfx_key)) {
         errors.push("斩击特效键必须是配置键。");
       }
+    } else if (draft.behavior.template === "chain") {
+      requireIntegerAtLeast(params.chain_count, "连锁次数", 1, errors);
+      requireNumberAtLeast(params.chain_radius, "连锁半径", 1, errors);
+      requireIntegerAtLeast(params.chain_delay_ms, "连锁间隔毫秒", 0, errors);
+      requireNumberRange(params.damage_falloff_per_chain, "每跳伤害衰减", 0, 1, errors);
+      requireIntegerAtLeast(params.max_targets, "最大目标数", 1, errors);
+      if (!editor.options.chain_target_policies.some((option) => option.value === params.target_policy)) {
+        errors.push("连锁目标规则必须使用已有选项。");
+      }
+      if (typeof params.allow_repeat_target !== "boolean") {
+        errors.push("允许重复命中必须是布尔值。");
+      }
+      if (typeof params.segment_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.segment_vfx_key)) {
+        errors.push("连锁段特效键必须是配置键。");
+      }
     } else {
       requirePositiveInteger(params.projectile_count, "投射物数量", errors);
       requireNumberAtLeast(params.projectile_speed, "投射物速度", 1, errors);
       requireNumberAtLeast(params.projectile_width, "投射物宽度", 1, errors);
       requireNumberAtLeast(params.projectile_height, "投射物高度", 1, errors);
       requireNumberAtLeast(params.max_distance, "最大距离", 1, errors);
-      requireNumberAtLeast(params.collision_radius, "碰撞半径", draft.behavior.template === "fan_projectile" ? 1 : 0, errors);
+      requireNumberAtLeast(params.collision_radius, "碰撞半径", 0, errors);
       if (params.burst_interval_ms !== undefined) requireIntegerAtLeast(params.burst_interval_ms, "连发间隔毫秒", 0, errors);
       if (params.pierce_count !== undefined) requireIntegerAtLeast(params.pierce_count, "穿透次数", 0, errors);
       if (params.max_targets !== undefined) requireIntegerAtLeast(params.max_targets, "最大目标数", 1, errors);
       if (params.min_duration_ms !== undefined) requireIntegerAtLeast(params.min_duration_ms, "最短生命周期", 0, errors);
       if (params.max_duration_ms !== undefined) requireIntegerAtLeast(params.max_duration_ms, "最长生命周期", 1, errors);
       if (params.spread_angle_deg !== undefined) requireNumberRange(params.spread_angle_deg, "散射角度", 0, 180, errors);
-      if (params.spread_angle !== undefined) requireNumberRange(params.spread_angle, "扇形角度", 0, 180, errors);
       if (params.angle_step !== undefined) requireNumberRange(params.angle_step, "角度间隔", 0, 90, errors);
-      if (params.per_projectile_damage_scale !== undefined) requireNumberRange(params.per_projectile_damage_scale, "单枚伤害倍率", 0.01, 10, errors);
       if (params.hit_policy !== undefined && !editor.options.hit_policies.some((option) => option.value === params.hit_policy)) {
         errors.push("命中后行为必须使用已有选项。");
-      }
-      if (params.spawn_pattern !== undefined && !editor.options.spawn_patterns.some((option) => option.value === params.spawn_pattern)) {
-        errors.push("生成模式必须使用已有选项。");
       }
     }
     if (draft.cast.target_selector && !editor.options.target_selectors.some((option) => option.value === draft.cast.target_selector)) {
@@ -3819,6 +3984,51 @@ function SkillEditorPanel({
     .map((modifierId) => availableModifierById.get(modifierId))
     .filter((modifier): modifier is SkillEditorTestModifier => Boolean(modifier));
   const powerError = validateModifierPower(sourcePower, targetPower, conduitPower, modifierStack.power_limits);
+  const canAdjustLaunchPoint = Boolean(canEdit && draft?.behavior.template === "projectile");
+  const launchAdjustmentActive = Boolean(launchAdjustmentSnapshot && draft);
+  const currentLaunchOffset = draft?.behavior.params.spawn_offset ?? { x: 0, y: 0 };
+  const currentLaunchWorldPosition = draft
+    ? {
+        x: playerPosition.x + Number(currentLaunchOffset.x ?? 0),
+        y: playerPosition.y + Number(currentLaunchOffset.y ?? 0)
+      }
+    : playerPosition;
+
+  function beginLaunchPointAdjustment() {
+    if (!draft || !canAdjustLaunchPoint) return;
+    const offset = draft.behavior.params.spawn_offset ?? { x: 0, y: 0 };
+    setSelectedEventType("projectile_spawn");
+    onDebugOptionsChange({ ...debugOptions, showLaunchPoints: true, showDirectionLines: true });
+    setLaunchAdjustmentSnapshot({
+      x: Number(offset.x ?? 0),
+      y: Number(offset.y ?? 0)
+    });
+  }
+
+  function updateLaunchPointFromWorld(worldPosition: { x: number; y: number }) {
+    updateDraft((next) => {
+      next.behavior.params.spawn_offset = {
+        x: Math.round(worldPosition.x - playerPosition.x),
+        y: Math.round(worldPosition.y - playerPosition.y)
+      };
+    });
+  }
+
+  function confirmLaunchPointAdjustment() {
+    setLaunchAdjustmentSnapshot(null);
+    setSaveMessage("发射位置已确认，保存技能包后写入配置。");
+  }
+
+  function cancelLaunchPointAdjustment() {
+    const snapshot = launchAdjustmentSnapshot;
+    if (snapshot) {
+      updateDraft((next) => {
+        next.behavior.params.spawn_offset = { ...snapshot };
+      });
+    }
+    setLaunchAdjustmentSnapshot(null);
+    setSaveMessage("已取消发射位置调整。");
+  }
 
   function addTestModifier(modifierId: string) {
     setSelectedModifierIds((current) => current.includes(modifierId) ? current : [...current, modifierId]);
@@ -3963,6 +4173,21 @@ function SkillEditorPanel({
   const draftPreview = draft ? projectileDebugPreviewFromDraft(draft, selectedArenaScene) : null;
   const eventDebug = projectileDebugFromEvent(selectedTimelineEvent) ?? draftPreview;
 
+  if (launchAdjustmentActive) {
+    return (
+      <section className="skill-editor-overlay skill-editor-overlay-adjusting" aria-label="发射位置直接调整">
+        <LaunchPointAdjustmentOverlay
+          worldPosition={currentLaunchWorldPosition}
+          offset={currentLaunchOffset}
+          battleCamera={battleCamera}
+          onDragWorldPosition={updateLaunchPointFromWorld}
+          onConfirm={confirmLaunchPointAdjustment}
+          onCancel={cancelLaunchPointAdjustment}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="skill-editor-overlay" aria-label="技能编辑器">
       <div className="skill-editor-shell">
@@ -4091,6 +4316,8 @@ function SkillEditorPanel({
                     editor={editor}
                     debugOptions={debugOptions}
                     eventDebug={eventDebug}
+                    canAdjustLaunchPoint={canAdjustLaunchPoint}
+                    onBeginLaunchPointAdjustment={beginLaunchPointAdjustment}
                     onDebugOptionsChange={onDebugOptionsChange}
                     updateDraft={updateDraft}
                   />
@@ -4344,7 +4571,7 @@ function SkillEditorPanel({
                         <NumberInput label="后摇毫秒" value={draft.cast.recovery_ms} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.cast.recovery_ms = value; })} />
                       </div>
                     </EditorSection>
-                    <EditorSection title={draft.behavior.template === "damage_zone" ? "伤害结算区域" : draft.behavior.template === "player_nova" ? "范围新星模块" : draft.behavior.template === "melee_arc" ? "近战扇形模块" : draft.behavior.template === "fan_projectile" ? "扇形投射物模块" : "投射物模块"}>
+                    <EditorSection title={draft.behavior.template === "damage_zone" ? "伤害结算区域" : draft.behavior.template === "player_nova" ? "范围新星模块" : draft.behavior.template === "melee_arc" ? "近战扇形模块" : draft.behavior.template === "chain" ? "连锁模块" : "投射物模块"}>
                       <div className="skill-editor-form-grid">
                         {draft.behavior.template === "damage_zone" ? (
                           <>
@@ -4409,32 +4636,18 @@ function SkillEditorPanel({
                             <ReadOnlyInput label="只读扇形范围摘要" value={meleeArcRangeSummary(draft)} />
                             <ReadOnlyInput label="只读命中时机摘要" value={meleeArcHitTimingSummary(draft)} />
                           </>
-                        ) : draft.behavior.template === "fan_projectile" ? (
+                        ) : draft.behavior.template === "chain" ? (
                           <>
-                            <NumberInput label="投射物数量" value={numberValue(projectileParams?.projectile_count, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_count = value; })} />
-                            <NumberInput label="投射物速度" value={numberValue(projectileParams?.projectile_speed, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_speed = value; })} />
-                            <NumberInput label="投射物宽度" value={numberValue(projectileParams?.projectile_width, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_width = value; })} />
-                            <NumberInput label="投射物高度" value={numberValue(projectileParams?.projectile_height, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_height = value; })} />
-                            <NumberInput label="扇形角度" value={numberValue(projectileParams?.spread_angle, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle = value; })} />
-                            <NumberInput label="角度步长" value={numberValue(projectileParams?.angle_step, 0)} min={0} max={90} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.angle_step = value; })} />
-                            <NumberInput label="最大距离" value={numberValue(projectileParams?.max_distance, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_distance = value; })} />
-                            <SelectInput
-                              label="命中规则"
-                              value={String(projectileParams?.hit_policy ?? "first_hit")}
-                              options={editor.options.hit_policies}
-                              disabled={!canEdit}
-                              onChange={(value) => updateDraft((next) => { next.behavior.params.hit_policy = value; })}
-                            />
-                            <NumberInput label="碰撞半径" value={numberValue(projectileParams?.collision_radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.collision_radius = value; })} />
-                            <SelectInput
-                              label="生成模式"
-                              value={String(projectileParams?.spawn_pattern ?? "centered_fan")}
-                              options={editor.options.spawn_patterns}
-                              disabled={!canEdit}
-                              onChange={(value) => updateDraft((next) => { next.behavior.params.spawn_pattern = value; })}
-                            />
-                            <NumberInput label="单枚伤害倍率" value={numberValue(projectileParams?.per_projectile_damage_scale, 1)} min={0.01} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.per_projectile_damage_scale = value; })} />
-                            <ReadOnlyInput label="只读飞行时间摘要" value={projectileTravelSummary(draft)} />
+                            <NumberInput label="连锁次数" value={numberValue(projectileParams?.chain_count, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.chain_count = value; })} />
+                            <NumberInput label="连锁半径" value={numberValue(projectileParams?.chain_radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.chain_radius = value; })} />
+                            <NumberInput label="连锁间隔毫秒" value={numberValue(projectileParams?.chain_delay_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.chain_delay_ms = value; })} />
+                            <NumberInput label="每跳伤害衰减" value={numberValue(projectileParams?.damage_falloff_per_chain, 0)} min={0} max={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.damage_falloff_per_chain = value; })} />
+                            <SelectInput label="连锁目标规则" value={String(projectileParams?.target_policy ?? "nearest_not_hit")} options={editor.options.chain_target_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.target_policy = value; })} />
+                            <CheckboxInput label="允许重复命中" checked={Boolean(projectileParams?.allow_repeat_target ?? false)} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.allow_repeat_target = value; })} />
+                            <NumberInput label="最大目标数" value={numberValue(projectileParams?.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
+                            <TextInput label="连锁段特效键" value={String(projectileParams?.segment_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.segment_vfx_key = value; })} />
+                            <ReadOnlyInput label="只读最大链段摘要" value={chainSegmentSummary(draft)} />
+                            <ReadOnlyInput label="只读预计链总时长摘要" value={chainDurationSummary(draft)} />
                           </>
                         ) : (
                           <>
@@ -4688,6 +4901,102 @@ type ProjectileDebugSnapshot = {
   vfxDirection: { x: number; y: number };
 };
 
+function LaunchPointAdjustmentOverlay({
+  worldPosition,
+  offset,
+  battleCamera,
+  onDragWorldPosition,
+  onConfirm,
+  onCancel
+}: {
+  worldPosition: { x: number; y: number };
+  offset: { x: number; y: number };
+  battleCamera: Camera2D;
+  onDragWorldPosition: (worldPosition: { x: number; y: number }) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const viewportPoint = battleWorldToViewport(worldPosition, battleCamera);
+
+  function updateFromPointer(event: ReactPointerEvent<HTMLElement>) {
+    onDragWorldPosition(viewportToBattleWorld(event.clientX, event.clientY, battleCamera));
+  }
+
+  function startDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+    updateFromPointer(event);
+  }
+
+  function moveDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!dragging) return;
+    event.preventDefault();
+    updateFromPointer(event);
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDragging(false);
+  }
+
+  return (
+    <>
+      <div className="skill-editor-adjustment-toolbar" role="status" aria-live="polite">
+        <div>
+          <strong>拖拽调整发射点</strong>
+          <span>当前偏移：x {formatPreviewNumber(offset.x)}，y {formatPreviewNumber(offset.y)}</span>
+        </div>
+        <div className="skill-editor-adjustment-actions">
+          <button type="button" onClick={onConfirm}>确认位置</button>
+          <button type="button" onClick={onCancel}>取消</button>
+        </div>
+      </div>
+      <button
+        className={`skill-editor-launch-drag-handle ${dragging ? "dragging" : ""}`}
+        type="button"
+        aria-label="拖拽发射点"
+        title="拖拽发射点"
+        style={{ left: viewportPoint.x, top: viewportPoint.y }}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
+        <span />
+      </button>
+    </>
+  );
+}
+
+function battleAnchorX() {
+  return window.innerWidth * 0.5;
+}
+
+function battleAnchorY() {
+  return window.innerHeight * 0.58;
+}
+
+function battleWorldToViewport(worldPosition: { x: number; y: number }, camera: Camera2D) {
+  const screen = projectBattleWorldToScreen(worldPosition.x, worldPosition.y);
+  return {
+    x: battleAnchorX() + camera.zoom * (screen.x - camera.screenX),
+    y: battleAnchorY() + camera.zoom * (screen.y - camera.screenY)
+  };
+}
+
+function viewportToBattleWorld(clientX: number, clientY: number, camera: Camera2D) {
+  const terrainScreenX = (clientX - battleAnchorX()) / camera.zoom + camera.screenX;
+  const terrainScreenY = (clientY - battleAnchorY()) / camera.zoom + camera.screenY;
+  return unprojectScreenToWorld(
+    terrainScreenX - BATTLE_PROJECTION_BOUNDS.offsetX,
+    terrainScreenY - BATTLE_PROJECTION_BOUNDS.offsetY
+  );
+}
+
 function SkillEditorEventList({
   supportedEventTypes,
   timelineEvents,
@@ -4744,6 +5053,8 @@ function ProjectileParameterPanel({
   editor,
   debugOptions,
   eventDebug,
+  canAdjustLaunchPoint,
+  onBeginLaunchPointAdjustment,
   onDebugOptionsChange,
   updateDraft
 }: {
@@ -4752,11 +5063,12 @@ function ProjectileParameterPanel({
   editor: SkillEditorState;
   debugOptions: SkillEditorDebugOptions;
   eventDebug: ProjectileDebugSnapshot | null;
+  canAdjustLaunchPoint: boolean;
+  onBeginLaunchPointAdjustment: () => void;
   onDebugOptionsChange: (options: SkillEditorDebugOptions) => void;
   updateDraft: (mutator: (next: SkillPackageData) => void) => void;
 }) {
   const params = draft.behavior.params;
-  const spreadKey = draft.behavior.template === "fan_projectile" ? "spread_angle" : "spread_angle_deg";
   const directionModeText = draft.cast.target_selector === "target_enemy" ? "朝当前目标" : "朝最近目标";
   const sourceText = draft.id ? "施法者 / 测试玩家" : "施法者";
   const setDebugOption = (key: keyof SkillEditorDebugOptions, value: boolean) => {
@@ -4856,20 +5168,19 @@ function ProjectileParameterPanel({
       <EditorSection title="发射位置">
         <div className="skill-editor-form-grid">
           <ReadOnlyInput label="发射来源" value={sourceText} />
-          <NumberInput label="发射偏移横向" value={numberValue(params.spawn_offset?.x, 0)} disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.spawn_offset = { ...(next.behavior.params.spawn_offset ?? { x: 0, y: 0 }), x: value }; })} />
-          <NumberInput label="发射偏移纵向" value={numberValue(params.spawn_offset?.y, 0)} disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.spawn_offset = { ...(next.behavior.params.spawn_offset ?? { x: 0, y: 0 }), y: value }; })} />
+          <NumberInput label="发射偏移横向" value={numberValue(params.spawn_offset?.x, 0)} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spawn_offset = { ...(next.behavior.params.spawn_offset ?? { x: 0, y: 0 }), x: value }; })} />
+          <NumberInput label="发射偏移纵向" value={numberValue(params.spawn_offset?.y, 0)} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spawn_offset = { ...(next.behavior.params.spawn_offset ?? { x: 0, y: 0 }), y: value }; })} />
           <ReadOnlyInput label="逻辑发射点" value={formatPoint(eventDebug?.spawn)} />
           <ReadOnlyInput label="特效发射点" value={formatPoint(eventDebug?.vfxSpawn)} />
+          <button className="skill-editor-inline-action" type="button" disabled={!canAdjustLaunchPoint} onClick={onBeginLaunchPointAdjustment}>
+            直接调整
+          </button>
         </div>
       </EditorSection>
       <EditorSection title="发射方向">
         <div className="skill-editor-form-grid">
           <ReadOnlyInput label="当前方向模式" value={directionModeText} />
-          {spreadKey === "spread_angle" ? (
-            <NumberInput label="扇形角度" value={numberValue(params.spread_angle, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle = value; })} />
-          ) : (
-            <NumberInput label="扇形角度" value={numberValue(params.spread_angle_deg, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle_deg = value; })} />
-          )}
+          <NumberInput label="扇形角度" value={numberValue(params.spread_angle_deg, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle_deg = value; })} />
           <NumberInput label="角度间隔" value={numberValue(params.angle_step, 0)} min={0} max={90} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.angle_step = value; })} />
           <ReadOnlyInput label="逻辑飞行方向" value={formatPoint(eventDebug?.direction)} />
           <ReadOnlyInput label="特效飞行方向" value={formatPoint(eventDebug?.vfxDirection)} />
@@ -4880,45 +5191,39 @@ function ProjectileParameterPanel({
           <SelectInput label="释放目标选择" value={draft.cast.target_selector} options={editor.options.target_selectors} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.cast.target_selector = value; })} />
           <NumberInput label="释放搜索范围" value={draft.cast.search_range} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.cast.search_range = value; })} />
           <SelectInput label="命中目标规则" value={draft.hit.target_policy ?? "selected_target"} options={editor.options.target_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.target_policy = value; })} />
-          <NumberInput label="最大目标数" value={numberValue(params.max_targets, 1)} min={1} integer disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
+          <NumberInput label="最大目标数" value={numberValue(params.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
         </div>
       </EditorSection>
       <EditorSection title="发射组">
         <div className="skill-editor-form-grid">
           <NumberInput label="投射物数量" value={numberValue(params.projectile_count, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_count = value; })} />
-          <NumberInput label="连发间隔毫秒" value={numberValue(params.burst_interval_ms, 0)} min={0} integer disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.burst_interval_ms = value; })} />
-          {spreadKey === "spread_angle" ? (
-            <NumberInput label="扇形角度" value={numberValue(params.spread_angle, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle = value; })} />
-          ) : (
-            <NumberInput label="扇形角度" value={numberValue(params.spread_angle_deg, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle_deg = value; })} />
-          )}
+          <NumberInput label="连发间隔毫秒" value={numberValue(params.burst_interval_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.burst_interval_ms = value; })} />
+          <NumberInput label="扇形角度" value={numberValue(params.spread_angle_deg, 0)} min={0} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.spread_angle_deg = value; })} />
           <NumberInput label="角度间隔" value={numberValue(params.angle_step, 0)} min={0} max={90} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.angle_step = value; })} />
-          <SelectInput label="发射排布" value={String(params.spawn_pattern ?? "centered_fan")} options={editor.options.spawn_patterns} disabled={!canEdit || draft.behavior.template !== "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.spawn_pattern = value; })} />
         </div>
       </EditorSection>
       <EditorSection title="运动">
         <div className="skill-editor-form-grid">
           <NumberInput label="投射物速度" value={numberValue(params.projectile_speed, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_speed = value; })} />
           <NumberInput label="最大距离" value={numberValue(params.max_distance, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_distance = value; })} />
-          <NumberInput label="最短持续毫秒" value={numberValue(params.min_duration_ms, 0)} min={0} integer disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.min_duration_ms = value; })} />
-          <NumberInput label="最长持续毫秒" value={numberValue(params.max_duration_ms, 1)} min={1} integer disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.max_duration_ms = value; })} />
+          <NumberInput label="最短持续毫秒" value={numberValue(params.min_duration_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.min_duration_ms = value; })} />
+          <NumberInput label="最长持续毫秒" value={numberValue(params.max_duration_ms, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_duration_ms = value; })} />
         </div>
       </EditorSection>
       <EditorSection title="碰撞">
         <div className="skill-editor-form-grid">
           <NumberInput label="投射物宽度" value={numberValue(params.projectile_width, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_width = value; })} />
           <NumberInput label="投射物高度" value={numberValue(params.projectile_height, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_height = value; })} />
-          <NumberInput label="碰撞半径" value={numberValue(params.collision_radius, 0)} min={draft.behavior.template === "fan_projectile" ? 1 : 0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.collision_radius = value; })} />
-          <NumberInput label="投射物半径" value={numberValue(params.projectile_radius, 0)} min={0} disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_radius = value; })} />
-          <NumberInput label="命中半径" value={numberValue(params.impact_radius, 0)} min={0} disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.impact_radius = value; })} />
+          <NumberInput label="碰撞半径" value={numberValue(params.collision_radius, 0)} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.collision_radius = value; })} />
+          <NumberInput label="投射物半径" value={numberValue(params.projectile_radius, 0)} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.projectile_radius = value; })} />
+          <NumberInput label="命中半径" value={numberValue(params.impact_radius, 0)} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.impact_radius = value; })} />
           <SelectInput label="命中后行为" value={String(params.hit_policy ?? "first_hit")} options={editor.options.hit_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_policy = value; })} />
-          <NumberInput label="穿透次数" value={numberValue(params.pierce_count, 0)} min={0} integer disabled={!canEdit || draft.behavior.template === "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.pierce_count = value; })} />
+          <NumberInput label="穿透次数" value={numberValue(params.pierce_count, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.pierce_count = value; })} />
         </div>
       </EditorSection>
       <EditorSection title="伤害">
         <div className="skill-editor-form-grid">
           <NumberInput label="命中基础伤害" value={draft.hit.base_damage} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.base_damage = value; })} />
-          <NumberInput label="单枚伤害倍率" value={numberValue(params.per_projectile_damage_scale, 1)} min={0.01} max={10} disabled={!canEdit || draft.behavior.template !== "fan_projectile"} onChange={(value) => updateDraft((next) => { next.behavior.params.per_projectile_damage_scale = value; })} />
           <SelectInput label="伤害时机" value={draft.hit.damage_timing ?? "on_projectile_hit"} options={editor.options.damage_timings} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.damage_timing = value; })} />
           <NumberInput label="命中延迟毫秒" value={numberValue(draft.hit.hit_delay_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.hit_delay_ms = value; })} />
           <NumberInput label="命中范围" value={numberValue(draft.hit.hit_radius, 0)} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.hit_radius = value; })} />
@@ -5320,7 +5625,8 @@ function SkillTestArenaResultView({
         {result.has_area_spawn && <span>已生成范围</span>}
         {result.has_melee_arc && <span>已生成近战扇形</span>}
         {result.has_damage_zone && <span>已生成伤害结算区域</span>}
-        <span>{result.has_projectile_spawn ? "已生成投射物" : result.has_damage_zone ? "伤害区域已生效" : result.has_area_spawn ? "范围生成已生效" : result.has_melee_arc ? "近战扇形已生效" : "缺少技能生成事件"}</span>
+        {result.has_chain_segment && <span>已生成连锁段</span>}
+        <span>{result.has_projectile_spawn ? "已生成投射物" : result.has_chain_segment ? "连锁段已生效" : result.has_damage_zone ? "伤害区域已生效" : result.has_area_spawn ? "范围生成已生效" : result.has_melee_arc ? "近战扇形已生效" : "缺少技能生成事件"}</span>
         <span>{result.has_damage ? "已生成伤害" : "缺少伤害"}</span>
         <span>{result.has_hit_vfx ? "已生成命中特效" : "缺少命中特效"}</span>
         <span>{result.has_floating_text ? "已生成伤害浮字" : "缺少伤害浮字"}</span>
@@ -5412,6 +5718,9 @@ function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTe
         <TimelineCheck label="伤害区域从玩家发出" passed={Boolean(result.timeline_checks.damage_zone_origin_passed ?? true)} />
         <TimelineCheck label="存在近战扇形" passed={Boolean(result.timeline_checks.has_melee_arc)} />
         <TimelineCheck label="扇形从玩家发出" passed={Boolean(result.timeline_checks.melee_arc_origin_passed ?? true)} />
+        <TimelineCheck label="存在连锁段" passed={Boolean(result.timeline_checks.has_chain_segment)} />
+        <TimelineCheck label="存在多段连锁" passed={Boolean(result.timeline_checks.has_multiple_chain_segment ?? true)} />
+        <TimelineCheck label="默认不重复命中" passed={Boolean(result.timeline_checks.chain_no_repeat_targets ?? true)} />
         <TimelineCheck label="存在投射物生成" passed={result.timeline_checks.has_projectile_spawn} />
         <TimelineCheck label="存在多枚投射物" passed={result.timeline_checks.has_multiple_projectile_spawn} />
         <TimelineCheck label="存在投射物命中" passed={result.timeline_checks.has_projectile_hit} />
@@ -5421,6 +5730,7 @@ function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTe
         <TimelineCheck label="伤害不早于投射物生成" passed={result.timeline_checks.damage_after_or_at_projectile_spawn} />
         <TimelineCheck label="伤害不早于命中时机" passed={Boolean(result.timeline_checks.damage_after_or_at_area_hit ?? true)} />
         <TimelineCheck label="伤害不早于近战命中" passed={Boolean(result.timeline_checks.damage_after_or_at_melee_hit ?? true)} />
+        <TimelineCheck label="伤害不早于连锁段" passed={Boolean(result.timeline_checks.damage_after_or_at_chain_segment ?? true)} />
         <TimelineCheck label="飞行期间未扣血" passed={result.timeline_checks.flight_no_damage_passed} />
         <TimelineCheck label="扇形方向可见" passed={result.timeline_checks.fan_direction_passed} />
         <TimelineCheck label="基础时序检查" passed={result.timeline_checks.basic_timing_passed} />
@@ -5555,6 +5865,24 @@ function meleeArcHitTimingSummary(packageData: SkillPackageData) {
   const windupMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.windup_ms, 0)));
   const hitAtMs = Math.max(0, Math.round(numberValue(packageData.behavior.params.hit_at_ms, 0)));
   return `前摇 ${windupMs} ms，${hitAtMs} ms 时结算伤害`;
+}
+
+function chainSegmentSummary(packageData: SkillPackageData) {
+  const params = packageData.behavior.params;
+  const chainCount = Math.max(1, Math.round(numberValue(params.chain_count, 1)));
+  const maxTargets = Math.max(1, Math.round(numberValue(params.max_targets, chainCount)));
+  const chainRadius = Math.max(1, numberValue(params.chain_radius, 1));
+  return `最多 ${Math.min(chainCount, maxTargets)} 段，跳跃半径 ${formatPreviewNumber(chainRadius)}`;
+}
+
+function chainDurationSummary(packageData: SkillPackageData) {
+  const params = packageData.behavior.params;
+  const chainCount = Math.max(1, Math.round(numberValue(params.chain_count, 1)));
+  const maxTargets = Math.max(1, Math.round(numberValue(params.max_targets, chainCount)));
+  const segmentCount = Math.min(chainCount, maxTargets);
+  const chainDelayMs = Math.max(0, Math.round(numberValue(params.chain_delay_ms, 0)));
+  const windupMs = Math.max(0, Math.round(numberValue(packageData.cast.windup_ms, 0)));
+  return `前摇 ${windupMs} ms，预计 ${windupMs + Math.max(0, segmentCount - 1) * chainDelayMs} ms 完成`;
 }
 
 function damageZoneRangeSummary(packageData: SkillPackageData) {
@@ -5754,6 +6082,35 @@ function selectMeleeArcTargets(enemies: Enemy[], skill: SkillPreview, player: { 
     .map((item) => item.enemy);
 }
 
+function selectChainTargets(enemies: Enemy[], skill: SkillPreview, player: { x: number; y: number }): Enemy[] {
+  const runtimeParams = skill.runtime_params ?? {};
+  const searchRange = Math.max(1, Number(skill.cast?.search_range ?? 520));
+  const chainRadius = Math.max(1, Number(runtimeParams.chain_radius ?? 180));
+  const chainCount = Math.max(1, Math.round(Number(runtimeParams.chain_count ?? 1)));
+  const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? chainCount)));
+  const limit = Math.min(chainCount, maxTargets);
+  const allowRepeatTarget = Boolean(runtimeParams.allow_repeat_target ?? false);
+  const first = [...enemies]
+    .filter((enemy) => enemy.hp > 0 && distance(enemy, player) <= searchRange)
+    .sort((a, b) => distance(a, player) - distance(b, player))[0];
+  if (!first) return [];
+  const selected: Enemy[] = [first];
+  const selectedIds = new Set([first.id]);
+  while (selected.length < limit) {
+    const current = selected[selected.length - 1];
+    const next = [...enemies]
+      .filter((enemy) => enemy.hp > 0)
+      .filter((enemy) => allowRepeatTarget || !selectedIds.has(enemy.id))
+      .filter((enemy) => enemy.id !== current.id)
+      .filter((enemy) => distance(enemy, current) <= chainRadius)
+      .sort((a, b) => distance(a, current) - distance(b, current))[0];
+    if (!next) break;
+    selected.push(next);
+    selectedIds.add(next.id);
+  }
+  return selected;
+}
+
 function nearestEnemy(enemies: Enemy[], source: { x: number; y: number }) {
   return [...enemies]
     .filter((enemy) => enemy.hp > 0)
@@ -5792,8 +6149,7 @@ function projectileSpreadAngleDeg(
   behaviorTemplate: string | undefined,
   runtimeParams: Record<string, unknown> | SkillPackageData["behavior"]["params"]
 ) {
-  if (behaviorTemplate === "fan_projectile") return Math.max(0, Number(runtimeParams.spread_angle ?? 0));
-  return Math.max(0, Number(runtimeParams.spread_angle_deg ?? runtimeParams.spread_angle ?? 0));
+  return Math.max(0, Number(runtimeParams.spread_angle_deg ?? 0));
 }
 
 function projectileAngleStepDeg(
@@ -5910,30 +6266,22 @@ function projectMovementVectorForAnimation(vector: { x: number; y: number }) {
 function createDefaultTilemap(width: number, height: number, tileSize: number): TilemapData {
   const spawnTileX = Math.floor(width / 2);
   const spawnTileY = Math.floor(height / 2);
-  const tiles: TileType[][] = Array.from({ length: height }, (_, y) =>
-    Array.from({ length: width }, (_, x) => {
-      const distanceToBorder = Math.min(x, y, width - 1 - x, height - 1 - y);
-      if (distanceToBorder <= 0) return "blocked";
-      const hash = tileHash(x, y);
-      if (distanceToBorder === 1 && hash % 100 < 48) return "blocked";
-      if (distanceToBorder === 2 && hash % 100 < 14) return "blocked";
-      return "ground";
-    })
+  const tiles: TileType[][] = Array.from({ length: height }, () => Array.from({ length: width }, () => "ground"));
+  const terrainAssets: TerrainTileAssetId[][] = Array.from({ length: height }, (_, y) =>
+    Array.from({ length: width }, (_, x) => forestRuinTerrainAsset(width, height, x, y))
   );
 
-  [
-    { x: spawnTileX + 4, y: spawnTileY - 2 },
-    { x: spawnTileX - 5, y: spawnTileY + 2 }
-  ].forEach((point) => {
+  createForestRuinObjectTiles(width, height, spawnTileX, spawnTileY).forEach((point) => {
     if (tiles[point.y]?.[point.x] === "ground") tiles[point.y][point.x] = "object";
   });
 
   return {
-    mapId: "v1-dark-arpg-procedural-tilemap",
+    mapId: "v2-forest-ruin-hd-tilemap",
     width,
     height,
     tileSize,
     tiles,
+    terrainAssets,
     spawnPoint: {
       tileX: spawnTileX,
       tileY: spawnTileY,
@@ -5941,6 +6289,50 @@ function createDefaultTilemap(width: number, height: number, tileSize: number): 
       y: spawnTileY * tileSize + tileSize / 2
     }
   };
+}
+
+function forestRuinTerrainAsset(width: number, height: number, x: number, y: number): TerrainTileAssetId {
+  const centerX = Math.floor(width / 2);
+  const centerY = Math.floor(height / 2);
+  const distanceToBorder = Math.min(x, y, width - 1 - x, height - 1 - y);
+  const onMainPath = Math.abs(x - centerX) <= 1 || Math.abs(y - centerY) <= 1;
+  const onDiagonalPath = Math.abs((x - centerX) - (y - centerY)) <= 1 && x > 1 && y > 1 && x < width - 2 && y < height - 2;
+  const inCentralCourt = Math.abs(x - centerX) <= 2 && Math.abs(y - centerY) <= 2;
+  const hash = tileHash(x, y);
+
+  if (distanceToBorder === 0) {
+    return hash % 3 === 0 ? "forest_ruin_hd_mossy_rock_border" : "forest_ruin_hd_low_cliff_grass";
+  }
+  if (distanceToBorder === 1) {
+    if (hash % 5 === 0) return "forest_ruin_hd_blue_flowers_corner";
+    if (hash % 3 === 0) return "forest_ruin_hd_dense_grass";
+    return "forest_ruin_hd_mossy_dirt_edge";
+  }
+  if (inCentralCourt && hash % 4 === 0) return "forest_ruin_hd_stone_dirt_transition";
+  if (onMainPath) {
+    if (hash % 7 === 0) return "forest_ruin_hd_dirt_road_curve";
+    if (hash % 5 === 0) return "forest_ruin_hd_grass_dirt_path";
+    return "forest_ruin_hd_dirt_plain";
+  }
+  if (onDiagonalPath) return hash % 2 === 0 ? "forest_ruin_hd_grass_dirt_path" : "forest_ruin_hd_dirt_plants";
+  if ((x <= 3 && y <= 3) || (x >= width - 4 && y <= 3) || (x <= 3 && y >= height - 4) || (x >= width - 4 && y >= height - 4)) {
+    return hash % 2 === 0 ? "forest_ruin_hd_mossy_broken_stone" : "forest_ruin_hd_pale_cobblestone";
+  }
+  if ((x === centerX - 4 && y === centerY + 2) || (x === centerX + 4 && y === centerY - 2)) return "forest_ruin_hd_cracked_stone_paving";
+  if (hash % 11 === 0) return "forest_ruin_hd_rocky_gravel";
+  if (hash % 13 === 0) return "forest_ruin_hd_leaf_litter_soil";
+  if (hash % 17 === 0) return "forest_ruin_hd_muddy_puddles";
+  return hash % 2 === 0 ? "forest_ruin_hd_dense_grass" : "forest_ruin_hd_mossy_dirt_edge";
+}
+
+function createForestRuinObjectTiles(width: number, height: number, centerX: number, centerY: number) {
+  return [
+    { x: centerX, y: centerY },
+    { x: centerX - 4, y: centerY + 2 },
+    { x: centerX + 4, y: centerY - 2 },
+    { x: Math.min(width - 3, centerX + 5), y: centerY + 2 },
+    { x: Math.max(2, centerX - 5), y: centerY - 2 }
+  ];
 }
 
 function createBattleCamera(playerX: number, playerY: number): Camera2D {
@@ -6185,8 +6577,8 @@ function MapTiles({ tilemap }: { tilemap: TilemapData }) {
     <>
       {tilemap.tiles.flatMap((row, y) =>
         row.flatMap((tile, x) => {
-          const terrainAsset = terrainAssetForTile(tile, x, y);
-          const edgeAssets = edgeAssetsForTile(tilemap.tiles, x, y);
+          const terrainAsset = terrainAssetForTile(tile, x, y, tilemap.terrainAssets[y]?.[x]);
+          const edgeAssets: ReturnType<typeof edgeAssetsForTile> = [];
           const tileWorldX = x * tilemap.tileSize;
           const tileWorldY = y * tilemap.tileSize;
           const visualPoint = projectBattleWorldToScreen(tileWorldX, tileWorldY);
@@ -6460,11 +6852,11 @@ function gemColorValue(gem: Gem) {
 }
 
 function usesSkillEventPipeline(skill: SkillPreview) {
-  return Boolean(skill.skill_package_id && (isProjectileSkillTemplate(skill.behavior_template) || skill.behavior_template === "player_nova" || skill.behavior_template === "melee_arc" || skill.behavior_template === "damage_zone"));
+  return Boolean(skill.skill_package_id && (isProjectileSkillTemplate(skill.behavior_template) || skill.behavior_template === "player_nova" || skill.behavior_template === "melee_arc" || skill.behavior_template === "damage_zone" || skill.behavior_template === "chain"));
 }
 
 function isProjectileSkillTemplate(behaviorTemplate: string | undefined) {
-  return behaviorTemplate === "projectile" || behaviorTemplate === "fan_projectile";
+  return behaviorTemplate === "projectile";
 }
 
 function damageTypeText(damageType: string) {
@@ -7153,6 +7545,42 @@ function MeleeArcLayer({ arcs }: { arcs: MeleeArcVfx[] }) {
             data-origin-world-y={arc.y}
             data-arc-angle={arc.arcAngle}
             data-arc-radius={arc.radius}
+            aria-hidden="true"
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function ChainSegmentLayer({ segments }: { segments: ChainSegmentVfx[] }) {
+  return (
+    <>
+      {segments.map((segment) => {
+        const start = projectBattleWorldToScreen(segment.startX, segment.startY);
+        const end = projectBattleWorldToScreen(segment.endX, segment.endY);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.max(1, Math.hypot(dx, dy));
+        const angle = Math.atan2(dy, dx);
+        const progress = clamp(1 - segment.ttl / Math.max(0.001, segment.duration), 0, 1);
+        return (
+          <div
+            key={segment.id}
+            className={`chain-segment-vfx chain-segment-vfx-${visualTone(segment.vfxKey || segment.damageType)}`}
+            style={{
+              left: start.x,
+              top: start.y,
+              width: length,
+              opacity: Math.max(0, 1 - progress * 0.65),
+              transform: `rotate(${angle}rad)`,
+              zIndex: BATTLE_ENTITY_Z_INDEX_BASE - 1,
+            }}
+            data-skill-event="chain_segment"
+            data-vfx-key={segment.vfxKey}
+            data-chain-segment-index={segment.segmentIndex}
+            data-segment-id={segment.segmentId}
+            data-skill-id={segment.skillId}
             aria-hidden="true"
           />
         );
