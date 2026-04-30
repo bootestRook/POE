@@ -1,0 +1,7 @@
+interface:
+  display_name: "Make Iso Map Tiles"
+  short_description: "Preview-confirm-slice 128x64 iso tiles"
+  default_prompt: "Use $make-iso-map-tiles to create a confirmed 128x64 isometric tile sheet, show the split preview, then slice approved tiles into project assets."
+
+policy:
+  allow_implicit_invocation: true

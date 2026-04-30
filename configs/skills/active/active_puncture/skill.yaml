@@ -20,20 +20,25 @@ behavior:
     shape: rectangle
     origin_policy: caster
     facing_policy: locked_or_nearest_target
-    length: 380
-    width: 96
-    angle_offset_deg: 0
     hit_at_ms: 180
     max_targets: 3
     status_chance_scale: 1
     zone_vfx_key: skill_event.ground_spike.vfx
+    length: 150
+    width: 30
+    angle_offset_deg: 0
+    hit_at_ms: 180
+    max_targets: 3
+    facing_policy: locked_or_nearest_target
+    status_chance_scale: 1
+    max_targets: 3
 hit:
   base_damage: 15
   can_crit: true
   can_apply_status: true
   damage_timing: on_damage_zone_hit
   hit_delay_ms: 180
-  hit_radius: 380
+  hit_radius: 40
   target_policy: nearest_enemy
 scaling:
   additive_stats: ["damage_add_percent", "physical_damage_add_percent", "attack_speed_add_percent", "area_add_percent"]

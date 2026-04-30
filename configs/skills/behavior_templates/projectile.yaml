@@ -1,5 +1,5 @@
 id: projectile
-allowed_params: ["projectile_count", "burst_interval_ms", "spread_angle_deg", "angle_step", "projectile_speed", "projectile_width", "projectile_height", "max_distance", "hit_policy", "pierce_count", "collision_radius", "spawn_offset", "projectile_radius", "impact_radius", "max_targets", "min_duration_ms", "max_duration_ms"]
+allowed_params: ["projectile_count", "burst_interval_ms", "spread_angle_deg", "angle_step", "projectile_speed", "projectile_width", "projectile_height", "max_distance", "hit_policy", "pierce_count", "collision_radius", "spawn_offset", "projectile_radius", "impact_radius", "max_targets", "min_duration_ms", "max_duration_ms", "trajectory", "travel_time_ms", "arc_height", "target_policy", "impact_marker_id", "vfx_key"]
 param_constraints:
   projectile_count:
     type: integer
@@ -55,5 +55,22 @@ param_constraints:
   max_duration_ms:
     type: integer
     minimum: 1
-events: ["projectile_spawn", "damage", "hit_vfx", "floating_text"]
+  trajectory:
+    type: string
+    enum: ["linear", "ballistic"]
+  travel_time_ms:
+    type: integer
+    minimum: 1
+  arc_height:
+    type: number
+    minimum: 0
+  target_policy:
+    type: string
+    enum: ["nearest_enemy", "locked_target", "target_position"]
+  impact_marker_id:
+    type: string
+    pattern: "^[a-z][a-z0-9_]*$"
+  vfx_key:
+    type: key
+events: ["projectile_spawn", "projectile_impact", "damage", "hit_vfx", "floating_text"]
 damage_timing: on_projectile_hit

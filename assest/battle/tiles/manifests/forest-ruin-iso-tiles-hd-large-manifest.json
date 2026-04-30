@@ -1,0 +1,527 @@
+{
+  "type": "isometric-tile-pack",
+  "tileWidth": 512,
+  "tileHeight": 256,
+  "safeContentWidth": 448,
+  "safeContentHeight": 192,
+  "cellWidth": 640,
+  "cellHeight": 400,
+  "columns": 4,
+  "rows": 4,
+  "raw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+  "contactSheet": "/assest/battle/tiles/manifests/forest-ruin-iso-tiles-hd-large-contact-sheet.png",
+  "assets": [
+    {
+      "id": "forest_ruin_hd_dirt_plain",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_dirt_plain.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 0,
+        "row": 0,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 64,
+        "y": 72,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 84,
+        "y": 32,
+        "width": 344,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_mossy_dirt_edge",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_mossy_dirt_edge.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 1,
+        "row": 0,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 704,
+        "y": 72,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 85,
+        "y": 32,
+        "width": 342,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_dirt_road_curve",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_dirt_road_curve.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 2,
+        "row": 0,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1344,
+        "y": 72,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 84,
+        "y": 32,
+        "width": 344,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_cracked_stone_paving",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_cracked_stone_paving.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 3,
+        "row": 0,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1984,
+        "y": 72,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 85,
+        "y": 32,
+        "width": 341,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_mossy_broken_stone",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_mossy_broken_stone.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 0,
+        "row": 1,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 64,
+        "y": 472,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 84,
+        "y": 32,
+        "width": 343,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_pale_cobblestone",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_pale_cobblestone.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 1,
+        "row": 1,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 704,
+        "y": 472,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 88,
+        "y": 32,
+        "width": 336,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_rocky_gravel",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_rocky_gravel.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 2,
+        "row": 1,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1344,
+        "y": 472,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 85,
+        "y": 32,
+        "width": 341,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_dense_grass",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_dense_grass.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 3,
+        "row": 1,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1984,
+        "y": 472,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 87,
+        "y": 32,
+        "width": 337,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_grass_dirt_path",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_grass_dirt_path.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 0,
+        "row": 2,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 64,
+        "y": 872,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 86,
+        "y": 32,
+        "width": 339,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_dirt_plants",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_dirt_plants.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 1,
+        "row": 2,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 704,
+        "y": 872,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 88,
+        "y": 32,
+        "width": 336,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_leaf_litter_soil",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_leaf_litter_soil.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 2,
+        "row": 2,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1344,
+        "y": 872,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 87,
+        "y": 32,
+        "width": 337,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_muddy_puddles",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_muddy_puddles.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 3,
+        "row": 2,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1984,
+        "y": 872,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 88,
+        "y": 32,
+        "width": 335,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_low_cliff_grass",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_low_cliff_grass.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 0,
+        "row": 3,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 64,
+        "y": 1272,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 94,
+        "y": 32,
+        "width": 323,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_mossy_rock_border",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_mossy_rock_border.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 1,
+        "row": 3,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 704,
+        "y": 1272,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 92,
+        "y": 32,
+        "width": 328,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_stone_dirt_transition",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_stone_dirt_transition.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 2,
+        "row": 3,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1344,
+        "y": 1272,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 93,
+        "y": 32,
+        "width": 326,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "forest_ruin_hd_blue_flowers_corner",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/forest_ruin_hd_blue_flowers_corner.png",
+      "width": 512,
+      "height": 256,
+      "sourceRaw": "/assest/battle/tiles/raw/forest-ruin-iso-tiles-hd-large-raw.png",
+      "sourceCell": {
+        "col": 3,
+        "row": 3,
+        "width": 640,
+        "height": 400
+      },
+      "sourceCrop": {
+        "x": 1984,
+        "y": 1272,
+        "width": 512,
+        "height": 256
+      },
+      "safeContentBox": {
+        "width": 448,
+        "height": 192
+      },
+      "contentBBox": {
+        "x": 93,
+        "y": 32,
+        "width": 326,
+        "height": 192
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    }
+  ]
+}

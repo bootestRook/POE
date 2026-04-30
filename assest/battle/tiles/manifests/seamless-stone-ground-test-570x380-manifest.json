@@ -1,0 +1,143 @@
+{
+  "type": "isometric-tile-pack",
+  "tileWidth": 570,
+  "tileHeight": 380,
+  "safeContentWidth": 570,
+  "safeContentHeight": 380,
+  "cellWidth": 896,
+  "cellHeight": 560,
+  "columns": 2,
+  "rows": 2,
+  "raw": "/assest/battle/tiles/raw/seamless-stone-ground-test-raw.png",
+  "contactSheet": "/assest/battle/tiles/manifests/seamless-stone-ground-test-570x380-contact-sheet.png",
+  "assets": [
+    {
+      "id": "seamless_stone_ground_plain",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/seamless_stone_ground_plain.png",
+      "width": 570,
+      "height": 380,
+      "sourceRaw": "/assest/battle/tiles/raw/seamless-stone-ground-test-raw.png",
+      "sourceCell": {
+        "col": 0,
+        "row": 0,
+        "width": 896,
+        "height": 560
+      },
+      "sourceCrop": {
+        "x": 163,
+        "y": 90,
+        "width": 570,
+        "height": 380
+      },
+      "safeContentBox": {
+        "width": 570,
+        "height": 380
+      },
+      "contentBBox": {
+        "x": 7,
+        "y": 9,
+        "width": 556,
+        "height": 362
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "seamless_stone_ground_broken",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/seamless_stone_ground_broken.png",
+      "width": 570,
+      "height": 380,
+      "sourceRaw": "/assest/battle/tiles/raw/seamless-stone-ground-test-raw.png",
+      "sourceCell": {
+        "col": 1,
+        "row": 0,
+        "width": 896,
+        "height": 560
+      },
+      "sourceCrop": {
+        "x": 1059,
+        "y": 90,
+        "width": 570,
+        "height": 380
+      },
+      "safeContentBox": {
+        "width": 570,
+        "height": 380
+      },
+      "contentBBox": {
+        "x": 5,
+        "y": 9,
+        "width": 560,
+        "height": 362
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "seamless_stone_ground_cracked",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/seamless_stone_ground_cracked.png",
+      "width": 570,
+      "height": 380,
+      "sourceRaw": "/assest/battle/tiles/raw/seamless-stone-ground-test-raw.png",
+      "sourceCell": {
+        "col": 0,
+        "row": 1,
+        "width": 896,
+        "height": 560
+      },
+      "sourceCrop": {
+        "x": 163,
+        "y": 650,
+        "width": 570,
+        "height": 380
+      },
+      "safeContentBox": {
+        "width": 570,
+        "height": 380
+      },
+      "contentBBox": {
+        "x": 10,
+        "y": 6,
+        "width": 550,
+        "height": 368
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    },
+    {
+      "id": "seamless_stone_ground_blood",
+      "type": "tile",
+      "path": "/assest/battle/tiles/cropped/seamless_stone_ground_blood.png",
+      "width": 570,
+      "height": 380,
+      "sourceRaw": "/assest/battle/tiles/raw/seamless-stone-ground-test-raw.png",
+      "sourceCell": {
+        "col": 1,
+        "row": 1,
+        "width": 896,
+        "height": 560
+      },
+      "sourceCrop": {
+        "x": 1059,
+        "y": 650,
+        "width": 570,
+        "height": 380
+      },
+      "safeContentBox": {
+        "width": 570,
+        "height": 380
+      },
+      "contentBBox": {
+        "x": 12,
+        "y": 6,
+        "width": 546,
+        "height": 368
+      },
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    }
+  ]
+}

@@ -17,6 +17,8 @@ cast:
 behavior:
   template: projectile
   params:
+    max_targets: 4
+    max_targets: 4
     projectile_count: 1
     burst_interval_ms: 0
     spread_angle_deg: 0
@@ -29,8 +31,8 @@ behavior:
     pierce_count: 3
     collision_radius: 16
     spawn_offset:
-      x: -8
-      y: -18
+      x: -52
+      y: -53
     projectile_radius: 10
     impact_radius: 14
     max_targets: 4

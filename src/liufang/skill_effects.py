@@ -75,7 +75,7 @@ class FinalSkillInstance:
     cast: dict[str, Any] | None = None
     hit: dict[str, Any] | None = None
     runtime_params: dict[str, Any] | None = None
-    presentation_keys: dict[str, str] | None = None
+    presentation_keys: dict[str, Any] | None = None
     source_context: dict[str, Any] | None = None
 
     @property
@@ -576,6 +576,8 @@ class SkillEffectCalculator:
             runtime_params["length"] = float(runtime_params["length"]) * area_multiplier
         if "width" in runtime_params:
             runtime_params["width"] = float(runtime_params["width"]) * area_multiplier
+        if isinstance(runtime_params.get("modules"), list):
+            runtime_params["modules"] = _scaled_modules(runtime_params["modules"], area_multiplier, speed_multiplier)
         if "status_chance_scale" in runtime_params:
             runtime_params["status_chance_scale"] = float(runtime_params["status_chance_scale"]) * (
                 1.0 + additive.get("status_chance_add_percent", 0.0) / 100.0
@@ -627,3 +629,25 @@ class SkillEffectCalculator:
                 continue
             result[modifier.stat] = result.get(modifier.stat, 0.0) + modifier.value
         return result
+
+
+def _scaled_modules(modules: object, area_multiplier: float, speed_multiplier: float) -> list[dict[str, Any]]:
+    scaled: list[dict[str, Any]] = []
+    if not isinstance(modules, list):
+        return scaled
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        next_module = {
+            key: (dict(value) if isinstance(value, dict) else value)
+            for key, value in module.items()
+        }
+        params = dict(next_module.get("params", {})) if isinstance(next_module.get("params"), dict) else {}
+        if "projectile_speed" in params:
+            params["projectile_speed"] = float(params["projectile_speed"]) * speed_multiplier
+        for area_key in ("radius", "length", "width"):
+            if area_key in params:
+                params[area_key] = float(params[area_key]) * area_multiplier
+        next_module["params"] = params
+        scaled.append(next_module)
+    return scaled

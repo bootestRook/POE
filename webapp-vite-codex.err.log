@@ -1,876 +1,202 @@
 [33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
-[2m15:59:08[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m15:59:08[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                     ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 0)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-[2m15:59:08[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:14[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:14[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:14[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                     ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 0)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-      at async viteTransformMiddleware (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
-[2m16:02:41[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:41[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                     ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 0)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-[2m16:02:41[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:59[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:59[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:02:59[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                     ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 0)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-      at async viteTransformMiddleware (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
-[2m16:27:35[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:35[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:35[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                     ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 0)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-      at async viteTransformMiddleware (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
-[2m16:27:43[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:43[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:43[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import { default as __vite_glob_0_0 } from "../assest/battle/units/sheets/player_adventurer_idle_right.png?url";import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                                                                                                                                     ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({"../assest/battle/units/sheets/player_adventurer_idle_right.png": __vite_glob_0_0
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 1)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-      at async viteTransformMiddleware (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
-[2m16:27:43[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:43[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:43[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import { default as __vite_glob_0_0 } from "../assest/battle/units/sheets/player_adventurer_idle_left.png?url";import { default as __vite_glob_0_1 } from "../assest/battle/units/sheets/player_adventurer_idle_right.png?url";import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                                                                                                                                                                                                                                                    ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({"../assest/battle/units/sheets/player_adventurer_idle_left.png": __vite_glob_0_0,"../assest/battle/units/sheets/player_adventurer_idle_right.png": __vite_glob_0_1
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 2)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-      at async viteTransformMiddleware (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
-[2m16:27:43[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:43[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:44[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:44[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:44[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m16:27:44[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?[39m
-  Plugin: [35mvite:import-analysis[39m
-  File: [36mF:/POE/POE/webapp/unitAssets.ts[39m:1:34
-[33m  1  |  import { default as __vite_glob_0_0 } from "../assest/battle/units/sheets/player_adventurer_idle_left.png?url";import { default as __vite_glob_0_1 } from "../assest/battle/units/sheets/player_adventurer_idle_right.png?url";import { default as __vite_glob_0_2 } from "../assest/battle/units/sheets/player_adventurer_run_right.png?url";import { default as __vite_glob_0_3 } from "../assest/battle/units/sheets/player_adventurer_walk_left.png?url";import { default as __vite_glob_0_4 } from "../assest/battle/units/sheets/player_adventurer_walk_right.png?url";import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
-     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  ^
-  2  |  const unitAnimationSheetUrls = /* #__PURE__ */ Object.assign({"../assest/battle/units/sheets/player_adventurer_idle_left.png": __vite_glob_0_0,"../assest/battle/units/sheets/player_adventurer_idle_right.png": __vite_glob_0_1,"../assest/battle/units/sheets/player_adventurer_run_right.png": __vite_glob_0_2,"../assest/battle/units/sheets/player_adventurer_walk_left.png": __vite_glob_0_3,"../assest/battle/units/sheets/player_adventurer_walk_right.png": __vite_glob_0_4
-  3  |  [39m
-      at TransformPluginContext._formatError (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
-      at TransformPluginContext.error (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
-      at normalizeUrl (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
-      at async file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
-      at async Promise.all (index 5)
-      at async TransformPluginContext.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
-      at async PluginContainer.transform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
-      at async loadAndTransform (file:///F:/POE/POE/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
-[2m16:27:44[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../assest/battle/units/manifests/unit-animations-manifest.json" from "webapp/unitAssets.ts". Does the file exist?
-[2m17:44:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:45:14[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:45:47[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:45:47[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:46:01[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:46:35[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:46:50[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:47:00[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:47:23[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
-[2m17:47:38[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5015:95)
+[2m01:03:26[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\webapp\App.tsx: Identifier 'vfxScale' has already been declared. (7542:8)
 
-[0m [90m 5013 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5014 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5015 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5016 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5017 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5018 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
+[0m [90m 7540 |[31m   [36mconst[31m sheets [33m=[31m projectileVfxSheets(vfxKind)[33m;[31m
+ [90m 7541 |[31m   [36mconst[31m vfxScale [33m=[31m normalizedVfxScale(vfx[33m.[31mvfxScale)[33m;[31m
+[31m[1m>[22m[31m[90m 7542 |[31m   [36mconst[31m vfxScale [33m=[31m normalizedVfxScale(bolt[33m.[31mvfxScale)[33m;[31m
+ [90m      |[31m         [31m[1m^[22m[31m
+ [90m 7543 |[31m   [36mconst[31m duration [33m=[31m [33mMath[31m[33m.[31mmax([35m0.001[31m[33m,[31m bolt[33m.[31mduration)[33m;[31m
+ [90m 7544 |[31m   [36mconst[31m aliveRemaining [33m=[31m fireBoltAliveRemaining(bolt)[33m;[31m
+ [90m 7545 |[31m   [36mconst[31m opacity [33m=[31m projectileBodyOpacity(bolt)[33m;[31m[0m[39m
   Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5015:95
-[33m  5093|    const target = state.board.cells[row]?.[column];
-  5094|    if (!target) return false;
-  5095|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                                ^
-  5096|  
-  5097|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:47:53[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5015:95)
+  File: [36mF:/POE/webapp/App.tsx[39m:7542:8
+[33m  7647|          data-projectile-alive-remaining={aliveRemaining}
+  7648|          data-projectile-fade-duration={fireBoltExitFadeDuration(bolt)}
+  7649|          data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
+     |                ^
+  7650|          aria-hidden="true"
+  7651|        >[39m
+      at constructor (F:\POE\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (F:\POE\node_modules\@babel\parser\lib\index.js:6599:19)
+      at TypeScriptScopeHandler.checkRedeclarationInScope (F:\POE\node_modules\@babel\parser\lib\index.js:1619:19)
+      at TypeScriptScopeHandler.declareName (F:\POE\node_modules\@babel\parser\lib\index.js:1585:12)
+      at TypeScriptScopeHandler.declareName (F:\POE\node_modules\@babel\parser\lib\index.js:4880:11)
+      at TypeScriptParserMixin.declareNameFromIdentifier (F:\POE\node_modules\@babel\parser\lib\index.js:7567:16)
+      at TypeScriptParserMixin.checkIdentifier (F:\POE\node_modules\@babel\parser\lib\index.js:7563:12)
+      at TypeScriptParserMixin.checkLVal (F:\POE\node_modules\@babel\parser\lib\index.js:7500:12)
+      at TypeScriptParserMixin.parseVarId (F:\POE\node_modules\@babel\parser\lib\index.js:13412:10)
+      at TypeScriptParserMixin.parseVarId (F:\POE\node_modules\@babel\parser\lib\index.js:9752:11)
+      at TypeScriptParserMixin.parseVar (F:\POE\node_modules\@babel\parser\lib\index.js:13383:12)
+      at TypeScriptParserMixin.parseVarStatement (F:\POE\node_modules\@babel\parser\lib\index.js:13230:10)
+      at TypeScriptParserMixin.parseVarStatement (F:\POE\node_modules\@babel\parser\lib\index.js:9408:31)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:12851:23)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\POE\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseStatementListItem (F:\POE\node_modules\@babel\parser\lib\index.js:12747:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13316:61)
+      at TypeScriptParserMixin.parseBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseBlock (F:\POE\node_modules\@babel\parser\lib\index.js:13297:10)
+      at TypeScriptParserMixin.parseFunctionBody (F:\POE\node_modules\@babel\parser\lib\index.js:12100:24)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\POE\node_modules\@babel\parser\lib\index.js:12086:10)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\POE\node_modules\@babel\parser\lib\index.js:9172:18)
+      at F:\POE\node_modules\@babel\parser\lib\index.js:13445:12
+      at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (F:\POE\node_modules\@babel\parser\lib\index.js:12403:14)
+      at TypeScriptParserMixin.parseFunction (F:\POE\node_modules\@babel\parser\lib\index.js:13444:10)
+      at TypeScriptParserMixin.parseFunctionStatement (F:\POE\node_modules\@babel\parser\lib\index.js:13125:17)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:12791:21)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\POE\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseModuleItem (F:\POE\node_modules\@babel\parser\lib\index.js:12744:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13316:36)
+      at TypeScriptParserMixin.parseBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseProgram (F:\POE\node_modules\@babel\parser\lib\index.js:12622:10)
+      at TypeScriptParserMixin.parseTopLevel (F:\POE\node_modules\@babel\parser\lib\index.js:12612:25)
+      at TypeScriptParserMixin.parse (F:\POE\node_modules\@babel\parser\lib\index.js:14488:25)
+      at TypeScriptParserMixin.parse (F:\POE\node_modules\@babel\parser\lib\index.js:10126:18)
+      at parse (F:\POE\node_modules\@babel\parser\lib\index.js:14522:38)
+      at parser (F:\POE\node_modules\@babel\core\lib\parser\index.js:41:34)
+      at parser.next (<anonymous>)
+      at normalizeFile (F:\POE\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+      at normalizeFile.next (<anonymous>)
+      at run (F:\POE\node_modules\@babel\core\lib\transformation\index.js:22:50)
+      at run.next (<anonymous>)
+      at transform (F:\POE\node_modules\@babel\core\lib\transform.js:22:33)
+      at transform.next (<anonymous>)
+      at step (F:\POE\node_modules\gensync\index.js:261:32)
+      at F:\POE\node_modules\gensync\index.js:273:13
+      at async.call.result.err.err (F:\POE\node_modules\gensync\index.js:223:11)
+      at F:\POE\node_modules\gensync\index.js:189:28
+[2m01:03:59[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\webapp\App.tsx: Identifier 'vfxScale' has already been declared. (7542:8)
 
-[0m [90m 5013 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5014 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5015 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5016 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5017 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5018 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
+[0m [90m 7540 |[31m   [36mconst[31m sheets [33m=[31m projectileVfxSheets(vfxKind)[33m;[31m
+ [90m 7541 |[31m   [36mconst[31m vfxScale [33m=[31m normalizedVfxScale(vfx[33m.[31mvfxScale)[33m;[31m
+[31m[1m>[22m[31m[90m 7542 |[31m   [36mconst[31m vfxScale [33m=[31m normalizedVfxScale(bolt[33m.[31mvfxScale)[33m;[31m
+ [90m      |[31m         [31m[1m^[22m[31m
+ [90m 7543 |[31m   [36mconst[31m duration [33m=[31m [33mMath[31m[33m.[31mmax([35m0.001[31m[33m,[31m bolt[33m.[31mduration)[33m;[31m
+ [90m 7544 |[31m   [36mconst[31m aliveRemaining [33m=[31m fireBoltAliveRemaining(bolt)[33m;[31m
+ [90m 7545 |[31m   [36mconst[31m opacity [33m=[31m projectileBodyOpacity(bolt)[33m;[31m[0m[39m
   Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5015:95
-[33m  5093|    const target = state.board.cells[row]?.[column];
-  5094|    if (!target) return false;
-  5095|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                                ^
-  5096|  
-  5097|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:48:33[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5045:95)
+  File: [36mF:/POE/webapp/App.tsx[39m:7542:8
+[33m  7647|          data-projectile-alive-remaining={aliveRemaining}
+  7648|          data-projectile-fade-duration={fireBoltExitFadeDuration(bolt)}
+  7649|          data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
+     |                ^
+  7650|          aria-hidden="true"
+  7651|        >[39m
+      at constructor (F:\POE\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (F:\POE\node_modules\@babel\parser\lib\index.js:6599:19)
+      at TypeScriptScopeHandler.checkRedeclarationInScope (F:\POE\node_modules\@babel\parser\lib\index.js:1619:19)
+      at TypeScriptScopeHandler.declareName (F:\POE\node_modules\@babel\parser\lib\index.js:1585:12)
+      at TypeScriptScopeHandler.declareName (F:\POE\node_modules\@babel\parser\lib\index.js:4880:11)
+      at TypeScriptParserMixin.declareNameFromIdentifier (F:\POE\node_modules\@babel\parser\lib\index.js:7567:16)
+      at TypeScriptParserMixin.checkIdentifier (F:\POE\node_modules\@babel\parser\lib\index.js:7563:12)
+      at TypeScriptParserMixin.checkLVal (F:\POE\node_modules\@babel\parser\lib\index.js:7500:12)
+      at TypeScriptParserMixin.parseVarId (F:\POE\node_modules\@babel\parser\lib\index.js:13412:10)
+      at TypeScriptParserMixin.parseVarId (F:\POE\node_modules\@babel\parser\lib\index.js:9752:11)
+      at TypeScriptParserMixin.parseVar (F:\POE\node_modules\@babel\parser\lib\index.js:13383:12)
+      at TypeScriptParserMixin.parseVarStatement (F:\POE\node_modules\@babel\parser\lib\index.js:13230:10)
+      at TypeScriptParserMixin.parseVarStatement (F:\POE\node_modules\@babel\parser\lib\index.js:9408:31)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:12851:23)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\POE\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseStatementListItem (F:\POE\node_modules\@babel\parser\lib\index.js:12747:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13316:61)
+      at TypeScriptParserMixin.parseBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseBlock (F:\POE\node_modules\@babel\parser\lib\index.js:13297:10)
+      at TypeScriptParserMixin.parseFunctionBody (F:\POE\node_modules\@babel\parser\lib\index.js:12100:24)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\POE\node_modules\@babel\parser\lib\index.js:12086:10)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\POE\node_modules\@babel\parser\lib\index.js:9172:18)
+      at F:\POE\node_modules\@babel\parser\lib\index.js:13445:12
+      at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (F:\POE\node_modules\@babel\parser\lib\index.js:12403:14)
+      at TypeScriptParserMixin.parseFunction (F:\POE\node_modules\@babel\parser\lib\index.js:13444:10)
+      at TypeScriptParserMixin.parseFunctionStatement (F:\POE\node_modules\@babel\parser\lib\index.js:13125:17)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:12791:21)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\POE\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseModuleItem (F:\POE\node_modules\@babel\parser\lib\index.js:12744:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13316:36)
+      at TypeScriptParserMixin.parseBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseProgram (F:\POE\node_modules\@babel\parser\lib\index.js:12622:10)
+      at TypeScriptParserMixin.parseTopLevel (F:\POE\node_modules\@babel\parser\lib\index.js:12612:25)
+      at TypeScriptParserMixin.parse (F:\POE\node_modules\@babel\parser\lib\index.js:14488:25)
+      at TypeScriptParserMixin.parse (F:\POE\node_modules\@babel\parser\lib\index.js:10126:18)
+      at parse (F:\POE\node_modules\@babel\parser\lib\index.js:14522:38)
+      at parser (F:\POE\node_modules\@babel\core\lib\parser\index.js:41:34)
+      at parser.next (<anonymous>)
+      at normalizeFile (F:\POE\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+      at normalizeFile.next (<anonymous>)
+      at run (F:\POE\node_modules\@babel\core\lib\transformation\index.js:22:50)
+      at run.next (<anonymous>)
+      at transform (F:\POE\node_modules\@babel\core\lib\transform.js:22:33)
+      at transform.next (<anonymous>)
+      at step (F:\POE\node_modules\gensync\index.js:261:32)
+      at F:\POE\node_modules\gensync\index.js:273:13
+      at async.call.result.err.err (F:\POE\node_modules\gensync\index.js:223:11)
+      at F:\POE\node_modules\gensync\index.js:189:28
+[2m01:04:26[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\webapp\App.tsx: Identifier 'vfxScale' has already been declared. (7552:8)
 
-[0m [90m 5043 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5044 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5045 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5046 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5047 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5048 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
+[0m [90m 7550 |[31m   [36mconst[31m sheets [33m=[31m projectileVfxSheets(vfxKind)[33m;[31m
+ [90m 7551 |[31m   [36mconst[31m vfxScale [33m=[31m normalizedVfxScale(vfx[33m.[31mvfxScale)[33m;[31m
+[31m[1m>[22m[31m[90m 7552 |[31m   [36mconst[31m vfxScale [33m=[31m normalizedVfxScale(bolt[33m.[31mvfxScale)[33m;[31m
+ [90m      |[31m         [31m[1m^[22m[31m
+ [90m 7553 |[31m   [36mconst[31m duration [33m=[31m [33mMath[31m[33m.[31mmax([35m0.001[31m[33m,[31m bolt[33m.[31mduration)[33m;[31m
+ [90m 7554 |[31m   [36mconst[31m aliveRemaining [33m=[31m fireBoltAliveRemaining(bolt)[33m;[31m
+ [90m 7555 |[31m   [36mconst[31m opacity [33m=[31m projectileBodyOpacity(bolt)[33m;[31m[0m[39m
   Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5045:95
-[33m  5123|    const target = state.board.cells[row]?.[column];
-  5124|    if (!target) return false;
-  5125|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                                ^
-  5126|  
-  5127|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:49:20[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5047:95)
-
-[0m [90m 5045 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5046 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5047 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5048 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5049 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5050 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5047:95
-[33m  5125|    const target = state.board.cells[row]?.[column];
-  5126|    if (!target) return false;
-  5127|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                               ^
-  5128|  
-  5129|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:49:42[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5072:95)
-
-[0m [90m 5070 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5071 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5072 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5073 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5074 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5075 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5072:95
-[33m  5150|    const target = state.board.cells[row]?.[column];
-  5151|    if (!target) return false;
-  5152|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                               ^
-  5153|  
-  5154|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:50:06[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5085:95)
-
-[0m [90m 5083 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5084 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5085 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5086 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5087 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5088 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5085:95
-[33m  5163|    const target = state.board.cells[row]?.[column];
-  5164|    if (!target) return false;
-  5165|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                               ^
-  5166|  
-  5167|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:51:10[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5124:95)
-
-[0m [90m 5122 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5123 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5124 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5125 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5126 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5127 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5124:95
-[33m  5202|    const target = state.board.cells[row]?.[column];
-  5203|    if (!target) return false;
-  5204|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                               ^
-  5205|  
-  5206|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:51:21[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5124:95)
-
-[0m [90m 5122 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5123 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5124 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5125 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5126 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5127 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5124:95
-[33m  5202|    const target = state.board.cells[row]?.[column];
-  5203|    if (!target) return false;
-  5204|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                               ^
-  5205|  
-  5206|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:51:34[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5128:95)
-
-[0m [90m 5126 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5127 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5128 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5129 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5130 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5131 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5128:95
-[33m  5206|    const target = state.board.cells[row]?.[column];
-  5207|    if (!target) return false;
-  5208|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                             ^
-  5209|  
-  5210|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:51:45[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\POE\POE\webapp\App.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (5128:95)
-
-[0m [90m 5126 |[31m   [36mconst[31m runtimeParams [33m=[31m skill[33m.[31mruntime_params [33m?[31m[33m?[31m {}[33m;[31m
- [90m 5127 |[31m   [36mconst[31m radius [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mNumber[31m(runtimeParams[33m.[31mradius [33m?[31m[33m?[31m skill[33m.[31mcast[33m?[31m[33m.[31msearch_range [33m?[31m[33m?[31m [35m360[31m))[33m;[31m
-[31m[1m>[22m[31m[90m 5128 |[31m   [36mconst[31m maxTargets [33m=[31m [33mMath[31m[33m.[31mmax([35m1[31m[33m,[31m [33mMath[31m[33m.[31mround([33mNumber[31m(runtimeParams[33m.[31mmax_targets [33m?[31m[33m?[31m enemies[33m.[31mlength [33m||[31m [35m1[31m)))[33m;[31m
- [90m      |[31m                                                                                                [31m[1m^[22m[31m
- [90m 5129 |[31m   [36mreturn[31m [[33m...[31menemies]
- [90m 5130 |[31m     [33m.[31mmap((enemy) [33m=>[31m ({ enemy[33m,[31m distance[33m:[31m [33mMath[31m[33m.[31mhypot(enemy[33m.[31mx [33m-[31m player[33m.[31mx[33m,[31m enemy[33m.[31my [33m-[31m player[33m.[31my) }))
- [90m 5131 |[31m     [33m.[31mfilter((item) [33m=>[31m item[33m.[31mdistance [33m<=[31m radius)[0m[39m
-  Plugin: [35mvite:react-babel[39m
-  File: [36mF:/POE/POE/webapp/App.tsx[39m:5128:95
-[33m  5206|    const target = state.board.cells[row]?.[column];
-  5207|    if (!target) return false;
-  5208|    if (target.gem && target.gem.instance_id !== gem.instance_id && !ignoredInstanceIds.has(target.gem.instance_id)) return false;
-     |                                                             ^
-  5209|  
-  5210|    const sudokuDigit = sudokuDigitKey(gem);[39m
-      at constructor (F:\POE\POE\node_modules\@babel\parser\lib\index.js:365:19)
-      at TypeScriptParserMixin.raise (F:\POE\POE\node_modules\@babel\parser\lib\index.js:6599:19)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10951:22)
-      at TypeScriptParserMixin.parseExprOp (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9306:18)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10908:17)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-      at TypeScriptParserMixin.parseExprListItem (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12175:18)
-      at TypeScriptParserMixin.parseCallExpressionArguments (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11252:22)
-      at TypeScriptParserMixin.parseCoverCallAndAsyncArrowHead (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11186:29)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11120:19)
-      at TypeScriptParserMixin.parseSubscript (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9272:18)
-      at TypeScriptParserMixin.parseSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11094:19)
-      at TypeScriptParserMixin.parseExprSubscripts (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11085:17)
-      at TypeScriptParserMixin.parseUpdate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11066:21)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:11046:23)
-      at TypeScriptParserMixin.parseMaybeUnary (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9837:18)
-      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10899:61)
-      at TypeScriptParserMixin.parseExprOps (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10904:23)
-      at TypeScriptParserMixin.parseMaybeConditional (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10881:23)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10831:21)
-      at TypeScriptParserMixin.parseMaybeAssign (F:\POE\POE\node_modules\@babel\parser\lib\index.js:9786:20)
-      at F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:39
-      at TypeScriptParserMixin.allowInAnd (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12426:12)
-      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\POE\POE\node_modules\@babel\parser\lib\index.js:10800:17)
-      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\POE\POE\node_modules\@babel\parser\lib\index.js:12493:17)
-[2m17:56:26[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/state[39m
-Error: socket hang up
-    at Socket.socketOnEnd (node:_http_client:599:25)
-    at Socket.emit (node:events:520:35)
-    at endReadableNT (node:internal/streams/readable:1701:12)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  File: [36mF:/POE/webapp/App.tsx[39m:7552:8
+[33m  7657|          data-projectile-alive-remaining={aliveRemaining}
+  7658|          data-projectile-fade-duration={fireBoltExitFadeDuration(bolt)}
+  7659|          data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
+     |                ^
+  7660|          aria-hidden="true"
+  7661|        >[39m
+      at constructor (F:\POE\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (F:\POE\node_modules\@babel\parser\lib\index.js:6599:19)
+      at TypeScriptScopeHandler.checkRedeclarationInScope (F:\POE\node_modules\@babel\parser\lib\index.js:1619:19)
+      at TypeScriptScopeHandler.declareName (F:\POE\node_modules\@babel\parser\lib\index.js:1585:12)
+      at TypeScriptScopeHandler.declareName (F:\POE\node_modules\@babel\parser\lib\index.js:4880:11)
+      at TypeScriptParserMixin.declareNameFromIdentifier (F:\POE\node_modules\@babel\parser\lib\index.js:7567:16)
+      at TypeScriptParserMixin.checkIdentifier (F:\POE\node_modules\@babel\parser\lib\index.js:7563:12)
+      at TypeScriptParserMixin.checkLVal (F:\POE\node_modules\@babel\parser\lib\index.js:7500:12)
+      at TypeScriptParserMixin.parseVarId (F:\POE\node_modules\@babel\parser\lib\index.js:13412:10)
+      at TypeScriptParserMixin.parseVarId (F:\POE\node_modules\@babel\parser\lib\index.js:9752:11)
+      at TypeScriptParserMixin.parseVar (F:\POE\node_modules\@babel\parser\lib\index.js:13383:12)
+      at TypeScriptParserMixin.parseVarStatement (F:\POE\node_modules\@babel\parser\lib\index.js:13230:10)
+      at TypeScriptParserMixin.parseVarStatement (F:\POE\node_modules\@babel\parser\lib\index.js:9408:31)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:12851:23)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\POE\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseStatementListItem (F:\POE\node_modules\@babel\parser\lib\index.js:12747:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13316:61)
+      at TypeScriptParserMixin.parseBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseBlock (F:\POE\node_modules\@babel\parser\lib\index.js:13297:10)
+      at TypeScriptParserMixin.parseFunctionBody (F:\POE\node_modules\@babel\parser\lib\index.js:12100:24)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\POE\node_modules\@babel\parser\lib\index.js:12086:10)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\POE\node_modules\@babel\parser\lib\index.js:9172:18)
+      at F:\POE\node_modules\@babel\parser\lib\index.js:13445:12
+      at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (F:\POE\node_modules\@babel\parser\lib\index.js:12403:14)
+      at TypeScriptParserMixin.parseFunction (F:\POE\node_modules\@babel\parser\lib\index.js:13444:10)
+      at TypeScriptParserMixin.parseFunctionStatement (F:\POE\node_modules\@babel\parser\lib\index.js:13125:17)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:12791:21)
+      at TypeScriptParserMixin.parseStatementContent (F:\POE\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\POE\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseModuleItem (F:\POE\node_modules\@babel\parser\lib\index.js:12744:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13316:36)
+      at TypeScriptParserMixin.parseBlockBody (F:\POE\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseProgram (F:\POE\node_modules\@babel\parser\lib\index.js:12622:10)
+      at TypeScriptParserMixin.parseTopLevel (F:\POE\node_modules\@babel\parser\lib\index.js:12612:25)
+      at TypeScriptParserMixin.parse (F:\POE\node_modules\@babel\parser\lib\index.js:14488:25)
+      at TypeScriptParserMixin.parse (F:\POE\node_modules\@babel\parser\lib\index.js:10126:18)
+      at parse (F:\POE\node_modules\@babel\parser\lib\index.js:14522:38)
+      at parser (F:\POE\node_modules\@babel\core\lib\parser\index.js:41:34)
+      at parser.next (<anonymous>)
+      at normalizeFile (F:\POE\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+      at normalizeFile.next (<anonymous>)
+      at run (F:\POE\node_modules\@babel\core\lib\transformation\index.js:22:50)
+      at run.next (<anonymous>)
+      at transform (F:\POE\node_modules\@babel\core\lib\transform.js:22:33)
+      at transform.next (<anonymous>)
+      at step (F:\POE\node_modules\gensync\index.js:261:32)
+      at F:\POE\node_modules\gensync\index.js:273:13
+      at async.call.result.err.err (F:\POE\node_modules\gensync\index.js:223:11)
+      at F:\POE\node_modules\gensync\index.js:189:28

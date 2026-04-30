@@ -1,16 +1,18 @@
-import groundBaseUrl from "../assest/battle/tiles/cropped/ground_base.png";
-import groundCrackedUrl from "../assest/battle/tiles/cropped/ground_cracked.png";
-import groundDarkUrl from "../assest/battle/tiles/cropped/ground_dark.png";
-import groundDirtUrl from "../assest/battle/tiles/cropped/ground_dirt.png";
-import groundRitualUrl from "../assest/battle/tiles/cropped/ground_ritual.png";
-import groundStoneUrl from "../assest/battle/tiles/cropped/ground_stone.png";
+import seamlessStoneGroundBloodUrl from "../assest/battle/tiles/cropped/seamless_stone_ground_blood.png";
+import seamlessStoneGroundBrokenUrl from "../assest/battle/tiles/cropped/seamless_stone_ground_broken.png";
+import seamlessStoneGroundCrackedUrl from "../assest/battle/tiles/cropped/seamless_stone_ground_cracked.png";
+import seamlessStoneGroundPlainUrl from "../assest/battle/tiles/cropped/seamless_stone_ground_plain.png";
 
 export type BattleTerrainTileKind = "ground" | "blocked" | "object";
-export type TerrainTileAssetId = "ground_base" | "ground_dark" | "ground_cracked" | "ground_stone" | "ground_ritual" | "ground_dirt";
+export type TerrainTileAssetId =
+  | "seamless_stone_ground_plain"
+  | "seamless_stone_ground_broken"
+  | "seamless_stone_ground_cracked"
+  | "seamless_stone_ground_blood";
 
 export type TerrainTileAsset = {
   id: TerrainTileAssetId;
-  terrainKind: "base" | "dark" | "cracked" | "stone" | "ritual" | "dirt";
+  terrainKind: "stone" | "broken" | "cracked" | "blood";
   src: string;
   width: number;
   height: number;
@@ -18,71 +20,33 @@ export type TerrainTileAsset = {
   anchorY: number;
 };
 
+const SEAMLESS_GROUND_TILE_WIDTH = 570;
+const SEAMLESS_GROUND_TILE_HEIGHT = 380;
+
 export const TERRAIN_TILE_ASSETS: Record<TerrainTileAssetId, TerrainTileAsset> = {
-  ground_base: {
-    id: "ground_base",
-    terrainKind: "base",
-    src: groundBaseUrl,
-    width: 128,
-    height: 109,
-    anchorX: 0.5,
-    anchorY: 0
-  },
-  ground_dark: {
-    id: "ground_dark",
-    terrainKind: "dark",
-    src: groundDarkUrl,
-    width: 128,
-    height: 103,
-    anchorX: 0.5,
-    anchorY: 0
-  },
-  ground_cracked: {
-    id: "ground_cracked",
-    terrainKind: "cracked",
-    src: groundCrackedUrl,
-    width: 128,
-    height: 96,
-    anchorX: 0.5,
-    anchorY: 0
-  },
-  ground_stone: {
-    id: "ground_stone",
-    terrainKind: "stone",
-    src: groundStoneUrl,
-    width: 128,
-    height: 96,
-    anchorX: 0.5,
-    anchorY: 0
-  },
-  ground_ritual: {
-    id: "ground_ritual",
-    terrainKind: "ritual",
-    src: groundRitualUrl,
-    width: 128,
-    height: 103,
-    anchorX: 0.5,
-    anchorY: 0
-  },
-  ground_dirt: {
-    id: "ground_dirt",
-    terrainKind: "dirt",
-    src: groundDirtUrl,
-    width: 128,
-    height: 108,
-    anchorX: 0.5,
-    anchorY: 0
-  }
+  seamless_stone_ground_plain: createTerrainAsset("seamless_stone_ground_plain", "stone", seamlessStoneGroundPlainUrl),
+  seamless_stone_ground_broken: createTerrainAsset("seamless_stone_ground_broken", "broken", seamlessStoneGroundBrokenUrl),
+  seamless_stone_ground_cracked: createTerrainAsset("seamless_stone_ground_cracked", "cracked", seamlessStoneGroundCrackedUrl),
+  seamless_stone_ground_blood: createTerrainAsset("seamless_stone_ground_blood", "blood", seamlessStoneGroundBloodUrl)
 };
 
-const GROUND_VARIANTS: TerrainTileAsset[] = [
-  TERRAIN_TILE_ASSETS.ground_base,
-  TERRAIN_TILE_ASSETS.ground_base,
-  TERRAIN_TILE_ASSETS.ground_dark,
-  TERRAIN_TILE_ASSETS.ground_cracked,
-  TERRAIN_TILE_ASSETS.ground_stone,
-  TERRAIN_TILE_ASSETS.ground_dirt
+const SEAMLESS_GROUND_DEFAULT_VARIANTS: TerrainTileAsset[] = [
+  TERRAIN_TILE_ASSETS.seamless_stone_ground_plain,
+  TERRAIN_TILE_ASSETS.seamless_stone_ground_broken,
+  TERRAIN_TILE_ASSETS.seamless_stone_ground_cracked
 ];
+
+function createTerrainAsset(id: TerrainTileAssetId, terrainKind: TerrainTileAsset["terrainKind"], src: string): TerrainTileAsset {
+  return {
+    id,
+    terrainKind,
+    src,
+    width: SEAMLESS_GROUND_TILE_WIDTH,
+    height: SEAMLESS_GROUND_TILE_HEIGHT,
+    anchorX: 0.5,
+    anchorY: 0
+  };
+}
 
 export function tileHash(x: number, y: number) {
   let value = (x + 11) * 374761393 + (y + 17) * 668265263;
@@ -90,8 +54,9 @@ export function tileHash(x: number, y: number) {
   return Math.abs(value ^ (value >> 16));
 }
 
-export function terrainAssetForTile(tileKind: BattleTerrainTileKind, x: number, y: number) {
+export function terrainAssetForTile(tileKind: BattleTerrainTileKind, x: number, y: number, assetId?: TerrainTileAssetId) {
   if (tileKind === "blocked") return null;
-  if (tileKind === "object") return TERRAIN_TILE_ASSETS.ground_ritual;
-  return GROUND_VARIANTS[tileHash(x, y) % GROUND_VARIANTS.length];
+  if (assetId) return TERRAIN_TILE_ASSETS[assetId];
+  if (tileKind === "object") return TERRAIN_TILE_ASSETS.seamless_stone_ground_blood;
+  return SEAMLESS_GROUND_DEFAULT_VARIANTS[tileHash(x, y) % SEAMLESS_GROUND_DEFAULT_VARIANTS.length];
 }

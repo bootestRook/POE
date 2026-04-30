@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from copy import deepcopy
 from dataclasses import replace
 from math import hypot
 from pathlib import Path
@@ -278,6 +279,85 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertTrue(all(event.payload["impact_kind"] == "projectile_hit_continue" for event in hit_events))
         self.assertTrue(all(event.payload["projectile_continues"] for event in hit_events))
         self.assertTrue(all(event.payload["hit_world_position"] == event.position for event in hit_events))
+
+    def test_fungal_petards_module_chain_triggers_damage_zone_after_projectile_impact(self) -> None:
+        self.inventory.add_instance("active", "active_fungal_petards")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(360, -12),
+            timestamp_ms=100,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 360, "y": -12}},
+                {"entity_id": "monster_2", "position": {"x": 430, "y": -12}},
+                {"entity_id": "monster_3", "position": {"x": 620, "y": -12}},
+            ],
+        )
+
+        by_type = {event.type: event for event in events}
+        damage_events = [event for event in events if event.type == "damage"]
+        self.assertEqual(final_skill.behavior_template, "module_chain")
+        for event_type in ("cast_start", "projectile_spawn", "projectile_impact", "damage_zone_prime", "damage_zone", "damage", "hit_vfx", "floating_text"):
+            self.assertIn(event_type, by_type)
+        spawn = by_type["projectile_spawn"]
+        impact = by_type["projectile_impact"]
+        prime = by_type["damage_zone_prime"]
+        zone = by_type["damage_zone"]
+        self.assertEqual(spawn.payload["trajectory"], "ballistic")
+        self.assertEqual(spawn.payload["travel_time_ms"], 760)
+        self.assertEqual(spawn.payload["arc_height"], 220)
+        self.assertEqual(spawn.payload["impact_marker_id"], "fungal_impact")
+        self.assertEqual(impact.payload["marker_id"], "fungal_impact")
+        self.assertEqual(impact.payload["impact_position"], {"x": 360.0, "y": -12.0})
+        self.assertEqual(prime.payload["trigger_marker_id"], "fungal_impact")
+        self.assertEqual(prime.payload["delay_ms"], 420)
+        self.assertEqual(zone.payload["shape"], "circle")
+        self.assertEqual(zone.payload["origin"], impact.payload["impact_position"])
+        self.assertEqual(zone.payload["radius"], 180)
+        self.assertEqual(zone.timestamp_ms, impact.timestamp_ms + 420)
+        self.assertTrue(all(event.timestamp_ms >= zone.timestamp_ms for event in damage_events))
+        self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2"})
+        self.assertTrue(all(event.damage_type == "physical" for event in damage_events))
+
+    def test_fungal_petards_module_chain_parameters_affect_runtime_events(self) -> None:
+        self.inventory.add_instance("active", "active_fungal_petards")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = dict(final_skill.runtime_params or {})
+        modules = deepcopy(runtime_params["modules"])
+        modules[0]["params"]["travel_time_ms"] = 920
+        modules[0]["params"]["arc_height"] = 320
+        modules[1]["trigger"]["trigger_delay_ms"] = 150
+        modules[1]["params"]["radius"] = 50
+        final_skill = replace(final_skill, runtime_params={**runtime_params, "modules": modules})
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(360, -12),
+            timestamp_ms=100,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 360, "y": -12}},
+                {"entity_id": "monster_2", "position": {"x": 430, "y": -12}},
+            ],
+        )
+
+        spawn = next(event for event in events if event.type == "projectile_spawn")
+        impact = next(event for event in events if event.type == "projectile_impact")
+        zone = next(event for event in events if event.type == "damage_zone")
+        damage_events = [event for event in events if event.type == "damage"]
+        self.assertEqual(spawn.payload["travel_time_ms"], 920)
+        self.assertEqual(spawn.payload["arc_height"], 320)
+        self.assertEqual(impact.timestamp_ms, 1020)
+        self.assertEqual(zone.timestamp_ms, 1170)
+        self.assertEqual({event.target_entity for event in damage_events}, {"monster_1"})
 
     def test_penetrating_shot_single_target_visual_travels_past_hit(self) -> None:
         self.inventory.add_instance("active", "active_penetrating_shot")

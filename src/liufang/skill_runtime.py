@@ -12,9 +12,11 @@ SKILL_EVENT_TYPES = frozenset(
         "cast_start",
         "projectile_spawn",
         "projectile_hit",
+        "projectile_impact",
         "chain_segment",
         "area_spawn",
         "melee_arc",
+        "damage_zone_prime",
         "damage_zone",
         "orbit_spawn",
         "orbit_tick",
@@ -92,8 +94,19 @@ class SkillRuntime:
     ) -> tuple[SkillEvent, ...]:
         if not skill.uses_skill_event_pipeline:
             raise SkillRuntimeError("skill does not use the SkillEvent pipeline")
-        if skill.behavior_template not in {"projectile", "chain", "player_nova", "melee_arc", "damage_zone"}:
+        if skill.behavior_template not in {"projectile", "chain", "player_nova", "melee_arc", "damage_zone", "module_chain"}:
             raise SkillRuntimeError(f"unsupported behavior template: {skill.behavior_template}")
+        if skill.behavior_template == "module_chain":
+            targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
+                _RuntimeTarget(target_entity, _position_dict(target_position)),
+            )
+            return self._module_chain_events(
+                skill,
+                source_entity=source_entity,
+                source_position=_position_dict(source_position),
+                targets=targets,
+                timestamp_ms=timestamp_ms,
+            )
         if skill.behavior_template == "chain":
             targets = tuple(_runtime_targets(target_entities)) if target_entities is not None else (
                 _RuntimeTarget(target_entity, _position_dict(target_position)),
@@ -293,6 +306,264 @@ class SkillRuntime:
                         vfx_key=vfx,
                         sfx_key=sfx_key,
                         reason_key=reason,
+                        payload=payload,
+                    )
+                )
+                next_index += 1
+        return _sorted_events(events)
+
+    def _module_chain_events(
+        self,
+        skill: FinalSkillInstance,
+        *,
+        source_entity: str,
+        source_position: dict[str, float],
+        targets: tuple[_RuntimeTarget, ...],
+        timestamp_ms: int,
+    ) -> tuple[SkillEvent, ...]:
+        runtime_params = skill.runtime_params or {}
+        modules = runtime_params.get("modules", [])
+        if not isinstance(modules, list):
+            raise SkillRuntimeError("module chain requires modules")
+        projectile_module = _first_module(modules, "projectile")
+        damage_zone_module = _first_module(modules, "damage_zone")
+        if projectile_module is None or damage_zone_module is None:
+            raise SkillRuntimeError("module chain requires projectile and damage_zone modules")
+        projectile_params = _module_params(projectile_module)
+        zone_params = _module_params(damage_zone_module)
+        trigger_params = _module_trigger(damage_zone_module)
+
+        presentation = skill.presentation_keys or {}
+        origin = dict(source_position)
+        spawn_position = _spawn_position(origin, projectile_params)
+        primary_target = _nearest_target(origin, targets) or _RuntimeTarget("", origin)
+        target_position = dict(primary_target.position)
+        direction = _direction(spawn_position, target_position)
+        travel_time_ms = max(1, int(projectile_params.get("travel_time_ms", 1)))
+        arc_height = max(0.0, float(projectile_params.get("arc_height", 0.0)))
+        trajectory = str(projectile_params.get("trajectory", "linear"))
+        impact_marker_id = str(projectile_params.get("impact_marker_id", ""))
+        trigger_marker_id = str(trigger_params.get("trigger_marker_id", zone_params.get("trigger_marker_id", "")))
+        trigger_delay_ms = max(0, int(trigger_params.get("trigger_delay_ms", zone_params.get("trigger_delay_ms", 0))))
+        if not impact_marker_id or trigger_marker_id != impact_marker_id:
+            raise SkillRuntimeError("module chain trigger does not match projectile impact marker")
+        impact_position = dict(target_position)
+        shape = str(zone_params.get("shape", "circle"))
+        if shape != "circle":
+            raise SkillRuntimeError("module chain damage_zone currently supports circle")
+        radius = max(1.0, float(zone_params.get("radius", skill.hit.get("hit_radius", 180.0) if skill.hit else 180.0)))
+        max_targets = _max_targets(zone_params.get("max_targets"), len(targets) or 1)
+        hit_at_ms = max(0, int(zone_params.get("hit_at_ms", trigger_delay_ms)))
+        vfx_key = str(zone_params.get("vfx_key") or zone_params.get("zone_vfx_key") or presentation.get("vfx", skill.visual_effect))
+        projectile_vfx_key = str(projectile_params.get("vfx_key") or presentation.get("projectile_vfx_key", presentation.get("vfx", skill.visual_effect)))
+        hit_vfx_key = presentation.get("hit_vfx_key", vfx_key)
+        sfx_key = presentation.get("sfx", "")
+        floating_key = presentation.get("floating_text", "skill_event.fungal_petards.floating_text")
+        reason_key = _damage_reason_key(skill)
+        damage_amount = skill.final_damage
+        projectile_id = _projectile_id(skill, timestamp_ms, 1)
+        zone_id = f"{skill.active_gem_instance_id}.{timestamp_ms}.damage_zone.1"
+        damage_delay_ms = travel_time_ms + trigger_delay_ms
+        hit_targets = _damage_zone_hit_targets(
+            impact_position,
+            {"x": 0.0, "y": 0.0},
+            targets,
+            shape="circle",
+            radius=radius,
+            length=0.0,
+            width=0.0,
+            max_targets=max_targets,
+        )
+        projectile_payload = {
+            "projectile_id": projectile_id,
+            "projectile_index": 1,
+            "projectile_count": 1,
+            "skill_id": skill.skill_package_id or skill.skill_template_id,
+            "trajectory": trajectory,
+            "start_position": dict(spawn_position),
+            "spawn_world_position": dict(spawn_position),
+            "target_position": dict(target_position),
+            "target_world_position": dict(target_position),
+            "end_position": dict(target_position),
+            "expire_world_position": dict(target_position),
+            "impact_world_position": dict(impact_position),
+            "direction_world": dict(direction),
+            "velocity_world": {"x": direction["x"], "y": direction["y"]},
+            "travel_time_ms": travel_time_ms,
+            "lifetime_ms": travel_time_ms,
+            "expire_time_ms": timestamp_ms + travel_time_ms,
+            "arc_height": arc_height,
+            "impact_marker_id": impact_marker_id,
+            "target_policy": str(projectile_params.get("target_policy", "target_position")),
+            "projectile_speed": projectile_params.get("projectile_speed", 0),
+        }
+        zone_payload = {
+            "zone_id": zone_id,
+            "skill_id": skill.skill_package_id or skill.skill_template_id,
+            "shape": "circle",
+            "origin": dict(impact_position),
+            "origin_world_position": dict(impact_position),
+            "origin_policy": "trigger_position",
+            "trigger_marker_id": trigger_marker_id,
+            "delay_ms": trigger_delay_ms,
+            "radius": radius,
+            "ring_width": float(zone_params.get("ring_width", 48.0)),
+            "hit_at_ms": hit_at_ms,
+            "max_targets": max_targets,
+            "damage_type": skill.damage_type,
+            "vfx_key": vfx_key,
+            "zone_vfx_key": vfx_key,
+            "hit_target_count": len(hit_targets),
+        }
+        events: list[SkillEvent] = [
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 0, "cast_start"),
+                type="cast_start",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=direction,
+                delay_ms=0,
+                duration_ms=0,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=presentation.get("cast_vfx_key", projectile_vfx_key),
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={"skill_id": skill.skill_package_id or skill.skill_template_id},
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 1, "projectile_spawn"),
+                type="projectile_spawn",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=spawn_position,
+                direction=direction,
+                delay_ms=0,
+                duration_ms=travel_time_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=projectile_vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload=projectile_payload,
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 2, "projectile_impact"),
+                type="projectile_impact",
+                timestamp_ms=timestamp_ms + travel_time_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=impact_position,
+                direction=direction,
+                delay_ms=travel_time_ms,
+                duration_ms=0,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=projectile_vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={**projectile_payload, "marker_id": impact_marker_id, "impact_position": dict(impact_position)},
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 3, "damage_zone_prime"),
+                type="damage_zone_prime",
+                timestamp_ms=timestamp_ms + travel_time_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=impact_position,
+                direction={"x": 0.0, "y": 0.0},
+                delay_ms=travel_time_ms,
+                duration_ms=trigger_delay_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload=zone_payload,
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 4, "damage_zone"),
+                type="damage_zone",
+                timestamp_ms=timestamp_ms + damage_delay_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=impact_position,
+                direction={"x": 0.0, "y": 0.0},
+                delay_ms=damage_delay_ms,
+                duration_ms=max(180, trigger_delay_ms),
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload=zone_payload,
+            ),
+        ]
+        next_index = 5
+        floating_text = _damage_text(damage_amount, skill.damage_type)
+        if hit_targets:
+            events.append(
+                SkillEvent(
+                    event_id=_event_id(skill, timestamp_ms, next_index, "hit_vfx"),
+                    type="hit_vfx",
+                    timestamp_ms=timestamp_ms + damage_delay_ms,
+                    source_entity=source_entity,
+                    target_entity=primary_target.entity_id,
+                    position=dict(impact_position),
+                    direction={"x": 0.0, "y": 0.0},
+                    delay_ms=damage_delay_ms,
+                    duration_ms=420,
+                    amount=None,
+                    damage_type=skill.damage_type,
+                    skill_instance_id=skill.active_gem_instance_id,
+                    vfx_key=hit_vfx_key,
+                    sfx_key=sfx_key,
+                    reason_key=reason_key,
+                    payload={**zone_payload, "hit_world_position": dict(impact_position), "skill_name": skill.skill_package_id or skill.skill_template_id},
+                )
+            )
+            next_index += 1
+        for target, target_payload in hit_targets:
+            target_direction = _direction(impact_position, target.position)
+            hit_payload = {
+                **zone_payload,
+                **target_payload,
+                "target_world_position": dict(target.position),
+                "hit_world_position": dict(target.position),
+                "skill_name": skill.skill_package_id or skill.skill_template_id,
+            }
+            for event_type, amount, duration, event_vfx, event_reason, position in (
+                ("damage", damage_amount, 0, hit_vfx_key, reason_key, target.position),
+                ("floating_text", damage_amount, 800, hit_vfx_key, floating_key, {"x": target.position["x"], "y": target.position["y"] - 28.0}),
+            ):
+                payload = {**hit_payload}
+                if event_type == "floating_text":
+                    payload["text"] = floating_text
+                events.append(
+                    SkillEvent(
+                        event_id=_event_id(skill, timestamp_ms, next_index, event_type),
+                        type=event_type,
+                        timestamp_ms=timestamp_ms + damage_delay_ms,
+                        source_entity=source_entity,
+                        target_entity=target.entity_id,
+                        position=dict(position),
+                        direction=target_direction,
+                        delay_ms=damage_delay_ms,
+                        duration_ms=duration,
+                        amount=amount,
+                        damage_type=skill.damage_type,
+                        skill_instance_id=skill.active_gem_instance_id,
+                        vfx_key=event_vfx,
+                        sfx_key=sfx_key,
+                        reason_key=event_reason,
                         payload=payload,
                     )
                 )
@@ -1244,16 +1515,35 @@ def _runtime_event_sort_order(event_type: str) -> int:
         "melee_arc": 1,
         "damage_zone": 1,
         "projectile_spawn": 1,
-        "projectile_hit": 2,
-        "damage": 3,
-        "hit_vfx": 4,
-        "floating_text": 5,
-        "cooldown_update": 6,
+        "projectile_impact": 2,
+        "damage_zone_prime": 3,
+        "projectile_hit": 4,
+        "damage": 5,
+        "hit_vfx": 6,
+        "floating_text": 7,
+        "cooldown_update": 8,
     }.get(event_type, 99)
 
 
 def _projectile_id(skill: FinalSkillInstance, timestamp_ms: int, projectile_index: int) -> str:
     return f"{skill.active_gem_instance_id}.{timestamp_ms}.projectile.{projectile_index}"
+
+
+def _first_module(modules: list[object], module_type: str) -> dict[str, Any] | None:
+    for module in modules:
+        if isinstance(module, dict) and module.get("type") == module_type:
+            return module
+    return None
+
+
+def _module_params(module: dict[str, Any]) -> dict[str, Any]:
+    params = module.get("params", {})
+    return dict(params) if isinstance(params, dict) else {}
+
+
+def _module_trigger(module: dict[str, Any]) -> dict[str, Any]:
+    trigger = module.get("trigger", {})
+    return dict(trigger) if isinstance(trigger, dict) else {}
 
 
 def _position_dict(position: object) -> dict[str, float]:

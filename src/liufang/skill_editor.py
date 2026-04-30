@@ -102,10 +102,12 @@ TEST_ARENA_SCENE_ALIASES = {
 TIMELINE_EVENT_TYPES = (
     "cast_start",
     "damage_zone",
+    "damage_zone_prime",
     "melee_arc",
     "chain_segment",
     "area_spawn",
     "projectile_spawn",
+    "projectile_impact",
     "projectile_hit",
     "damage",
     "hit_vfx",
@@ -120,6 +122,7 @@ PACKAGE_KEY_ORDER = (
     "classification",
     "cast",
     "behavior",
+    "modules",
     "hit",
     "scaling",
     "presentation",
@@ -132,6 +135,13 @@ NESTED_KEY_ORDER = {
     "behavior": ("template", "params"),
     "params": (
         "shape",
+        "trajectory",
+        "travel_time_ms",
+        "arc_height",
+        "target_policy",
+        "impact_marker_id",
+        "trigger_marker_id",
+        "trigger_delay_ms",
         "origin_policy",
         "facing_policy",
         "hit_at_ms",
@@ -192,6 +202,7 @@ NESTED_KEY_ORDER = {
         "floating_text",
         "floating_text_style",
         "screen_feedback",
+        "vfx_scale",
         "hit_stop_ms",
         "camera_shake",
     ),
@@ -754,13 +765,22 @@ class SkillEditorService:
 
     def _final_skill_summary(self, final_skill: FinalSkillInstance) -> dict[str, Any]:
         runtime_params = final_skill.runtime_params or {}
+        projectile_params = _module_params(runtime_params, "projectile")
+        zone_params = _module_params(runtime_params, "damage_zone")
+        zone_trigger = _module_trigger(runtime_params, "damage_zone")
         return {
             "final_damage": final_skill.final_damage,
             "final_cooldown_ms": final_skill.final_cooldown_ms,
             "projectile_count": final_skill.projectile_count,
-            "projectile_speed": runtime_params.get("projectile_speed", 0),
-            "shape": runtime_params.get("shape", ""),
-            "radius": runtime_params.get("radius", 0),
+            "projectile_speed": runtime_params.get("projectile_speed", projectile_params.get("projectile_speed", 0)),
+            "trajectory": runtime_params.get("trajectory", projectile_params.get("trajectory", "")),
+            "travel_time_ms": runtime_params.get("travel_time_ms", projectile_params.get("travel_time_ms", 0)),
+            "arc_height": runtime_params.get("arc_height", projectile_params.get("arc_height", 0)),
+            "impact_marker_id": runtime_params.get("impact_marker_id", projectile_params.get("impact_marker_id", "")),
+            "trigger_marker_id": runtime_params.get("trigger_marker_id", zone_trigger.get("trigger_marker_id", zone_params.get("trigger_marker_id", ""))),
+            "trigger_delay_ms": runtime_params.get("trigger_delay_ms", zone_trigger.get("trigger_delay_ms", zone_params.get("trigger_delay_ms", 0))),
+            "shape": runtime_params.get("shape", zone_params.get("shape", "")),
+            "radius": runtime_params.get("radius", zone_params.get("radius", 0)),
             "length": runtime_params.get("length", 0),
             "width": runtime_params.get("width", 0),
             "angle_offset_deg": runtime_params.get("angle_offset_deg", 0),
@@ -771,7 +791,7 @@ class SkillEditorService:
             "chain_delay_ms": runtime_params.get("chain_delay_ms", 0),
             "damage_falloff_per_chain": runtime_params.get("damage_falloff_per_chain", 0),
             "expand_duration_ms": runtime_params.get("expand_duration_ms", 0),
-            "hit_at_ms": runtime_params.get("hit_at_ms", 0),
+            "hit_at_ms": runtime_params.get("hit_at_ms", zone_params.get("hit_at_ms", 0)),
         }
 
     def _package_for_test_payload(self, payload: dict[str, Any], skill_id: str) -> dict[str, Any]:
@@ -856,6 +876,8 @@ class SkillEditorService:
             "event_count": len(events),
             "event_counts": event_counts,
             "has_projectile_spawn": event_counts.get("projectile_spawn", 0) > 0,
+            "has_projectile_impact": event_counts.get("projectile_impact", 0) > 0,
+            "has_damage_zone_prime": event_counts.get("damage_zone_prime", 0) > 0,
             "has_damage_zone": event_counts.get("damage_zone", 0) > 0,
             "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
             "has_melee_arc": event_counts.get("melee_arc", 0) > 0,
@@ -981,7 +1003,7 @@ class SkillEditorService:
             "editable": result.is_valid,
             "status_text": "已迁移，可编辑" if result.is_valid else "已迁移，需修复",
             "skill_yaml_path": relative_path,
-            "behavior_template": str(behavior.get("template", "")),
+            "behavior_template": "module_chain" if isinstance(package.get("modules"), list) else str(behavior.get("template", "")),
             "schema_status": schema_status,
             "detail": {
                 "id": str(package.get("id", skill_id)),
@@ -1319,8 +1341,30 @@ def _chinese_test_arena_error(error: Exception) -> str:
     return "技能测试场运行失败，请检查技能包、测试场景和测试参数。"
 
 
+def _module_params(runtime_params: dict[str, Any], module_type: str) -> dict[str, Any]:
+    modules = runtime_params.get("modules", [])
+    if not isinstance(modules, list):
+        return {}
+    for module in modules:
+        if isinstance(module, dict) and module.get("type") == module_type:
+            params = module.get("params", {})
+            return dict(params) if isinstance(params, dict) else {}
+    return {}
+
+
+def _module_trigger(runtime_params: dict[str, Any], module_type: str) -> dict[str, Any]:
+    modules = runtime_params.get("modules", [])
+    if not isinstance(modules, list):
+        return {}
+    for module in modules:
+        if isinstance(module, dict) and module.get("type") == module_type:
+            trigger = module.get("trigger", {})
+            return dict(trigger) if isinstance(trigger, dict) else {}
+    return {}
+
+
 def _arena_stages(enemies: list[dict[str, Any]], events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
-    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "area_spawn", "melee_arc", "damage_zone", "chain_segment"})
+    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "projectile_impact", "damage_zone_prime", "area_spawn", "melee_arc", "damage_zone", "chain_segment"})
     stage_name = "技能生效前" if any(event.type in {"area_spawn", "melee_arc", "damage_zone"} for event in spawn_events) else "投射物飞行中"
     stages = [_arena_stage(stage_name, enemies, events, spawn_events)]
     damage_delays = sorted({event.delay_ms for event in events if event.type == "damage"})
@@ -1381,7 +1425,7 @@ def _event_summary(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
             "amount": event.amount,
             "projectile_index": event.payload.get("projectile_index"),
             "segment_index": event.payload.get("segment_index"),
-            "area_id": event.payload.get("zone_id") or event.payload.get("area_id") or event.payload.get("arc_id") or event.payload.get("segment_id"),
+            "area_id": event.payload.get("zone_id") or event.payload.get("area_id") or event.payload.get("arc_id") or event.payload.get("segment_id") or event.payload.get("projectile_id") or event.payload.get("marker_id"),
         }
         for event in sorted(events, key=lambda item: (item.delay_ms, _event_sort_order(item.type), item.event_id))
     ]
@@ -1400,8 +1444,11 @@ def _event_timeline(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
 
 def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list[dict[str, Any]]) -> dict[str, Any]:
     event_counts = _event_counts(events)
-    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "area_spawn", "melee_arc", "damage_zone", "chain_segment"}]
+    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "projectile_impact", "damage_zone_prime", "area_spawn", "melee_arc", "damage_zone", "chain_segment"}]
     projectile_spawn_times = [event.timestamp_ms for event in events if event.type == "projectile_spawn"]
+    projectile_spawn_events = [event for event in events if event.type == "projectile_spawn"]
+    projectile_impact_events = [event for event in events if event.type == "projectile_impact"]
+    damage_zone_prime_events = [event for event in events if event.type == "damage_zone_prime"]
     area_spawn_events = [event for event in events if event.type == "area_spawn"]
     melee_arc_events = [event for event in events if event.type == "melee_arc"]
     damage_zone_events = [event for event in events if event.type == "damage_zone"]
@@ -1429,6 +1476,41 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
     damage_zone_origin_passed = bool(
         not damage_zone_events
         or all(event.payload.get("origin") == event.position for event in damage_zone_events)
+    )
+    projectile_spawn_ballistic = bool(
+        not projectile_spawn_events
+        or any(event.payload.get("trajectory") == "ballistic" for event in projectile_spawn_events)
+    )
+    projectile_impact_marker_present = bool(
+        not projectile_impact_events
+        or all(bool(event.payload.get("marker_id")) for event in projectile_impact_events)
+    )
+    damage_zone_prime_trigger_present = bool(
+        not damage_zone_prime_events
+        or all(bool(event.payload.get("trigger_marker_id")) for event in damage_zone_prime_events)
+    )
+    damage_zone_origin_matches_projectile_impact = bool(
+        not projectile_impact_events
+        or not damage_zone_events
+        or all(
+            zone_event.payload.get("origin") == impact_event.payload.get("impact_position", impact_event.position)
+            for impact_event in projectile_impact_events
+            for zone_event in damage_zone_events
+            if zone_event.payload.get("trigger_marker_id") == impact_event.payload.get("marker_id")
+        )
+    )
+    damage_after_triggered_zone = bool(
+        not projectile_impact_events
+        or not damage_zone_events
+        or (
+            damage_times
+            and all(
+                min(damage_times) >= impact_event.timestamp_ms + int(zone_event.payload.get("delay_ms", 0))
+                for impact_event in projectile_impact_events
+                for zone_event in damage_zone_events
+                if zone_event.payload.get("trigger_marker_id") == impact_event.payload.get("marker_id")
+            )
+        )
     )
     damage_after_melee_hit = bool(
         not melee_arc_events
@@ -1491,6 +1573,11 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
     return {
         "has_projectile_spawn": event_counts.get("projectile_spawn", 0) > 0,
         "has_multiple_projectile_spawn": event_counts.get("projectile_spawn", 0) > 1,
+        "has_projectile_impact": event_counts.get("projectile_impact", 0) > 0,
+        "projectile_spawn_ballistic": projectile_spawn_ballistic,
+        "projectile_impact_marker_present": projectile_impact_marker_present,
+        "has_damage_zone_prime": event_counts.get("damage_zone_prime", 0) > 0,
+        "damage_zone_prime_trigger_present": damage_zone_prime_trigger_present,
         "has_damage_zone": event_counts.get("damage_zone", 0) > 0,
         "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
         "has_melee_arc": event_counts.get("melee_arc", 0) > 0,
@@ -1504,12 +1591,14 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
         "damage_after_or_at_area_hit": damage_after_area_hit,
         "damage_after_or_at_melee_hit": damage_after_melee_hit,
         "damage_after_or_at_damage_zone_hit": damage_after_damage_zone_hit,
+        "damage_after_or_at_triggered_zone": damage_after_triggered_zone,
         "damage_after_or_at_chain_segment": damage_after_chain_segment,
         "chain_no_repeat_targets": chain_no_repeat_targets,
         "chain_hits_multiple_targets": chain_hits_multiple_targets,
         "area_center_passed": area_center_passed,
         "melee_arc_origin_passed": melee_arc_origin_passed,
         "damage_zone_origin_passed": damage_zone_origin_passed,
+        "damage_zone_origin_matches_projectile_impact": damage_zone_origin_matches_projectile_impact,
         "flight_no_damage_passed": flight_no_damage,
         "fan_direction_passed": _has_fan_directions(events),
         "basic_timing_passed": basic_timing_passed,
@@ -1520,10 +1609,12 @@ def _event_sort_order(event_type: str) -> int:
     order = {
         "cast_start": -1,
         "damage_zone": 0,
+        "damage_zone_prime": 0,
         "area_spawn": 0,
         "melee_arc": 0,
         "chain_segment": 1,
         "projectile_spawn": 0,
+        "projectile_impact": 1,
         "projectile_hit": 1,
         "damage": 2,
         "hit_vfx": 3,

@@ -4,6 +4,7 @@ import ast
 import json
 import re
 import tomllib
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -63,7 +64,7 @@ SKILL_PACKAGE_REQUIRED_PATHS = (
     ("preview", "show_fields"),
 )
 SKILL_PACKAGE_TOP_LEVEL_FIELDS = frozenset(
-    {"id", "version", "display", "classification", "cast", "behavior", "hit", "scaling", "presentation", "preview"}
+    {"id", "version", "display", "classification", "cast", "behavior", "modules", "hit", "scaling", "presentation", "preview"}
 )
 SKILL_PACKAGE_FIELD_ALLOWLISTS = {
     "display": frozenset({"name_key", "description_key"}),
@@ -92,6 +93,7 @@ SKILL_PACKAGE_FIELD_ALLOWLISTS = {
             "floating_text",
             "floating_text_style",
             "screen_feedback",
+            "vfx_scale",
             "hit_stop_ms",
             "camera_shake",
         }
@@ -108,6 +110,13 @@ ALLOWED_PREVIEW_SHOW_FIELDS = frozenset(
         "base_cooldown_ms",
         "damage_type",
         "damage_form",
+        "trajectory",
+        "travel_time_ms",
+        "arc_height",
+        "target_policy",
+        "impact_marker_id",
+        "trigger_marker_id",
+        "trigger_delay_ms",
     }
 )
 
@@ -197,7 +206,7 @@ class SkillTemplate:
     cast: dict[str, Any] = field(default_factory=dict)
     hit: dict[str, Any] = field(default_factory=dict)
     runtime_params: dict[str, Any] = field(default_factory=dict)
-    presentation_keys: dict[str, str] = field(default_factory=dict)
+    presentation_keys: dict[str, Any] = field(default_factory=dict)
     preview_show_fields: tuple[str, ...] = ()
 
 
@@ -586,6 +595,9 @@ def validate_skill_package_data(
         _validate_chain_params(params, package_id)
     if behavior_template == "damage_zone":
         _validate_damage_zone_params(params, behavior_templates[behavior_template], package_id)
+    modules = package.get("modules")
+    if modules is not None:
+        _validate_skill_modules(modules, behavior_templates, package_id)
 
     hit = _require_mapping(package["hit"], "hit")
     _reject_unknown_fields(hit, SKILL_PACKAGE_FIELD_ALLOWLISTS["hit"], "hit", package_id)
@@ -714,7 +726,7 @@ def _validate_damage_zone_params(params: dict[str, Any], template: dict[str, Any
     shape = params.get("shape")
     if shape not in {"circle", "rectangle"}:
         raise ValueError(f"skill package behavior.params.shape is invalid: {package_id}")
-    if params.get("origin_policy") != "caster":
+    if params.get("origin_policy") not in {"caster", "trigger_position"}:
         raise ValueError(f"skill package behavior.params.origin_policy is invalid: {package_id}")
     if params.get("facing_policy") not in {"none", "nearest_target", "locked_or_nearest_target"}:
         raise ValueError(f"skill package behavior.params.facing_policy is invalid: {package_id}")
@@ -735,6 +747,78 @@ def _validate_damage_zone_params(params: dict[str, Any], template: dict[str, Any
         raise ValueError(f"skill package behavior.params.facing_policy must be none for circle: {package_id}")
     if shape == "rectangle" and params.get("facing_policy") == "none":
         raise ValueError(f"skill package behavior.params.facing_policy must choose a target direction for rectangle: {package_id}")
+    if "trigger_delay_ms" in params and (not _is_integer(params["trigger_delay_ms"]) or params["trigger_delay_ms"] < 0):
+        raise ValueError(f"skill package behavior.params.trigger_delay_ms must be a non-negative integer: {package_id}")
+    if params.get("origin_policy") == "trigger_position" and not params.get("trigger_marker_id"):
+        raise ValueError(f"skill package behavior.params.trigger_marker_id is required for trigger_position: {package_id}")
+
+
+def _validate_skill_modules(
+    modules: Any,
+    behavior_templates: dict[str, dict[str, Any]],
+    package_id: str,
+) -> None:
+    if not isinstance(modules, list) or not modules:
+        raise ValueError(f"skill package modules must be a non-empty array: {package_id}")
+    module_ids: set[str] = set()
+    marker_ids: set[str] = set()
+    for index, module in enumerate(modules):
+        if not isinstance(module, dict):
+            raise ValueError(f"skill package modules[{index}] must be an object: {package_id}")
+        _reject_unknown_fields(module, frozenset({"id", "type", "params", "trigger"}), f"modules[{index}]", package_id)
+        module_id = _require_string(module.get("id"), f"modules[{index}].id")
+        if module_id in module_ids:
+            raise ValueError(f"skill package modules duplicate id '{module_id}': {package_id}")
+        module_ids.add(module_id)
+        module_type = _require_string(module.get("type"), f"modules[{index}].type")
+        if module_type not in behavior_templates:
+            raise ValueError(f"skill package modules[{index}].type is not allowed: {package_id}")
+        params = _require_mapping(module.get("params", {}), f"modules[{index}].params")
+        trigger = module.get("trigger", {})
+        if trigger is None:
+            trigger = {}
+        trigger_map = _require_mapping(trigger, f"modules[{index}].trigger")
+        _reject_unknown_fields(trigger_map, frozenset({"trigger_marker_id", "trigger_delay_ms"}), f"modules[{index}].trigger", package_id)
+
+        template = behavior_templates[module_type]
+        allowed_params = set(template.get("allowed_params", []))
+        for param_name, param_value in params.items():
+            if param_name not in allowed_params:
+                raise ValueError(f"skill package modules[{index}].params has unsupported parameter '{param_name}': {package_id}")
+            _validate_behavior_param(
+                param_name,
+                param_value,
+                _require_mapping(template.get("param_constraints", {}), "param_constraints").get(param_name, {}),
+                package_id,
+            )
+        if module_type == "projectile":
+            marker_id = params.get("impact_marker_id")
+            if marker_id is not None:
+                if not isinstance(marker_id, str) or not marker_id:
+                    raise ValueError(f"skill package modules[{index}].params.impact_marker_id must be a non-empty string: {package_id}")
+                if marker_id in marker_ids:
+                    raise ValueError(f"skill package modules duplicate marker id '{marker_id}': {package_id}")
+                marker_ids.add(marker_id)
+            if params.get("trajectory") == "ballistic":
+                if not _is_integer(params.get("travel_time_ms")) or params["travel_time_ms"] <= 0:
+                    raise ValueError(f"skill package modules[{index}].params.travel_time_ms must be positive: {package_id}")
+                if not _is_number(params.get("arc_height")) or params["arc_height"] < 0:
+                    raise ValueError(f"skill package modules[{index}].params.arc_height must be non-negative: {package_id}")
+        if trigger_map:
+            trigger_marker_id = trigger_map.get("trigger_marker_id")
+            if not isinstance(trigger_marker_id, str) or not trigger_marker_id:
+                raise ValueError(f"skill package modules[{index}].trigger.trigger_marker_id must be a non-empty string: {package_id}")
+            if trigger_marker_id not in marker_ids:
+                raise ValueError(f"skill package modules[{index}].trigger unresolved trigger id '{trigger_marker_id}': {package_id}")
+            trigger_delay_ms = trigger_map.get("trigger_delay_ms", 0)
+            if not _is_integer(trigger_delay_ms) or trigger_delay_ms < 0:
+                raise ValueError(f"skill package modules[{index}].trigger.trigger_delay_ms must be a non-negative integer: {package_id}")
+        if module_type == "damage_zone":
+            merged_params = dict(params)
+            if trigger_map:
+                merged_params.setdefault("trigger_marker_id", trigger_map["trigger_marker_id"])
+                merged_params.setdefault("trigger_delay_ms", trigger_map.get("trigger_delay_ms", 0))
+            _validate_damage_zone_params(merged_params, template, package_id)
 
 
 def _validate_chain_params(params: dict[str, Any], package_id: str) -> None:
@@ -833,6 +917,9 @@ def _skill_template_from_package(package: dict[str, Any]) -> SkillTemplate:
     scaling = package["scaling"]
     presentation = package["presentation"]
     runtime_params = dict(behavior["params"])
+    modules = package.get("modules")
+    if isinstance(modules, list):
+        runtime_params["modules"] = deepcopy(modules)
     template_id = _legacy_template_id_from_package_id(package_id)
     return SkillTemplate(
         template_id=template_id,
@@ -841,7 +928,7 @@ def _skill_template_from_package(package: dict[str, Any]) -> SkillTemplate:
         base_cooldown_ms=int(cast["cooldown_ms"]),
         name_key=str(package["display"]["name_key"]),
         damage_type=str(classification["damage_type"]),
-        behavior_type=str(behavior["template"]),
+        behavior_type="module_chain" if isinstance(modules, list) and modules else str(behavior["template"]),
         visual_effect=str(presentation["vfx"]),
         scaling_stats=tuple(
             str(stat)
@@ -853,12 +940,12 @@ def _skill_template_from_package(package: dict[str, Any]) -> SkillTemplate:
         ),
         skill_package_id=package_id,
         skill_package_version=str(package["version"]),
-        behavior_template=str(behavior["template"]),
+        behavior_template="module_chain" if isinstance(modules, list) and modules else str(behavior["template"]),
         damage_form=str(classification["damage_form"]),
         cast=cast,
         hit=hit,
         runtime_params=runtime_params,
-        presentation_keys={key: str(value) for key, value in presentation.items()},
+        presentation_keys=dict(presentation),
         preview_show_fields=tuple(str(field) for field in package["preview"]["show_fields"]),
     )
 

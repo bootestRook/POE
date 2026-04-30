@@ -68,14 +68,14 @@ class SkillTestReportTest(unittest.TestCase):
         markdown = report.markdown
         self.assertEqual(report.conclusion, "通过")
         self.assertIn("测试技能 ID：`active_ice_shards`", markdown)
-        self.assertIn("behavior_template：`fan_projectile`", markdown)
+        self.assertIn("behavior_template：`projectile`", markdown)
         self.assertIn("自动向最近敌人方向射出多枚冰霜冰棱", markdown)
         self.assertIn("多枚 projectile_spawn：通过", markdown)
         self.assertIn("扇形方向：通过", markdown)
         self.assertIn("projectile_hit：通过", markdown)
         self.assertIn("damage_type 为 cold：通过", markdown)
         self.assertIn("projectile_count 修改后事件数量变化：通过", markdown)
-        self.assertIn("spread_angle 修改后方向变化：通过", markdown)
+        self.assertIn("spread_angle_deg 修改后方向变化：通过", markdown)
         self.assertTrue(report.source_result["timeline_checks"]["has_multiple_projectile_spawn"])
         self.assertTrue(report.source_result["timeline_checks"]["fan_direction_passed"])
 
@@ -139,6 +139,30 @@ class SkillTestReportTest(unittest.TestCase):
         self.assertIn("damage_falloff_per_chain 修改后后续伤害变化：通过", markdown)
         self.assertTrue(report.source_result["timeline_checks"]["has_chain_segment"])
         self.assertTrue(report.source_result["timeline_checks"]["chain_no_repeat_targets"])
+
+    def test_generate_fungal_petards_report_from_dense_pack(self) -> None:
+        report = generate_skill_test_report(
+            self.config_root,
+            SkillTestReportRequest(skill_id="active_fungal_petards", scenario_id="dense_pack"),
+        )
+
+        checks = report.source_result["timeline_checks"]
+        event_types = [event["type"] for event in report.source_result["event_timeline"]]
+        self.assertEqual(report.conclusion, "通过")
+        self.assertIn("active_fungal_petards", report.markdown)
+        self.assertIn("behavior_template：`module_chain`", report.markdown)
+        self.assertIn("projectile_impact", event_types)
+        self.assertIn("damage_zone_prime", event_types)
+        self.assertTrue(checks["has_projectile_impact"])
+        self.assertTrue(checks["projectile_spawn_ballistic"])
+        self.assertTrue(checks["projectile_impact_marker_present"])
+        self.assertTrue(checks["has_damage_zone_prime"])
+        self.assertTrue(checks["damage_zone_prime_trigger_present"])
+        self.assertTrue(checks["damage_zone_origin_matches_projectile_impact"])
+        self.assertTrue(checks["damage_after_or_at_triggered_zone"])
+        damage_events = [event for event in report.source_result["event_timeline"] if event["type"] == "damage"]
+        self.assertTrue(damage_events)
+        self.assertTrue(all(event["damage_type"] == "physical" for event in damage_events))
 
     def test_report_with_modifier_stack_uses_changed_real_amount(self) -> None:
         base = generate_skill_test_report(

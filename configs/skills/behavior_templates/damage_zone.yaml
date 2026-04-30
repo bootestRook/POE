@@ -1,12 +1,12 @@
 id: damage_zone
-allowed_params: ["shape", "origin_policy", "facing_policy", "hit_at_ms", "max_targets", "status_chance_scale", "zone_vfx_key", "radius", "length", "width", "angle_offset_deg", "expand_duration_ms", "ring_width"]
+allowed_params: ["shape", "origin_policy", "facing_policy", "hit_at_ms", "max_targets", "status_chance_scale", "zone_vfx_key", "vfx_key", "radius", "length", "width", "angle_offset_deg", "expand_duration_ms", "ring_width", "trigger_marker_id", "trigger_delay_ms"]
 param_constraints:
   shape:
     type: string
     enum: ["circle", "rectangle"]
   origin_policy:
     type: string
-    enum: ["caster"]
+    enum: ["caster", "trigger_position"]
   facing_policy:
     type: string
     enum: ["none", "nearest_target", "locked_or_nearest_target"]
@@ -21,6 +21,8 @@ param_constraints:
     minimum: 0
     maximum: 10
   zone_vfx_key:
+    type: key
+  vfx_key:
     type: key
   radius:
     type: number
@@ -41,6 +43,12 @@ param_constraints:
   ring_width:
     type: number
     minimum: 1
+  trigger_marker_id:
+    type: string
+    pattern: "^[a-z][a-z0-9_]*$"
+  trigger_delay_ms:
+    type: integer
+    minimum: 0
 shape_param_sets:
   circle:
     required: ["radius"]
@@ -50,5 +58,5 @@ shape_param_sets:
     required: ["length", "width"]
     optional: ["angle_offset_deg"]
     forbidden: ["radius", "expand_duration_ms", "ring_width"]
-events: ["cast_start", "damage_zone", "damage", "hit_vfx", "floating_text"]
+events: ["cast_start", "damage_zone_prime", "damage_zone", "damage", "hit_vfx", "floating_text"]
 damage_timing: on_damage_zone_hit

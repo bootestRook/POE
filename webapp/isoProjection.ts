@@ -1,5 +1,5 @@
-export const ISO_TILE_W = 128;
-export const ISO_TILE_H = 64;
+export const ISO_TILE_W = 560;
+export const ISO_TILE_H = 368;
 export const WORLD_TILE_SIZE = 64;
 
 export type IsoScreenPoint = {

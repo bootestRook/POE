@@ -184,6 +184,27 @@ class SkillEditorTest(unittest.TestCase):
         ]:
             self.assertIn(field, params)
 
+    def test_skill_editor_view_exposes_active_fungal_petards_module_chain_package(self) -> None:
+        entries = self.entries_by_id()
+        fungal = entries["active_fungal_petards"]
+        package = fungal["package_data"]
+        modules = package["modules"]
+        projectile = next(module for module in modules if module["type"] == "projectile")
+        damage_zone = next(module for module in modules if module["type"] == "damage_zone")
+
+        self.assertTrue(fungal["migrated"])
+        self.assertTrue(fungal["openable"])
+        self.assertTrue(fungal["editable"])
+        self.assertEqual(fungal["skill_yaml_path"], "configs/skills/active/active_fungal_petards/skill.yaml")
+        self.assertEqual(fungal["behavior_template"], "module_chain")
+        self.assertTrue(fungal["schema_status"]["is_valid"])
+        self.assertEqual(fungal["detail"]["damage_type"], "physical")
+        self.assertEqual(projectile["params"]["trajectory"], "ballistic")
+        self.assertEqual(projectile["params"]["impact_marker_id"], "fungal_impact")
+        self.assertEqual(damage_zone["trigger"]["trigger_marker_id"], "fungal_impact")
+        self.assertEqual(damage_zone["trigger"]["trigger_delay_ms"], 420)
+        self.assertEqual(damage_zone["params"]["origin_policy"], "trigger_position")
+
     def test_migrated_skill_packages_are_openable_without_manual_whitelist(self) -> None:
         entries = self.entries_by_id()
         migrated_ids = {
@@ -193,6 +214,7 @@ class SkillEditorTest(unittest.TestCase):
             "active_frost_nova",
             "active_puncture",
             "active_lightning_chain",
+            "active_fungal_petards",
         }
 
         for skill_id in migrated_ids:
@@ -217,7 +239,7 @@ class SkillEditorTest(unittest.TestCase):
         entries = self.entries_by_id()
         self.assertEqual(tuple(entries), ACTIVE_SKILL_ORDER)
         for skill_id in ACTIVE_SKILL_ORDER:
-            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain"}:
+            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain", "active_fungal_petards"}:
                 continue
             self.assertFalse(entries[skill_id]["migrated"])
             self.assertFalse(entries[skill_id]["openable"])
@@ -381,8 +403,9 @@ class SkillEditorTest(unittest.TestCase):
         self.assertTrue(skills["active_frost_nova"]["testable"])
         self.assertTrue(skills["active_puncture"]["testable"])
         self.assertTrue(skills["active_lightning_chain"]["testable"])
+        self.assertTrue(skills["active_fungal_petards"]["testable"])
         for skill_id in ACTIVE_SKILL_ORDER:
-            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain"}:
+            if skill_id in {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain", "active_fungal_petards"}:
                 continue
             self.assertFalse(skills[skill_id]["testable"])
             self.assertEqual(skills[skill_id]["status_text"], "未迁移 / 不可测试")
@@ -544,6 +567,8 @@ class SkillEditorTest(unittest.TestCase):
             "chain_segment",
             "area_spawn",
             "projectile_spawn",
+            "projectile_impact",
+            "damage_zone_prime",
             "projectile_hit",
             "damage",
             "hit_vfx",

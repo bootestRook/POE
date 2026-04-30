@@ -16,6 +16,7 @@ EXPECTED_PLAYER_DESCRIPTIONS = {
     "active_frost_nova": "自动以玩家自身为中心释放一圈向外扩散的冰霜新星，命中范围内敌人后造成冰霜伤害，并显示冰霜范围爆发特效与伤害浮字。",
     "active_puncture": "自动朝锁定敌人的方向发出一列地刺，命中矩形范围内敌人后造成物理伤害，并显示地刺命中特效与伤害浮字。",
     "active_lightning_chain": "自动向最近敌人释放闪电链，命中初始目标后，在一定半径内跳跃到附近未命中的敌人，造成多段闪电伤害，并显示连续电弧、命中特效与伤害浮字。",
+    "active_fungal_petards": "自动向最近敌人位置投掷一枚真菌爆弹，爆弹以抛物线飞行到目标区域，落地后出现短暂预警，随后在落点产生圆形孢子爆炸，对范围内敌人造成物理伤害，并显示爆炸特效与伤害浮字。",
 }
 
 
@@ -149,12 +150,15 @@ def _report_checks(
     area_events = [event for event in arena_result["event_timeline"] if event["type"] == "area_spawn"]
     melee_events = [event for event in arena_result["event_timeline"] if event["type"] == "melee_arc"]
     zone_events = [event for event in arena_result["event_timeline"] if event["type"] == "damage_zone"]
+    impact_events = [event for event in arena_result["event_timeline"] if event["type"] == "projectile_impact"]
+    prime_events = [event for event in arena_result["event_timeline"] if event["type"] == "damage_zone_prime"]
     chain_events = [event for event in arena_result["event_timeline"] if event["type"] == "chain_segment"]
     uses_area_nova = entry.get("behavior_template") == "player_nova"
     uses_melee_arc = entry.get("behavior_template") == "melee_arc"
     uses_damage_zone = entry.get("behavior_template") == "damage_zone"
+    uses_module_chain = entry.get("behavior_template") == "module_chain"
     uses_chain = entry.get("behavior_template") == "chain"
-    expected_damage_type = "lightning" if request.skill_id == "active_lightning_chain" else ("physical" if request.skill_id == "active_puncture" else ("cold" if request.skill_id in {"active_ice_shards", "active_frost_nova"} else "fire"))
+    expected_damage_type = "lightning" if request.skill_id == "active_lightning_chain" else ("physical" if request.skill_id in {"active_puncture", "active_fungal_petards"} else ("cold" if request.skill_id in {"active_ice_shards", "active_frost_nova"} else "fire"))
     life_reduced = any(monster["current_life"] < monster["max_life"] for monster in arena_result["monsters"])
     modifier_changed = (
         arena_result["baseline"]["final_damage"] != arena_result["tested"]["final_damage"]
@@ -169,6 +173,7 @@ def _report_checks(
         "uses_area_nova": uses_area_nova,
         "uses_melee_arc": uses_melee_arc,
         "uses_damage_zone": uses_damage_zone,
+        "uses_module_chain": uses_module_chain,
         "uses_chain": uses_chain,
         "expected_damage_type": expected_damage_type,
         "has_projectile_spawn": bool(timeline_checks["has_projectile_spawn"]),
@@ -188,6 +193,17 @@ def _report_checks(
         "damage_zone_faces_nearest_target": (not uses_damage_zone) or _damage_zone_faces_nearest_target(zone_events, arena_result["initial_monsters"]),
         "damage_after_or_at_damage_zone_hit": (not uses_damage_zone) or bool(timeline_checks.get("damage_after_or_at_damage_zone_hit")),
         "damage_zone_targets_passed": (not uses_damage_zone) or _damage_zone_targets_passed(zone_events, damage_events),
+        "has_projectile_impact": (not uses_module_chain) or bool(timeline_checks.get("has_projectile_impact")),
+        "projectile_spawn_ballistic": (not uses_module_chain) or bool(timeline_checks.get("projectile_spawn_ballistic")),
+        "projectile_impact_marker_present": (not uses_module_chain) or bool(timeline_checks.get("projectile_impact_marker_present")),
+        "has_damage_zone_prime": (not uses_module_chain) or bool(timeline_checks.get("has_damage_zone_prime")),
+        "damage_zone_prime_trigger_present": (not uses_module_chain) or bool(timeline_checks.get("damage_zone_prime_trigger_present")),
+        "triggered_damage_zone_present": (not uses_module_chain) or bool(timeline_checks.get("has_damage_zone")),
+        "damage_zone_origin_matches_projectile_impact": (not uses_module_chain) or bool(timeline_checks.get("damage_zone_origin_matches_projectile_impact")),
+        "damage_after_or_at_triggered_zone": (not uses_module_chain) or bool(timeline_checks.get("damage_after_or_at_triggered_zone")),
+        "triggered_damage_zone_targets_passed": (not uses_module_chain) or _damage_zone_targets_passed(zone_events, damage_events),
+        "projectile_impact_event_present": (not uses_module_chain) or bool(impact_events),
+        "damage_zone_prime_event_present": (not uses_module_chain) or bool(prime_events),
         "has_chain_segment": (not uses_chain) or bool(timeline_checks.get("has_chain_segment")),
         "has_multiple_chain_segment": (not uses_chain) or bool(timeline_checks.get("has_multiple_chain_segment")),
         "chain_hits_multiple_targets": (not uses_chain) or bool(timeline_checks.get("chain_hits_multiple_targets")),
@@ -373,6 +389,42 @@ def _parameter_variant_checks(
     request: SkillTestReportRequest,
     baseline_spawns: list[dict[str, Any]],
 ) -> dict[str, bool]:
+    if request.skill_id == "active_fungal_petards":
+        package = entry.get("package_data")
+        if not isinstance(package, dict):
+            return {
+                "projectile_count_changes_events": True,
+                "spread_angle_changes_directions": True,
+                "radius_changes_hit_targets": False,
+                "travel_time_changes_impact_timing": False,
+                "arc_height_changes_payload": False,
+                "trigger_delay_changes_damage_timing": False,
+            }
+        base_result = _run_arena(service, request, package)
+        radius_package = deepcopy(package)
+        radius_zone = _package_module_params(radius_package, "damage_zone")
+        radius_zone["radius"] = max(1.0, float(radius_zone.get("radius", 180.0)) * 0.25)
+        radius_result = _run_arena(service, request, radius_package)
+        travel_package = deepcopy(package)
+        travel_projectile = _package_module_params(travel_package, "projectile")
+        travel_projectile["travel_time_ms"] = int(travel_projectile.get("travel_time_ms", 520)) + 120
+        travel_result = _run_arena(service, request, travel_package)
+        arc_package = deepcopy(package)
+        arc_projectile = _package_module_params(arc_package, "projectile")
+        arc_projectile["arc_height"] = float(arc_projectile.get("arc_height", 120.0)) + 80.0
+        arc_result = _run_arena(service, request, arc_package)
+        delay_package = deepcopy(package)
+        delay_trigger = _package_module_trigger(delay_package, "damage_zone")
+        delay_trigger["trigger_delay_ms"] = int(delay_trigger.get("trigger_delay_ms", 420)) + 90
+        delay_result = _run_arena(service, request, delay_package)
+        return {
+            "projectile_count_changes_events": True,
+            "spread_angle_changes_directions": True,
+            "radius_changes_hit_targets": _hit_target_ids(base_result) != _hit_target_ids(radius_result),
+            "travel_time_changes_impact_timing": _event_delays(base_result, "projectile_impact") != _event_delays(travel_result, "projectile_impact"),
+            "arc_height_changes_payload": _spawn_arc_heights(base_result) != _spawn_arc_heights(arc_result),
+            "trigger_delay_changes_damage_timing": _event_delays(base_result, "damage") != _event_delays(delay_result, "damage"),
+        }
     if request.skill_id == "active_lightning_chain":
         package = entry.get("package_data")
         if not isinstance(package, dict):
@@ -502,6 +554,40 @@ def _event_count(arena_result: dict[str, Any], event_type: str) -> int:
     return int(arena_result.get("event_counts", {}).get(event_type, 0))
 
 
+def _event_delays(arena_result: dict[str, Any], event_type: str) -> tuple[int, ...]:
+    return tuple(
+        int(event.get("delay_ms", 0))
+        for event in arena_result.get("event_timeline", [])
+        if event.get("type") == event_type
+    )
+
+
+def _spawn_arc_heights(arena_result: dict[str, Any]) -> tuple[float, ...]:
+    return tuple(
+        round(float(event.get("payload", {}).get("arc_height", 0.0)), 4)
+        for event in arena_result.get("event_timeline", [])
+        if event.get("type") == "projectile_spawn"
+    )
+
+
+def _package_module_params(package: dict[str, Any], module_type: str) -> dict[str, Any]:
+    for module in package.get("modules", []):
+        if isinstance(module, dict) and module.get("type") == module_type:
+            params = module.setdefault("params", {})
+            if isinstance(params, dict):
+                return params
+    raise ValueError(f"missing module params: {module_type}")
+
+
+def _package_module_trigger(package: dict[str, Any], module_type: str) -> dict[str, Any]:
+    for module in package.get("modules", []):
+        if isinstance(module, dict) and module.get("type") == module_type:
+            trigger = module.setdefault("trigger", {})
+            if isinstance(trigger, dict):
+                return trigger
+    raise ValueError(f"missing module trigger: {module_type}")
+
+
 def _chain_segment_delays(arena_result: dict[str, Any]) -> tuple[int, ...]:
     return tuple(
         int(event.get("delay_ms", 0))
@@ -515,7 +601,29 @@ def _damage_amounts(arena_result: dict[str, Any]) -> tuple[float, ...]:
 
 
 def _conclusion(checks: dict[str, bool]) -> tuple[str, tuple[str, ...]]:
-    if checks.get("uses_chain"):
+    if checks.get("uses_module_chain"):
+        critical = (
+            "has_projectile_spawn",
+            "projectile_spawn_ballistic",
+            "has_projectile_impact",
+            "projectile_impact_marker_present",
+            "has_damage_zone_prime",
+            "damage_zone_prime_trigger_present",
+            "triggered_damage_zone_present",
+            "damage_zone_origin_matches_projectile_impact",
+            "has_damage",
+            "damage_after_or_at_triggered_zone",
+            "flight_no_damage_passed",
+            "life_reduced_after_damage",
+            "damage_type_expected",
+            "hit_target_exists",
+            "triggered_damage_zone_targets_passed",
+            "radius_changes_hit_targets",
+            "travel_time_changes_impact_timing",
+            "arc_height_changes_payload",
+            "trigger_delay_changes_damage_timing",
+        )
+    elif checks.get("uses_chain"):
         critical = (
             "has_chain_segment",
             "has_multiple_chain_segment",
@@ -618,6 +726,18 @@ def _check_failure_text(key: str) -> str:
         "hit_target_exists": "没有实际命中目标。",
         "projectile_count_changes_events": "修改 projectile_count 后投射物事件数量没有变化。",
         "spread_angle_changes_directions": "修改 spread_angle_deg 后投射物方向没有变化。",
+        "projectile_spawn_ballistic": "projectile_spawn 未标记为 ballistic。",
+        "has_projectile_impact": "缺少投射物落地 projectile_impact 事件。",
+        "projectile_impact_marker_present": "projectile_impact 未携带 marker_id。",
+        "has_damage_zone_prime": "缺少落地后的 damage_zone_prime 预警事件。",
+        "damage_zone_prime_trigger_present": "damage_zone_prime 未引用 trigger_marker_id。",
+        "triggered_damage_zone_present": "缺少由 trigger 触发的 damage_zone 事件。",
+        "damage_zone_origin_matches_projectile_impact": "damage_zone 原点没有使用 projectile_impact 位置。",
+        "damage_after_or_at_triggered_zone": "damage 早于 projectile_impact + trigger_delay_ms。",
+        "triggered_damage_zone_targets_passed": "触发伤害区内外命中判断不一致。",
+        "travel_time_changes_impact_timing": "修改 travel_time_ms 后落地时机没有变化。",
+        "arc_height_changes_payload": "修改 arc_height 后 projectile_spawn 参数没有变化。",
+        "trigger_delay_changes_damage_timing": "修改 trigger_delay_ms 后爆炸伤害时机没有变化。",
         "has_area_spawn": "缺少范围生成 area_spawn 事件。",
         "area_center_passed": "area_spawn 中心不是玩家或释放源位置。",
         "damage_after_or_at_area_hit": "damage 早于 hit_at_ms 结算。",
@@ -714,6 +834,11 @@ def _markdown_report(
         *_damage_lines(arena_result),
         "",
         "## 表现完整性检查",
+        f"- projectile_impact：{_pass_text(checks.get('has_projectile_impact', True))}",
+        f"- projectile_spawn ballistic：{_pass_text(checks.get('projectile_spawn_ballistic', True))}",
+        f"- impact marker：{_pass_text(checks.get('projectile_impact_marker_present', True))}",
+        f"- damage_zone_prime：{_pass_text(checks.get('has_damage_zone_prime', True))}",
+        f"- trigger marker：{_pass_text(checks.get('damage_zone_prime_trigger_present', True))}",
         f"- damage_zone：{_pass_text(checks.get('has_damage_zone', True))}",
         f"- 伤害区域起点：{_pass_text(checks.get('damage_zone_origin_passed', True))}",
         f"- 伤害区域朝向：{_pass_text(checks.get('damage_zone_faces_nearest_target', True))}",
@@ -739,6 +864,7 @@ def _markdown_report(
         f"- damage 不早于 hit_at_ms：{_pass_text(checks.get('damage_after_or_at_area_hit', True))}",
         f"- damage 不早于 melee_arc hit_at_ms：{_pass_text(checks.get('damage_after_or_at_melee_hit', True))}",
         f"- damage 不早于 damage_zone hit_at_ms：{_pass_text(checks.get('damage_after_or_at_damage_zone_hit', True))}",
+        f"- damage 不早于 impact + trigger_delay_ms：{_pass_text(checks.get('damage_after_or_at_triggered_zone', True))}",
         f"- damage 不早于 chain_segment：{_pass_text(checks.get('damage_after_or_at_chain_segment', True))}",
         f"- 投射物飞行期间未扣血：{_pass_text(checks['flight_no_damage_passed'])}",
         f"- damage 后目标生命减少：{_pass_text(checks['life_reduced_after_damage'])}",
@@ -755,6 +881,10 @@ def _markdown_report(
         f"- damage_falloff_per_chain 修改后后续伤害变化：{_pass_text(checks.get('damage_falloff_changes_damage', True))}",
         f"- 范围内外命中判断：{_pass_text(checks.get('area_range_targets_passed', True))}",
         f"- 伤害区域命中判断：{_pass_text(checks.get('damage_zone_targets_passed', True))}",
+        f"- 触发伤害区命中判断：{_pass_text(checks.get('triggered_damage_zone_targets_passed', True))}",
+        f"- travel_time_ms 修改后落地变化：{_pass_text(checks.get('travel_time_changes_impact_timing', True))}",
+        f"- arc_height 修改后参数变化：{_pass_text(checks.get('arc_height_changes_payload', True))}",
+        f"- trigger_delay_ms 修改后爆炸时机变化：{_pass_text(checks.get('trigger_delay_changes_damage_timing', True))}",
         f"- arc_radius 修改后命中目标变化：{_pass_text(checks.get('arc_radius_changes_hit_targets', True))}",
         f"- arc_angle 修改后命中目标变化：{_pass_text(checks.get('arc_angle_changes_hit_targets', True))}",
         f"- 近战扇形命中判断：{_pass_text(checks.get('melee_arc_targets_passed', True))}",

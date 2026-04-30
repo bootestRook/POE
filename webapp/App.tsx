@@ -105,7 +105,7 @@ type SkillPreview = {
   cast?: Record<string, number | string | boolean>;
   hit?: Record<string, number | string | boolean>;
   runtime_params?: Record<string, unknown>;
-  presentation_keys?: Record<string, string>;
+  presentation_keys?: Record<string, unknown>;
   source_context?: Record<string, number | string>;
   shape_effects: { id: string; text: string }[];
   final_damage: number;
@@ -184,6 +184,18 @@ type SkillPackageData = {
       [key: string]: unknown;
     };
   };
+  modules?: {
+    id: string;
+    type: string;
+    trigger?: {
+      trigger_marker_id?: string;
+      trigger_delay_ms?: number;
+      [key: string]: unknown;
+    };
+    params: {
+      [key: string]: unknown;
+    };
+  }[];
   hit: {
     base_damage: number;
     can_crit: boolean;
@@ -207,6 +219,7 @@ type SkillPackageData = {
     floating_text: string;
     floating_text_style?: string;
     screen_feedback: string;
+    vfx_scale?: number;
     hit_stop_ms?: number;
     camera_shake?: number;
   };
@@ -499,12 +512,23 @@ type SkillEditorDebugOptions = {
   showSearchRange: boolean;
 };
 
+type SkillEditorCameraSettings = {
+  zoom: number;
+};
+
 const DEFAULT_SKILL_EDITOR_DEBUG_OPTIONS: SkillEditorDebugOptions = {
   showLaunchPoints: true,
   showTargetPoint: true,
   showDirectionLines: true,
   showCollisionRadius: true,
   showSearchRange: true
+};
+
+const SKILL_EDITOR_CAMERA_STORAGE_KEY = "poe.skillEditor.camera";
+const SKILL_EDITOR_CAMERA_MIN_ZOOM = 0.18;
+const SKILL_EDITOR_CAMERA_MAX_ZOOM = 0.6;
+const DEFAULT_SKILL_EDITOR_CAMERA_SETTINGS: SkillEditorCameraSettings = {
+  zoom: 0.34
 };
 
 type SkillEditorSaveResponse = {
@@ -543,15 +567,44 @@ function initialSpriteTestMode() {
   return path === "/sprite-test" || params.get("mode") === "sprite-test";
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeSkillEditorCameraSettings(value: unknown): SkillEditorCameraSettings {
+  const source = value && typeof value === "object" ? value as Partial<SkillEditorCameraSettings> : {};
+  return {
+    zoom: clampNumber(Number(source.zoom ?? DEFAULT_SKILL_EDITOR_CAMERA_SETTINGS.zoom), SKILL_EDITOR_CAMERA_MIN_ZOOM, SKILL_EDITOR_CAMERA_MAX_ZOOM)
+  };
+}
+
+function loadSkillEditorCameraSettings(): SkillEditorCameraSettings {
+  if (typeof window === "undefined") return DEFAULT_SKILL_EDITOR_CAMERA_SETTINGS;
+  try {
+    const raw = window.localStorage.getItem(SKILL_EDITOR_CAMERA_STORAGE_KEY);
+    return normalizeSkillEditorCameraSettings(raw ? JSON.parse(raw) : DEFAULT_SKILL_EDITOR_CAMERA_SETTINGS);
+  } catch {
+    return DEFAULT_SKILL_EDITOR_CAMERA_SETTINGS;
+  }
+}
+
+function saveSkillEditorCameraSettings(settings: SkillEditorCameraSettings) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SKILL_EDITOR_CAMERA_STORAGE_KEY, JSON.stringify(normalizeSkillEditorCameraSettings(settings)));
+}
+
 type SkillEvent = {
   event_id: string;
   type:
     | "cast_start"
     | "projectile_spawn"
     | "projectile_hit"
+    | "projectile_impact"
     | "chain_segment"
     | "area_spawn"
     | "melee_arc"
+    | "damage_zone_prime"
     | "damage_zone"
     | "orbit_spawn"
     | "orbit_tick"
@@ -630,6 +683,8 @@ type FireBolt = {
   directionY: number;
   velocityX?: number;
   velocityY?: number;
+  trajectory?: string;
+  arcHeight?: number;
   projectileId?: string;
   skillId?: string;
   projectileIndex?: number;
@@ -648,6 +703,7 @@ type FireBolt = {
   vfxKey: string;
   shapeEffects: { id: string; text: string }[];
   areaScale: number;
+  vfxScale?: number;
 };
 
 type HitVfx = {
@@ -664,6 +720,7 @@ type HitVfx = {
   damageType: string;
   vfxKey: string;
   skillTemplateId?: string;
+  vfxScale?: number;
 };
 
 type AreaNova = {
@@ -678,6 +735,7 @@ type AreaNova = {
   vfxKey: string;
   areaId?: string;
   skillId?: string;
+  vfxScale?: number;
 };
 
 type MeleeArcVfx = {
@@ -694,6 +752,7 @@ type MeleeArcVfx = {
   vfxKey: string;
   arcId?: string;
   skillId?: string;
+  vfxScale?: number;
 };
 
 type ChainSegmentVfx = {
@@ -709,6 +768,7 @@ type ChainSegmentVfx = {
   segmentIndex: number;
   segmentId?: string;
   skillId?: string;
+  vfxScale?: number;
 };
 
 type DamageZoneVfx = {
@@ -727,6 +787,8 @@ type DamageZoneVfx = {
   vfxKey: string;
   zoneId?: string;
   skillId?: string;
+  warning?: boolean;
+  vfxScale?: number;
 };
 
 type ScheduledSkillEvent = {
@@ -836,7 +898,7 @@ type EnemyVisualRuntime = UnitVisualRuntime & {
 };
 
 type BattleRenderEntity =
-  | { kind: "enemy"; id: number; x: number; y: number; hp: number; maxHp: number }
+  | { kind: "enemy"; id: number; x: number; y: number; hp: number; maxHp: number; playerDistance: number }
   | { kind: "player"; id: "player"; x: number; y: number; hp: number; maxHp: number }
   | { kind: "prop"; id: string; x: number; y: number; prop: SceneProp };
 
@@ -865,7 +927,7 @@ const MAP_VISUAL_HEIGHT = BATTLE_PROJECTION_BOUNDS.height;
 const PLAYER_SPEED = 250;
 const FLOATING_TEXT_VISUAL_RISE_SPEED = 22;
 const DIMETRIC_GROUND_EFFECT_Y_SCALE = ISO_TILE_H / ISO_TILE_W;
-const BATTLE_CAMERA_ZOOM = 0.34;
+const BATTLE_CAMERA_ZOOM = 0.22;
 const BATTLE_CAMERA_ANCHOR_X = "50vw";
 const BATTLE_CAMERA_ANCHOR_Y = "54vh";
 const BATTLE_CAMERA_FOLLOW_OFFSET_Y = 0;
@@ -904,7 +966,7 @@ const SKILL_TEST_DUMMY_OFFSETS = [
   { x: 560, y: -220 },
   { x: 560, y: 220 }
 ];
-const UNIT_RENDER_SCALE = 0.5;
+const UNIT_RENDER_SCALE = 1;
 const UNIT_RUN_SPEED_RATIO = 0.72;
 const FLOATING_GEM_OFFSET = { x: 18, y: 18 };
 const INVENTORY_SLOT_COUNT = 60;
@@ -1476,6 +1538,7 @@ function GameApp() {
   const [selectedSkillEditorId, setSelectedSkillEditorId] = useState<string | null>(null);
   const [skillEditorGuidePackage, setSkillEditorGuidePackage] = useState<SkillPackageData | null>(null);
   const [skillEditorDebugOptions, setSkillEditorDebugOptions] = useState<SkillEditorDebugOptions>(DEFAULT_SKILL_EDITOR_DEBUG_OPTIONS);
+  const [skillEditorCameraSettings, setSkillEditorCameraSettings] = useState<SkillEditorCameraSettings>(() => loadSkillEditorCameraSettings());
   const [notice, setNotice] = useState("正在载入。");
   const [playing, setPlaying] = useState(() => skillEditorMode);
   const [player, setPlayer] = useState({ x: DEFAULT_TILEMAP.spawnPoint.x, y: DEFAULT_TILEMAP.spawnPoint.y, hp: 100, maxHp: 100 });
@@ -1728,6 +1791,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     if (usesSkillEventPipeline(skill)) return hitEnemiesWithSkillEvents(current, skill);
     if (current.length === 0) return current;
     const range = 520 * skill.area_multiplier;
+    const vfxScale = skillPreviewVfxScale(skill);
     const targets = [...current]
       .sort((a, b) => distance(a, player) - distance(b, player))
       .filter((enemy) => distance(enemy, player) <= range)
@@ -1765,7 +1829,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         visualEffect: skill.visual_effect,
         vfxKey: skill.visual_effect,
         shapeEffects: skill.shape_effects ?? [],
-        areaScale: skill.area_multiplier
+        areaScale: skill.area_multiplier,
+        vfxScale
       };
     });
     const legacyProjectileVfxKind = projectileVfxKind(skill.visual_effect) ?? projectileVfxKind(skill.skill_template_id);
@@ -1798,7 +1863,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
             duration: legacyProjectileVfxKind === "ice_shards" ? ICE_SHARDS_IMPACT_DURATION_MS / 1000 : FIRE_BOLT_IMPACT_DURATION_MS / 1000,
             damageType: skill.damage_type,
             vfxKey: skill.visual_effect,
-            skillTemplateId: skill.skill_template_id
+            skillTemplateId: skill.skill_template_id,
+            vfxScale
           }))
         ]);
       }, Math.round(Math.max(...nextBolts.map((bolt) => bolt.duration), 0.12) * 1000));
@@ -1808,6 +1874,18 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
 
   function hitEnemiesWithSkillEvents(current: Enemy[], skill: SkillPreview) {
     if (current.length === 0) return current;
+    if (skill.behavior_template === "module_chain") {
+      const skillEvents = createModuleChainSkillEvents(skill, current);
+      if (skillEvents.length === 0) return current;
+      consumeImmediateSkillEvents(skillEvents);
+      for (const event of skillEvents) {
+        if (event.delay_ms > 0) {
+          scheduledSkillEvents.current.push({ event, remaining: event.delay_ms / 1000 });
+        }
+      }
+      setCombatLogs((logs) => [`${skill.name_text} 自动释放。`, ...logs].slice(0, 8));
+      return current;
+    }
     if (skill.behavior_template === "damage_zone") {
       const targets = selectDamageZoneTargets(current, skill, player);
       const skillEvents = createDamageZoneSkillEvents(skill, targets);
@@ -1871,6 +1949,114 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     return current;
   }
 
+  function createModuleChainSkillEvents(skill: SkillPreview, current: Enemy[]): SkillEvent[] {
+    const modules = Array.isArray(skill.runtime_params?.modules) ? skill.runtime_params.modules as { type?: string; params?: Record<string, unknown>; trigger?: Record<string, unknown> }[] : [];
+    const projectileModule = modules.find((module) => module.type === "projectile");
+    const zoneModule = modules.find((module) => module.type === "damage_zone");
+    if (!projectileModule || !zoneModule) return [];
+    const projectileParams = projectileModule.params ?? {};
+    const zoneParams = zoneModule.params ?? {};
+    const triggerParams = zoneModule.trigger ?? {};
+    const origin = { x: player.x, y: player.y };
+    const spawnWorldPosition = projectileSpawnWorldPosition(origin, projectileParams as SkillPackageData["behavior"]["params"]);
+    const primaryTarget = nearestEnemy(current, origin);
+    if (!primaryTarget) return [];
+    const targetPosition = { x: primaryTarget.x, y: primaryTarget.y };
+    const directionWorld = guideDirection(spawnWorldPosition, targetPosition);
+    const timestampMs = Math.round(elapsed * 1000);
+    const travelTimeMs = Math.max(1, Math.round(Number(projectileParams.travel_time_ms ?? 520)));
+    const arcHeight = Math.max(0, Number(projectileParams.arc_height ?? 0));
+    const impactMarkerId = String(projectileParams.impact_marker_id ?? "");
+    const triggerMarkerId = String(triggerParams.trigger_marker_id ?? zoneParams.trigger_marker_id ?? "");
+    if (!impactMarkerId || impactMarkerId !== triggerMarkerId) return [];
+    const triggerDelayMs = Math.max(0, Math.round(Number(triggerParams.trigger_delay_ms ?? zoneParams.trigger_delay_ms ?? 0)));
+    const radius = Math.max(1, Number(zoneParams.radius ?? skill.hit?.hit_radius ?? 180));
+    const maxTargets = Math.max(1, Math.round(Number(zoneParams.max_targets ?? current.length)));
+    const hitTargets = current
+      .map((enemy) => ({ enemy, distance: distance({ x: enemy.x, y: enemy.y }, targetPosition) }))
+      .filter((item) => item.distance <= radius)
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, maxTargets);
+    const projectileVfxKey = String(projectileParams.vfx_key ?? skill.presentation_keys?.projectile_vfx_key ?? skill.visual_effect);
+    const zoneVfxKey = String(zoneParams.vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
+    const hitVfxKey = skill.presentation_keys?.hit_vfx_key ?? zoneVfxKey;
+    const sfxKey = skill.presentation_keys?.sfx ?? "";
+    const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
+    const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const vfxScale = skillPreviewVfxScale(skill);
+    const projectileId = `${skill.active_gem_instance_id}.${timestampMs}.projectile.1`;
+    const zoneId = `${skill.active_gem_instance_id}.${timestampMs}.damage_zone.1`;
+    const damageDelayMs = travelTimeMs + triggerDelayMs;
+    const projectilePayload = {
+      projectile_id: projectileId,
+      projectile_index: 1,
+      projectile_count: 1,
+      skill_id: skill.skill_package_id ?? skill.skill_template_id,
+      trajectory: String(projectileParams.trajectory ?? "linear"),
+      start_position: spawnWorldPosition,
+      spawn_world_position: spawnWorldPosition,
+      target_position: targetPosition,
+      target_world_position: targetPosition,
+      end_position: targetPosition,
+      expire_world_position: targetPosition,
+      impact_world_position: targetPosition,
+      direction_world: directionWorld,
+      travel_time_ms: travelTimeMs,
+      lifetime_ms: travelTimeMs,
+      arc_height: arcHeight,
+      impact_marker_id: impactMarkerId,
+      projectile_speed: Number(projectileParams.projectile_speed ?? 0),
+      vfx_scale: vfxScale,
+      skill_name: skill.name_text
+    };
+    const zonePayload = {
+      zone_id: zoneId,
+      skill_id: skill.skill_package_id ?? skill.skill_template_id,
+      shape: "circle",
+      origin: targetPosition,
+      origin_world_position: targetPosition,
+      origin_policy: "trigger_position",
+      trigger_marker_id: triggerMarkerId,
+      delay_ms: triggerDelayMs,
+      radius,
+      ring_width: Number(zoneParams.ring_width ?? 48),
+      hit_at_ms: Math.max(0, Math.round(Number(zoneParams.hit_at_ms ?? triggerDelayMs))),
+      max_targets: maxTargets,
+      damage_type: skill.damage_type,
+      vfx_key: zoneVfxKey,
+      zone_vfx_key: zoneVfxKey,
+      vfx_scale: vfxScale,
+      hit_target_count: hitTargets.length,
+      skill_name: skill.name_text
+    };
+    const base = {
+      timestamp_ms: timestampMs,
+      source_entity: "player",
+      target_entity: String(primaryTarget.id),
+      direction: directionWorld,
+      damage_type: skill.damage_type,
+      skill_instance_id: skill.active_gem_instance_id,
+      sfx_key: sfxKey
+    };
+    return [
+      { ...base, event_id: `${skill.active_gem_instance_id}.cast_start.${timestampMs}`, type: "cast_start" as const, position: origin, delay_ms: 0, duration_ms: 0, amount: null, vfx_key: skill.presentation_keys?.cast_vfx_key ?? projectileVfxKey, reason_key: "", payload: { skill_id: skill.skill_package_id ?? skill.skill_template_id, skill_name: skill.name_text } },
+      { ...base, event_id: `${skill.active_gem_instance_id}.projectile_spawn.${timestampMs}`, type: "projectile_spawn" as const, position: spawnWorldPosition, delay_ms: 0, duration_ms: travelTimeMs, amount: null, vfx_key: projectileVfxKey, reason_key: "", payload: projectilePayload },
+      { ...base, event_id: `${skill.active_gem_instance_id}.projectile_impact.${timestampMs}`, type: "projectile_impact" as const, timestamp_ms: timestampMs + travelTimeMs, position: targetPosition, delay_ms: travelTimeMs, duration_ms: 0, amount: null, vfx_key: projectileVfxKey, reason_key: "", payload: { ...projectilePayload, marker_id: impactMarkerId, impact_position: targetPosition } },
+      { ...base, event_id: `${skill.active_gem_instance_id}.damage_zone_prime.${timestampMs}`, type: "damage_zone_prime" as const, timestamp_ms: timestampMs + travelTimeMs, position: targetPosition, delay_ms: travelTimeMs, duration_ms: triggerDelayMs, amount: null, vfx_key: zoneVfxKey, reason_key: "", payload: zonePayload },
+      { ...base, event_id: `${skill.active_gem_instance_id}.damage_zone.${timestampMs}`, type: "damage_zone" as const, timestamp_ms: timestampMs + damageDelayMs, position: targetPosition, delay_ms: damageDelayMs, duration_ms: Math.max(180, triggerDelayMs), amount: null, vfx_key: zoneVfxKey, reason_key: "", payload: zonePayload },
+      ...(hitTargets.length > 0 ? [{ ...base, event_id: `${skill.active_gem_instance_id}.hit_vfx.${timestampMs}`, type: "hit_vfx" as const, timestamp_ms: timestampMs + damageDelayMs, position: targetPosition, delay_ms: damageDelayMs, duration_ms: FIRE_BOLT_IMPACT_DURATION_MS, amount: null, vfx_key: hitVfxKey, reason_key: reasonKey, payload: { ...zonePayload, hit_world_position: targetPosition } }] : []),
+      ...hitTargets.flatMap((item, index) => {
+        const targetPosition = { x: item.enemy.x, y: item.enemy.y };
+        const hitPayload = { ...zonePayload, target_world_position: targetPosition, hit_world_position: targetPosition, target_distance: item.distance };
+        const targetBase = { ...base, target_entity: String(item.enemy.id), direction: guideDirection(zonePayload.origin, targetPosition) };
+        return [
+          { ...targetBase, event_id: `${skill.active_gem_instance_id}.${item.enemy.id}.damage.${index}.${timestampMs}`, type: "damage" as const, timestamp_ms: timestampMs + damageDelayMs, position: targetPosition, delay_ms: damageDelayMs, duration_ms: 0, amount: skill.final_damage, vfx_key: hitVfxKey, reason_key: reasonKey, payload: hitPayload },
+          { ...targetBase, event_id: `${skill.active_gem_instance_id}.${item.enemy.id}.floating_text.${index}.${timestampMs}`, type: "floating_text" as const, timestamp_ms: timestampMs + damageDelayMs, position: { x: item.enemy.x, y: item.enemy.y - 28 }, delay_ms: damageDelayMs, duration_ms: 800, amount: skill.final_damage, vfx_key: hitVfxKey, reason_key: floatingKey, payload: { ...hitPayload, text: `${Math.round(skill.final_damage)}点${damageTypeText(skill.damage_type)}伤害` } }
+        ];
+      })
+    ];
+  }
+
   function createDamageZoneSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
     const runtimeParams = skill.runtime_params ?? {};
     const origin = { x: player.x, y: player.y };
@@ -1892,6 +2078,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const sfxKey = skill.presentation_keys?.sfx ?? "";
     const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
     const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const vfxScale = skillPreviewVfxScale(skill);
     const zoneId = `${skill.active_gem_instance_id}.${timestampMs}.damage_zone.1`;
     const selectedTargets = targets.slice(0, maxTargets);
     const durationMs = Math.max(hitAtMs, shape === "circle" ? expandDurationMs : 0);
@@ -1918,6 +2105,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       damage_type: skill.damage_type,
       vfx_key: vfxKey,
       zone_vfx_key: vfxKey,
+      vfx_scale: vfxScale,
       status_chance_scale: Number(runtimeParams.status_chance_scale ?? 1),
       hit_target_count: selectedTargets.length,
       skill_name: skill.name_text
@@ -1987,6 +2175,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const sfxKey = skill.presentation_keys?.sfx ?? "";
     const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
     const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const vfxScale = skillPreviewVfxScale(skill);
     const arcId = `${skill.active_gem_instance_id}.${timestampMs}.melee_arc.1`;
     const arcPayload = {
       arc_id: arcId,
@@ -2005,6 +2194,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       damage_type: skill.damage_type,
       vfx_key: vfxKey,
       slash_vfx_key: String(runtimeParams.slash_vfx_key ?? vfxKey),
+      vfx_scale: vfxScale,
       status_chance_scale: Number(runtimeParams.status_chance_scale ?? 1),
       hit_target_count: selectedTargets.length,
       skill_name: skill.name_text
@@ -2121,6 +2311,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const sfxKey = skill.presentation_keys?.sfx ?? "";
     const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
     const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const vfxScale = skillPreviewVfxScale(skill);
     const targetPolicy = String(runtimeParams.target_policy ?? "nearest_not_hit");
     const allowRepeatTarget = Boolean(runtimeParams.allow_repeat_target ?? false);
     const base = {
@@ -2171,8 +2362,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           max_targets: maxTargets,
           damage_scale: damageScale,
           damage_type: skill.damage_type,
-          vfx_key: segmentVfxKey,
-          skill_name: skill.name_text
+      vfx_key: segmentVfxKey,
+      vfx_scale: vfxScale,
+      skill_name: skill.name_text
         };
         const targetBase = {
           ...base,
@@ -2228,6 +2420,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       hit_at_ms: hitAtMs,
       damage_type: skill.damage_type,
       vfx_key: vfxKey,
+      vfx_scale: vfxScale,
       center_policy: String(runtimeParams.center_policy ?? "player_center"),
       damage_falloff_by_distance: String(runtimeParams.damage_falloff_by_distance ?? "none"),
       status_chance_scale: Number(runtimeParams.status_chance_scale ?? 1),
@@ -2344,6 +2537,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const sfxKey = skill.presentation_keys?.sfx ?? "";
     const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
     const floatingKey = skill.presentation_keys?.floating_text ?? "skill_event.fire_bolt.floating_text";
+    const vfxScale = skillPreviewVfxScale(skill);
     const projectileDirections = projectileSpreadDirections(direction, projectileCount, spreadAngleDeg, angleStepDeg);
     const projectileSpawns = projectileDirections.map((projectileDirection, index) => {
       const spawnWorldPosition = start;
@@ -2388,6 +2582,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           burst_interval_ms: burstIntervalMs,
           spread_angle_deg: spreadAngleDeg,
           angle_step: angleStepDeg,
+          vfx_scale: vfxScale,
           skill_name: skill.name_text
         }
       };
@@ -2427,7 +2622,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           projectile_id: `${skill.active_gem_instance_id}.${base.timestamp_ms}.projectile.${projectileIndex + 1}`,
           skill_id: skill.skill_package_id ?? skill.skill_template_id,
           impact_world_position: hitEnd,
-          direction_world: projectileDirection
+          direction_world: projectileDirection,
+          vfx_scale: vfxScale
         };
         return [
           {
@@ -2526,35 +2722,60 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           vfxKey: event.vfx_key,
           segmentIndex: Number(payload.segment_index ?? 0),
           segmentId: typeof payload.segment_id === "string" ? payload.segment_id : event.event_id,
-          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
         }
       ]);
       return;
     }
-    if (event.type === "damage_zone") {
+    if (event.type === "damage_zone_prime" || event.type === "damage_zone") {
       const payload = event.payload ?? {};
       const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
       const direction = (payload.direction_world ?? payload.facing_direction ?? event.direction) as { x?: number; y?: number };
       const shape = String(payload.shape ?? "circle") === "rectangle" ? "rectangle" : "circle";
       const duration = Math.max(0.18, event.duration_ms / 1000);
-      setDamageZones((items) => [
+      const zoneId = typeof payload.zone_id === "string" ? payload.zone_id : event.event_id;
+      const nextZone = {
+        id: nextDamageZoneId.current++,
+        x: Number(origin.x ?? event.position.x),
+        y: Number(origin.y ?? event.position.y),
+        shape,
+        radius: Math.max(1, Number(payload.radius ?? 120)),
+        length: Math.max(1, Number(payload.length ?? 160)),
+        width: Math.max(1, Number(payload.width ?? 80)),
+        directionX: Number(direction.x ?? event.direction.x),
+        directionY: Number(direction.y ?? event.direction.y),
+        ttl: duration,
+        duration,
+        damageType: event.damage_type,
+        vfxKey: event.vfx_key,
+        zoneId,
+        skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+        warning: event.type === "damage_zone_prime",
+        vfxScale: normalizedVfxScale(payload.vfx_scale)
+      };
+      setDamageZones((items) => event.type === "damage_zone"
+        ? [...items.filter((zone) => zone.zoneId !== zoneId), nextZone]
+        : [...items, nextZone]
+      );
+      return;
+    }
+    if (event.type === "projectile_impact") {
+      const payload = event.payload ?? {};
+      const impact = (payload.impact_position ?? event.position) as { x?: number; y?: number };
+      setHitVfxs((items) => [
         ...items,
         {
-          id: nextDamageZoneId.current++,
-          x: Number(origin.x ?? event.position.x),
-          y: Number(origin.y ?? event.position.y),
-          shape,
-          radius: Math.max(1, Number(payload.radius ?? 120)),
-          length: Math.max(1, Number(payload.length ?? 160)),
-          width: Math.max(1, Number(payload.width ?? 80)),
-          directionX: Number(direction.x ?? event.direction.x),
-          directionY: Number(direction.y ?? event.direction.y),
-          ttl: duration,
-          duration,
+          id: nextHitVfxId.current++,
+          x: Number(impact.x ?? event.position.x),
+          y: Number(impact.y ?? event.position.y),
+          projectileId: typeof payload.projectile_id === "string" ? payload.projectile_id : undefined,
+          ttl: 0.18,
+          duration: 0.18,
           damageType: event.damage_type,
           vfxKey: event.vfx_key,
-          zoneId: typeof payload.zone_id === "string" ? payload.zone_id : event.event_id,
-          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+          skillTemplateId: event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
         }
       ]);
       return;
@@ -2579,7 +2800,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           damageType: event.damage_type,
           vfxKey: event.vfx_key,
           arcId: typeof payload.arc_id === "string" ? payload.arc_id : event.event_id,
-          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
         }
       ]);
       return;
@@ -2601,7 +2823,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           damageType: event.damage_type,
           vfxKey: event.vfx_key,
           areaId: typeof payload.area_id === "string" ? payload.area_id : event.event_id,
-          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
         }
       ]);
       return;
@@ -2631,6 +2854,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           localSpreadAngle: Number(event.payload?.local_spread_angle ?? 0),
           pierceRemaining: Number(event.payload?.pierce_remaining ?? 0),
           projectileSpeed: Number(event.payload?.projectile_speed ?? Math.hypot(velocityWorld?.x ?? 0, velocityWorld?.y ?? 0)),
+          trajectory: String(event.payload?.trajectory ?? "linear"),
+          arcHeight: Number(event.payload?.arc_height ?? 0),
           ttl: aliveDuration + PROJECTILE_BODY_EXIT_FADE_DURATION,
           duration: aliveDuration,
           fadeDuration: PROJECTILE_BODY_EXIT_FADE_DURATION,
@@ -2640,7 +2865,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           visualEffect: event.vfx_key,
           vfxKey: event.vfx_key,
           shapeEffects: [],
-          areaScale: 1
+          areaScale: 1,
+          vfxScale: normalizedVfxScale(event.payload?.vfx_scale)
         }
       ]);
       return;
@@ -2683,7 +2909,8 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           duration: visualDuration,
           damageType: event.damage_type,
           vfxKey: event.vfx_key,
-          skillTemplateId: event.skill_instance_id
+          skillTemplateId: event.skill_instance_id,
+          vfxScale: normalizedVfxScale(event.payload?.vfx_scale)
         }
       ]);
       return;
@@ -2905,7 +3132,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
 
   if (!state) return <main className="game-screen loading">{notice}</main>;
   const moveSpeedText = state.player_stats?.move_speed?.value ? `${Math.round(state.player_stats.move_speed.value * 100)}%` : "100%";
-  const battleCamera = createBattleCamera(player.x, player.y);
+  const battleCamera = createBattleCamera(player.x, player.y, skillEditorMode ? skillEditorCameraSettings.zoom : BATTLE_CAMERA_ZOOM);
   const sortedRenderItems = createBattleRenderItems(player, enemies, proceduralSceneProps, bolts, hitVfxs);
   const animationNowMs = elapsed * 1000;
   const battleAnimationContexts = createBattleAnimationContexts(playerVisual.current, enemyVisuals.current, enemies, player, animationNowMs, state.player_stats?.move_speed?.value ?? 1);
@@ -2975,7 +3202,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       {skillEditorMode && (
         <SkillEditorDebugToggles
           options={skillEditorDebugOptions}
+          cameraSettings={skillEditorCameraSettings}
           onChange={setSkillEditorDebugOptions}
+          onCameraSettingsChange={setSkillEditorCameraSettings}
         />
       )}
 
@@ -2988,7 +3217,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           onPreviewPackage={setSkillEditorGuidePackage}
           playerPosition={player}
           battleCamera={battleCamera}
+          cameraSettings={skillEditorCameraSettings}
           debugOptions={skillEditorDebugOptions}
+          onCameraSettingsChange={setSkillEditorCameraSettings}
           onDebugOptionsChange={setSkillEditorDebugOptions}
           onClose={() => {
             setSkillEditorGuidePackage(null);
@@ -3126,16 +3357,59 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
 
 function SkillEditorDebugToggles({
   options,
-  onChange
+  cameraSettings,
+  onChange,
+  onCameraSettingsChange
 }: {
   options: SkillEditorDebugOptions;
+  cameraSettings: SkillEditorCameraSettings;
   onChange: (options: SkillEditorDebugOptions) => void;
+  onCameraSettingsChange: (settings: SkillEditorCameraSettings) => void;
 }) {
+  const [zoomDraft, setZoomDraft] = useState(cameraSettings.zoom);
+  const [saveText, setSaveText] = useState("");
   const setOption = (key: keyof SkillEditorDebugOptions, value: boolean) => {
     onChange({ ...options, [key]: value });
   };
+  useEffect(() => {
+    setZoomDraft(cameraSettings.zoom);
+  }, [cameraSettings.zoom]);
+
+  function applyCameraZoom(value: number) {
+    const nextSettings = normalizeSkillEditorCameraSettings({ zoom: value });
+    setZoomDraft(nextSettings.zoom);
+    onCameraSettingsChange(nextSettings);
+    setSaveText("");
+  }
+
+  function saveCameraZoom() {
+    const nextSettings = normalizeSkillEditorCameraSettings({ zoom: zoomDraft });
+    saveSkillEditorCameraSettings(nextSettings);
+    onCameraSettingsChange(nextSettings);
+    setZoomDraft(nextSettings.zoom);
+    setSaveText("已保存");
+  }
+
   return (
     <section className="skill-test-debug-toggles" aria-label="技能测试辅助线显示">
+      <div className="skill-test-camera-control">
+        <div>
+          <strong>镜头 POV</strong>
+          <span>{zoomDraft.toFixed(2)}</span>
+        </div>
+        <input
+          type="range"
+          min={SKILL_EDITOR_CAMERA_MIN_ZOOM}
+          max={SKILL_EDITOR_CAMERA_MAX_ZOOM}
+          step={0.01}
+          value={zoomDraft}
+          onChange={(event) => applyCameraZoom(Number(event.currentTarget.value))}
+        />
+        <button type="button" onClick={saveCameraZoom}>
+          保存镜头
+        </button>
+        {saveText && <span className="skill-test-camera-save-text">{saveText}</span>}
+      </div>
       <label>
         <input type="checkbox" checked={options.showSearchRange} onChange={(event) => setOption("showSearchRange", event.currentTarget.checked)} />
         <span>搜索范围圈</span>
@@ -3681,7 +3955,9 @@ function SkillEditorPanel({
   onPreviewPackage,
   playerPosition,
   battleCamera,
+  cameraSettings,
   debugOptions,
+  onCameraSettingsChange,
   onDebugOptionsChange,
   onClose
 }: {
@@ -3692,7 +3968,9 @@ function SkillEditorPanel({
   onPreviewPackage: (packageData: SkillPackageData | null) => void;
   playerPosition: { x: number; y: number };
   battleCamera: Camera2D;
+  cameraSettings: SkillEditorCameraSettings;
   debugOptions: SkillEditorDebugOptions;
+  onCameraSettingsChange: (settings: SkillEditorCameraSettings) => void;
   onDebugOptionsChange: (options: SkillEditorDebugOptions) => void;
   onClose: () => void;
 }) {
@@ -3720,6 +3998,8 @@ function SkillEditorPanel({
   const [arenaMessage, setArenaMessage] = useState("");
   const [arenaRunning, setArenaRunning] = useState(false);
   const [arenaPaused, setArenaPaused] = useState(false);
+  const [cameraZoomDraft, setCameraZoomDraft] = useState(cameraSettings.zoom);
+  const [cameraMessage, setCameraMessage] = useState("");
   const [selectedEventType, setSelectedEventType] = useState("projectile_spawn");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [runLogs, setRunLogs] = useState<string[]>([]);
@@ -3748,6 +4028,10 @@ function SkillEditorPanel({
     onPreviewPackage(selectedEntry?.editable && draft ? draft : null);
   }, [draft, onPreviewPackage, selectedEntry?.editable]);
 
+  useEffect(() => {
+    setCameraZoomDraft(cameraSettings.zoom);
+  }, [cameraSettings.zoom]);
+
   function updateDraft(mutator: (next: SkillPackageData) => void) {
     setDraft((current) => {
       const next = clonePackageData(current);
@@ -3762,7 +4046,7 @@ function SkillEditorPanel({
     if (!draft) return ["当前技能包对象不存在，无法保存。"];
     const errors: string[] = [];
     const params = draft.behavior.params ?? {};
-    const allowedTemplates = new Set(["projectile", "chain", "player_nova", "melee_arc", "damage_zone", "line_pierce", "orbit", "delayed_area"]);
+    const allowedTemplates = new Set(["projectile", "module_chain", "chain", "player_nova", "melee_arc", "damage_zone", "line_pierce", "orbit", "delayed_area"]);
     const projectileAllowedParams = new Set([
       "projectile_count",
       "burst_interval_ms",
@@ -3779,6 +4063,12 @@ function SkillEditorPanel({
       "projectile_radius",
       "impact_radius",
       "max_targets",
+      "trajectory",
+      "travel_time_ms",
+      "arc_height",
+      "target_policy",
+      "impact_marker_id",
+      "vfx_key",
       "min_duration_ms",
       "max_duration_ms"
     ]);
@@ -3816,7 +4106,10 @@ function SkillEditorPanel({
       "width",
       "angle_offset_deg",
       "expand_duration_ms",
-      "ring_width"
+      "ring_width",
+      "trigger_marker_id",
+      "trigger_delay_ms",
+      "vfx_key"
     ]);
     const chainAllowedParams = new Set([
       "chain_count",
@@ -3840,9 +4133,32 @@ function SkillEditorPanel({
 
     if (draft.id !== selectedEntry.id) errors.push("技能 ID 必须与当前选择的技能一致。");
     if (!allowedTemplates.has(draft.behavior.template)) errors.push("行为模板不在允许范围内。");
+    if (draft.presentation.vfx_scale !== undefined) requireNumberRange(draft.presentation.vfx_scale, "特效放大倍数", 0.1, 10, errors);
     if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova" || draft.behavior.template === "melee_arc" || draft.behavior.template === "damage_zone" || draft.behavior.template === "chain") {
       for (const key of Object.keys(params)) {
         if (!allowedParams.has(key)) errors.push(`行为参数 ${key} 不属于当前行为模板。`);
+      }
+    }
+    if (draft.modules?.length) {
+      const markers = new Set<string>();
+      for (const module of draft.modules) {
+        if (!module.id || !module.type) errors.push("模块必须包含 id 和 type。");
+        const moduleParams = module.params ?? {};
+        const moduleAllowedParams = module.type === "damage_zone" ? damageZoneAllowedParams : module.type === "projectile" ? projectileAllowedParams : allowedParams;
+        for (const key of Object.keys(moduleParams)) {
+          if (!moduleAllowedParams.has(key)) errors.push(`模块参数 ${module.id}.${key} 不属于 ${module.type}。`);
+        }
+        if (module.type === "projectile") {
+          const marker = String(moduleParams.impact_marker_id ?? "");
+          if (!marker) errors.push("投射物模块必须声明落地标识。");
+          markers.add(marker);
+        }
+      }
+      for (const module of draft.modules) {
+        const trigger = module.trigger;
+        if (trigger?.trigger_marker_id && !markers.has(String(trigger.trigger_marker_id))) {
+          errors.push("伤害区触发标识必须来自已有投射物落地标识。");
+        }
       }
     }
     if (draft.behavior.template === "damage_zone") {
@@ -4157,6 +4473,14 @@ function SkillEditorPanel({
     setArenaMessage("测试场已重置。");
   }
 
+  function saveCameraSettings() {
+    const nextSettings = normalizeSkillEditorCameraSettings({ zoom: cameraZoomDraft });
+    saveSkillEditorCameraSettings(nextSettings);
+    onCameraSettingsChange(nextSettings);
+    setCameraZoomDraft(nextSettings.zoom);
+    setCameraMessage("镜头 POV 已保存，并应用到所有测试场景。");
+  }
+
   const timelineEvents = arenaResult?.event_timeline ?? [];
   const selectedTimelineEvent = timelineEvents.find((event) => event.type === selectedEventType) ?? timelineEvents[0] ?? null;
   const supportedEventTypes = (arenaResult?.timeline_supported_types.length ? arenaResult.timeline_supported_types : [
@@ -4168,7 +4492,15 @@ function SkillEditorPanel({
     { type: "floating_text", text: "伤害浮字" },
     { type: "cooldown_update", text: "冷却更新" }
   ]);
-  const isProjectileEventSelected = selectedEventType === "projectile_spawn" || selectedEventType === "projectile_hit" || selectedEventType === "area_spawn" || isProjectileSkillTemplate(draft?.behavior.template) || draft?.behavior.template === "player_nova";
+  const isProjectileEventSelected = selectedEventType === "projectile_spawn"
+    || selectedEventType === "projectile_hit"
+    || selectedEventType === "area_spawn"
+    || isProjectileSkillTemplate(draft?.behavior.template)
+    || draft?.behavior.template === "player_nova"
+    || draft?.behavior.template === "melee_arc"
+    || draft?.behavior.template === "damage_zone"
+    || draft?.behavior.template === "chain"
+    || draft?.behavior.template === "module_chain";
   const draftPreview = draft ? projectileDebugPreviewFromDraft(draft, selectedArenaScene) : null;
   const eventDebug = projectileDebugFromEvent(selectedTimelineEvent) ?? draftPreview;
 
@@ -4411,6 +4743,16 @@ function SkillEditorPanel({
                 setArenaStageIndex(0);
               }}
             />
+            <NumberInput
+              label="镜头 POV"
+              value={cameraZoomDraft}
+              min={SKILL_EDITOR_CAMERA_MIN_ZOOM}
+              max={SKILL_EDITOR_CAMERA_MAX_ZOOM}
+              onChange={(value) => {
+                setCameraZoomDraft(value);
+                setCameraMessage("");
+              }}
+            />
           </div>
           <div className="skill-editor-actions">
             <button type="button" disabled={arenaRunning || arenaPaused || !selectedArenaSkill?.testable} onClick={runArena}>
@@ -4428,8 +4770,16 @@ function SkillEditorPanel({
             <button type="button" disabled={!canEdit || saving} onClick={saveDraft}>
               {saving ? "保存中" : "保存技能包"}
             </button>
+            <button type="button" onClick={saveCameraSettings}>
+              保存镜头参数
+            </button>
           </div>
           <div className="skill-editor-bottom-feedback">
+            {cameraMessage && (
+              <p className="skill-editor-save-ok" role="status">
+                {cameraMessage}
+              </p>
+            )}
             {arenaMessage && (
               <p className={arenaMessage.includes("失败") || arenaMessage.includes("不可") || arenaMessage.includes("必须") ? "skill-editor-save-error" : "skill-editor-save-ok"} role="status">
                 {arenaMessage}
@@ -4703,6 +5053,7 @@ function SkillEditorPanel({
                         <TextInput label="释放特效键" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
                         <TextInput label="投射物特效键" value={draft.presentation.projectile_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.projectile_vfx_key = value; })} />
                         <TextInput label="命中特效键" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
+                        <NumberInput label="特效放大倍数" value={numberValue(draft.presentation.vfx_scale, 1)} min={0.1} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx_scale = value; })} />
                         <TextInput label="音效键" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
                         <TextInput label="浮字样式键" value={draft.presentation.floating_text_style ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text_style = value; })} />
                         <NumberInput label="命中停顿毫秒" value={numberValue(draft.presentation.hit_stop_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_stop_ms = value; })} />
@@ -5068,11 +5419,165 @@ function ProjectileParameterPanel({
   updateDraft: (mutator: (next: SkillPackageData) => void) => void;
 }) {
   const params = draft.behavior.params;
+  const projectileModuleIndex = draft.modules?.findIndex((module) => module.type === "projectile") ?? -1;
+  const damageZoneModuleIndex = draft.modules?.findIndex((module) => module.type === "damage_zone") ?? -1;
+  const projectileModule = projectileModuleIndex >= 0 ? draft.modules?.[projectileModuleIndex] : null;
+  const damageZoneModule = damageZoneModuleIndex >= 0 ? draft.modules?.[damageZoneModuleIndex] : null;
+  const projectileModuleParams = projectileModule?.params ?? {};
+  const damageZoneModuleParams = damageZoneModule?.params ?? {};
+  const damageZoneTrigger = damageZoneModule?.trigger ?? {};
+  const updateModuleParam = (moduleIndex: number, key: string, value: unknown) => {
+    updateDraft((next) => {
+      if (!next.modules?.[moduleIndex]) return;
+      next.modules[moduleIndex].params = { ...(next.modules[moduleIndex].params ?? {}), [key]: value };
+    });
+  };
+  const updateModuleTrigger = (moduleIndex: number, key: string, value: unknown) => {
+    updateDraft((next) => {
+      if (!next.modules?.[moduleIndex]) return;
+      next.modules[moduleIndex].trigger = { ...(next.modules[moduleIndex].trigger ?? {}), [key]: value };
+    });
+  };
   const directionModeText = draft.cast.target_selector === "target_enemy" ? "朝当前目标" : "朝最近目标";
   const sourceText = draft.id ? "施法者 / 测试玩家" : "施法者";
   const setDebugOption = (key: keyof SkillEditorDebugOptions, value: boolean) => {
     onDebugOptionsChange({ ...debugOptions, [key]: value });
   };
+  const setDamageZoneShape = (shape: string) => {
+    updateDraft((next) => {
+      next.behavior.params.shape = shape;
+      if (shape === "rectangle") {
+        next.behavior.params.length = numberValue(next.behavior.params.length, numberValue(next.behavior.params.radius, numberValue(next.hit.hit_radius, 320)));
+        next.behavior.params.width = numberValue(next.behavior.params.width, 96);
+        next.behavior.params.angle_offset_deg = numberValue(next.behavior.params.angle_offset_deg, 0);
+        delete next.behavior.params.radius;
+        delete next.behavior.params.expand_duration_ms;
+        delete next.behavior.params.ring_width;
+      } else {
+        next.behavior.params.radius = numberValue(next.behavior.params.radius, numberValue(next.hit.hit_radius, numberValue(next.behavior.params.length, 360)));
+        next.behavior.params.expand_duration_ms = numberValue(next.behavior.params.expand_duration_ms, numberValue(next.behavior.params.hit_at_ms, 0));
+        next.behavior.params.ring_width = numberValue(next.behavior.params.ring_width, 48);
+        delete next.behavior.params.length;
+        delete next.behavior.params.width;
+        delete next.behavior.params.angle_offset_deg;
+      }
+    });
+  };
+  if (projectileModule && damageZoneModule && projectileModuleIndex >= 0 && damageZoneModuleIndex >= 0) {
+    return (
+      <div className="skill-editor-projectile-panel">
+        <EditorSection title="技能模块链">
+          <div className="skill-editor-form-grid">
+            <ReadOnlyInput label="技能编号" value={draft.id} />
+            <ReadOnlyInput label="行为模板" value="module_chain" />
+            <ReadOnlyInput label="模块 1" value={`${projectileModule.id} / projectile`} />
+            <ReadOnlyInput label="模块 2" value={`${damageZoneModule.id} / damage_zone`} />
+            <ReadOnlyInput label="链接" value={`${String(projectileModuleParams.impact_marker_id ?? "")} → ${String(damageZoneTrigger.trigger_marker_id ?? "")}`} />
+          </div>
+        </EditorSection>
+        <EditorSection title="投射物模块">
+          <div className="skill-editor-form-grid">
+            <SelectInput label="轨迹" value={String(projectileModuleParams.trajectory ?? "linear")} options={[{ value: "linear", text: "linear" }, { value: "ballistic", text: "ballistic" }]} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "trajectory", value)} />
+            <NumberInput label="飞行时间毫秒" value={numberValue(projectileModuleParams.travel_time_ms, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "travel_time_ms", value)} />
+            <NumberInput label="抛物线高度" value={numberValue(projectileModuleParams.arc_height, 0)} min={0} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "arc_height", value)} />
+            <SelectInput label="目标规则" value={String(projectileModuleParams.target_policy ?? "target_position")} options={[{ value: "nearest_enemy", text: "nearest_enemy" }, { value: "locked_target", text: "locked_target" }, { value: "target_position", text: "target_position" }]} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "target_policy", value)} />
+            <TextInput label="落地标识" value={String(projectileModuleParams.impact_marker_id ?? "")} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "impact_marker_id", value)} />
+            <NumberInput label="投射物速度" value={numberValue(projectileModuleParams.projectile_speed, 1)} min={1} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "projectile_speed", value)} />
+            <NumberInput label="投射物宽度" value={numberValue(projectileModuleParams.projectile_width, 1)} min={1} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "projectile_width", value)} />
+            <NumberInput label="投射物高度" value={numberValue(projectileModuleParams.projectile_height, 1)} min={1} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "projectile_height", value)} />
+            <TextInput label="投射物特效" value={String(projectileModuleParams.vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateModuleParam(projectileModuleIndex, "vfx_key", value)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="伤害区模块">
+          <div className="skill-editor-form-grid">
+            <SelectInput label="触发标识" value={String(damageZoneTrigger.trigger_marker_id ?? "")} options={[{ value: String(projectileModuleParams.impact_marker_id ?? ""), text: String(projectileModuleParams.impact_marker_id ?? "") }]} disabled={!canEdit} onChange={(value) => updateModuleTrigger(damageZoneModuleIndex, "trigger_marker_id", value)} />
+            <NumberInput label="触发延迟毫秒" value={numberValue(damageZoneTrigger.trigger_delay_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateModuleTrigger(damageZoneModuleIndex, "trigger_delay_ms", value)} />
+            <ReadOnlyInput label="形状" value={String(damageZoneModuleParams.shape ?? "circle")} />
+            <ReadOnlyInput label="原点规则" value={String(damageZoneModuleParams.origin_policy ?? "trigger_position")} />
+            <NumberInput label="半径" value={numberValue(damageZoneModuleParams.radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "radius", value)} />
+            <NumberInput label="命中时机毫秒" value={numberValue(damageZoneModuleParams.hit_at_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "hit_at_ms", value)} />
+            <NumberInput label="最大目标数" value={numberValue(damageZoneModuleParams.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "max_targets", value)} />
+            <SelectInput label="伤害类型" value={draft.classification.damage_type} options={editor.options.damage_types} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.classification.damage_type = value; })} />
+            <TextInput label="爆炸特效" value={String(damageZoneModuleParams.vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "vfx_key", value)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="表现">
+          <div className="skill-editor-form-grid">
+            <TextInput label="施法特效" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
+            <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
+            <NumberInput label="特效放大倍数" value={numberValue(draft.presentation.vfx_scale, 1)} min={0.1} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx_scale = value; })} />
+            <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
+            <TextInput label="伤害浮字" value={draft.presentation.floating_text} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text = value; })} />
+            <TextInput label="屏幕反馈" value={draft.presentation.screen_feedback} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.screen_feedback = value; })} />
+          </div>
+        </EditorSection>
+      </div>
+    );
+  }
+  if (draft.behavior.template === "damage_zone") {
+    const shape = String(params.shape ?? "circle");
+    return (
+      <div className="skill-editor-projectile-panel">
+        <EditorSection title="伤害结算区域">
+          <div className="skill-editor-form-grid">
+            <ReadOnlyInput label="技能编号" value={draft.id} />
+            <ReadOnlyInput label="行为模板" value={draft.behavior.template} />
+            <SelectInput label="结算区域类型" value={shape} options={editor.options.zone_shapes} disabled={!canEdit} onChange={setDamageZoneShape} />
+            <SelectInput label="起点规则" value={String(params.origin_policy ?? "caster")} options={editor.options.origin_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.origin_policy = value; })} />
+            <SelectInput label="朝向规则" value={String(params.facing_policy ?? "none")} options={editor.options.facing_policies} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.facing_policy = value; })} />
+            {shape === "rectangle" ? (
+              <>
+                <NumberInput label="长" value={numberValue(params.length, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.length = value; })} />
+                <NumberInput label="宽" value={numberValue(params.width, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.width = value; })} />
+                <NumberInput label="角度" value={numberValue(params.angle_offset_deg, 0)} min={-180} max={180} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.angle_offset_deg = value; })} />
+              </>
+            ) : (
+              <>
+                <NumberInput label="半径" value={numberValue(params.radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.radius = value; })} />
+                <NumberInput label="扩散时长毫秒" value={numberValue(params.expand_duration_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.expand_duration_ms = value; })} />
+                <NumberInput label="环宽" value={numberValue(params.ring_width, 1)} min={1} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.ring_width = value; })} />
+              </>
+            )}
+            <NumberInput label="命中时机毫秒" value={numberValue(params.hit_at_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.hit_at_ms = value; })} />
+            <NumberInput label="最大目标数" value={numberValue(params.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.max_targets = value; })} />
+            <NumberInput label="状态几率倍率" value={numberValue(params.status_chance_scale, 1)} min={0} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.status_chance_scale = value; })} />
+            <TextInput label="区域特效键" value={String(params.zone_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.behavior.params.zone_vfx_key = value; })} />
+            <ReadOnlyInput label="只读范围摘要" value={damageZoneRangeSummary(draft)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="伤害">
+          <div className="skill-editor-form-grid">
+            <NumberInput label="基础伤害" value={draft.hit.base_damage} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.base_damage = value; })} />
+            <SelectInput label="伤害时机" value={draft.hit.damage_timing ?? "on_damage_zone_hit"} options={editor.options.damage_timings} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.damage_timing = value; })} />
+            <NumberInput label="命中延迟毫秒" value={numberValue(draft.hit.hit_delay_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.hit_delay_ms = value; })} />
+            <NumberInput label="命中范围" value={numberValue(draft.hit.hit_radius, 0)} min={0} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.hit_radius = value; })} />
+            <CheckboxInput label="可以暴击" checked={draft.hit.can_crit} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.can_crit = value; })} />
+            <CheckboxInput label="可以附加状态" checked={draft.hit.can_apply_status} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.hit.can_apply_status = value; })} />
+            <ReadOnlyInput label="只读命中时机摘要" value={damageZoneHitTimingSummary(draft)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="表现">
+          <div className="skill-editor-form-grid">
+            <TextInput label="施法特效" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
+            <TextInput label="命中特效" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
+            <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
+            <NumberInput label="特效放大倍数" value={numberValue(draft.presentation.vfx_scale, 1)} min={0.1} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx_scale = value; })} />
+            <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
+            <TextInput label="伤害浮字" value={draft.presentation.floating_text} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text = value; })} />
+            <TextInput label="屏幕反馈" value={draft.presentation.screen_feedback} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.screen_feedback = value; })} />
+          </div>
+        </EditorSection>
+        <EditorSection title="调试">
+          <div className="skill-editor-debug-options">
+            <CheckboxInput label="显示目标点" checked={debugOptions.showTargetPoint} onChange={(value) => setDebugOption("showTargetPoint", value)} />
+            <CheckboxInput label="显示飞行方向线" checked={debugOptions.showDirectionLines} onChange={(value) => setDebugOption("showDirectionLines", value)} />
+            <CheckboxInput label="显示搜索范围" checked={debugOptions.showSearchRange} onChange={(value) => setDebugOption("showSearchRange", value)} />
+          </div>
+          <p className="skill-editor-test-notice">调试开关只保存在编辑器临时状态中，不会写入正式技能配置文件。</p>
+        </EditorSection>
+      </div>
+    );
+  }
   if (draft.behavior.template === "player_nova") {
     return (
       <div className="skill-editor-projectile-panel">
@@ -5104,6 +5609,7 @@ function ProjectileParameterPanel({
             <TextInput label="释放特效" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
             <TextInput label="命中特效" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
             <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
+            <NumberInput label="特效放大倍数" value={numberValue(draft.presentation.vfx_scale, 1)} min={0.1} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx_scale = value; })} />
             <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
             <TextInput label="伤害浮字" value={draft.presentation.floating_text} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text = value; })} />
             <TextInput label="屏幕反馈" value={draft.presentation.screen_feedback} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.screen_feedback = value; })} />
@@ -5144,6 +5650,7 @@ function ProjectileParameterPanel({
             <TextInput label="施法特效" value={draft.presentation.cast_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.cast_vfx_key = value; })} />
             <TextInput label="命中特效" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
             <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
+            <NumberInput label="特效放大倍数" value={numberValue(draft.presentation.vfx_scale, 1)} min={0.1} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx_scale = value; })} />
             <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
             <TextInput label="伤害浮字" value={draft.presentation.floating_text} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text = value; })} />
             <TextInput label="屏幕反馈" value={draft.presentation.screen_feedback} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.screen_feedback = value; })} />
@@ -5236,6 +5743,7 @@ function ProjectileParameterPanel({
           <TextInput label="投射物特效" value={draft.presentation.projectile_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.projectile_vfx_key = value; })} />
           <TextInput label="命中特效" value={draft.presentation.hit_vfx_key ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.hit_vfx_key = value; })} />
           <TextInput label="通用视觉效果" value={draft.presentation.vfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx = value; })} />
+          <NumberInput label="特效放大倍数" value={numberValue(draft.presentation.vfx_scale, 1)} min={0.1} max={10} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.vfx_scale = value; })} />
           <TextInput label="音效" value={draft.presentation.sfx} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.sfx = value; })} />
           <TextInput label="伤害浮字" value={draft.presentation.floating_text} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text = value; })} />
           <TextInput label="浮字样式" value={draft.presentation.floating_text_style ?? ""} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.presentation.floating_text_style = value; })} />
@@ -6299,29 +6807,21 @@ function forestRuinTerrainAsset(width: number, height: number, x: number, y: num
   const inCentralCourt = Math.abs(x - centerX) <= 2 && Math.abs(y - centerY) <= 2;
   const hash = tileHash(x, y);
 
-  if (distanceToBorder === 0) {
-    return hash % 3 === 0 ? "forest_ruin_hd_mossy_rock_border" : "forest_ruin_hd_low_cliff_grass";
-  }
-  if (distanceToBorder === 1) {
-    if (hash % 5 === 0) return "forest_ruin_hd_blue_flowers_corner";
-    if (hash % 3 === 0) return "forest_ruin_hd_dense_grass";
-    return "forest_ruin_hd_mossy_dirt_edge";
-  }
-  if (inCentralCourt && hash % 4 === 0) return "forest_ruin_hd_stone_dirt_transition";
+  if (inCentralCourt && hash % 5 === 0) return "seamless_stone_ground_blood";
   if (onMainPath) {
-    if (hash % 7 === 0) return "forest_ruin_hd_dirt_road_curve";
-    if (hash % 5 === 0) return "forest_ruin_hd_grass_dirt_path";
-    return "forest_ruin_hd_dirt_plain";
+    if (hash % 7 === 0) return "seamless_stone_ground_cracked";
+    if (hash % 5 === 0) return "seamless_stone_ground_broken";
+    return "seamless_stone_ground_plain";
   }
-  if (onDiagonalPath) return hash % 2 === 0 ? "forest_ruin_hd_grass_dirt_path" : "forest_ruin_hd_dirt_plants";
+  if (onDiagonalPath) return hash % 2 === 0 ? "seamless_stone_ground_cracked" : "seamless_stone_ground_broken";
   if ((x <= 3 && y <= 3) || (x >= width - 4 && y <= 3) || (x <= 3 && y >= height - 4) || (x >= width - 4 && y >= height - 4)) {
-    return hash % 2 === 0 ? "forest_ruin_hd_mossy_broken_stone" : "forest_ruin_hd_pale_cobblestone";
+    return hash % 2 === 0 ? "seamless_stone_ground_broken" : "seamless_stone_ground_cracked";
   }
-  if ((x === centerX - 4 && y === centerY + 2) || (x === centerX + 4 && y === centerY - 2)) return "forest_ruin_hd_cracked_stone_paving";
-  if (hash % 11 === 0) return "forest_ruin_hd_rocky_gravel";
-  if (hash % 13 === 0) return "forest_ruin_hd_leaf_litter_soil";
-  if (hash % 17 === 0) return "forest_ruin_hd_muddy_puddles";
-  return hash % 2 === 0 ? "forest_ruin_hd_dense_grass" : "forest_ruin_hd_mossy_dirt_edge";
+  if ((x === centerX - 4 && y === centerY + 2) || (x === centerX + 4 && y === centerY - 2)) return "seamless_stone_ground_blood";
+  if (distanceToBorder <= 1 && hash % 3 === 0) return "seamless_stone_ground_cracked";
+  if (hash % 11 === 0) return "seamless_stone_ground_blood";
+  if (hash % 5 === 0) return "seamless_stone_ground_broken";
+  return "seamless_stone_ground_plain";
 }
 
 function createForestRuinObjectTiles(width: number, height: number, centerX: number, centerY: number) {
@@ -6334,12 +6834,12 @@ function createForestRuinObjectTiles(width: number, height: number, centerX: num
   ];
 }
 
-function createBattleCamera(playerX: number, playerY: number): Camera2D {
+function createBattleCamera(playerX: number, playerY: number, zoom = BATTLE_CAMERA_ZOOM): Camera2D {
   const playerScreen = projectBattleWorldToScreen(playerX, playerY);
   return {
     screenX: playerScreen.x,
     screenY: playerScreen.y + BATTLE_CAMERA_FOLLOW_OFFSET_Y,
-    zoom: BATTLE_CAMERA_ZOOM
+    zoom
   };
 }
 
@@ -6354,7 +6854,11 @@ function battleTerrainTransform(camera: Camera2D) {
 function createBattleRenderEntities(player: { x: number; y: number; hp: number; maxHp: number }, enemies: Enemy[], props: SceneProp[]): BattleRenderEntity[] {
   return [
     ...props.map((prop) => ({ kind: "prop" as const, id: prop.id, x: prop.x, y: prop.y, prop })),
-    ...enemies.map((enemy) => ({ kind: "enemy" as const, ...enemy })),
+    ...enemies.map((enemy) => ({
+      kind: "enemy" as const,
+      ...enemy,
+      playerDistance: distance(enemy, player)
+    })),
     { kind: "player", id: "player", x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp }
   ].sort(compareDimetricDepth);
 }
@@ -6482,6 +6986,9 @@ function renderBattleEntity(entity: BattleRenderEntity, depthIndex: number, anim
       data-animation-direction={animationFrame.animation.direction}
       data-animation-playback-rate={animationFrame.playbackRate}
     >
+      <div className="enemy-distance" aria-hidden="true">
+        {formatPreviewNumber(entity.playerDistance)}
+      </div>
       <div className="enemy-health" aria-hidden="true">
         <span style={{ width: `${Math.max(0, entity.hp / entity.maxHp) * 100}%` }} />
       </div>
@@ -6851,11 +7358,24 @@ function gemColorValue(gem: Gem) {
 }
 
 function usesSkillEventPipeline(skill: SkillPreview) {
-  return Boolean(skill.skill_package_id && (isProjectileSkillTemplate(skill.behavior_template) || skill.behavior_template === "player_nova" || skill.behavior_template === "melee_arc" || skill.behavior_template === "damage_zone" || skill.behavior_template === "chain"));
+  return Boolean(skill.skill_package_id && (isProjectileSkillTemplate(skill.behavior_template) || skill.behavior_template === "module_chain" || skill.behavior_template === "player_nova" || skill.behavior_template === "melee_arc" || skill.behavior_template === "damage_zone" || skill.behavior_template === "chain"));
 }
 
 function isProjectileSkillTemplate(behaviorTemplate: string | undefined) {
   return behaviorTemplate === "projectile";
+}
+
+function normalizedVfxScale(value: unknown) {
+  const scale = Number(value ?? 1);
+  return Number.isFinite(scale) ? clamp(scale, 0.1, 10) : 1;
+}
+
+function skillPreviewVfxScale(skill: SkillPreview) {
+  return normalizedVfxScale(skill.presentation_keys?.vfx_scale);
+}
+
+function packageVfxScale(packageData: SkillPackageData) {
+  return normalizedVfxScale(packageData.presentation.vfx_scale);
 }
 
 function damageTypeText(damageType: string) {
@@ -6949,6 +7469,32 @@ function fireBoltWorldPoint(bolt: FireBolt, travel = fireBoltTravel(bolt)) {
   };
 }
 
+function ballisticArcVisualLift(bolt: FireBolt, travel = fireBoltTravel(bolt)) {
+  if (bolt.trajectory !== "ballistic") return 0;
+  const arcHeight = Math.max(0, Number(bolt.arcHeight ?? 0));
+  return arcHeight * 1.75 * 4 * travel * (1 - travel);
+}
+
+function ballisticShadowStyle(
+  bolt: FireBolt,
+  point: { x: number; y: number },
+  depthIndex: number,
+  opacity: number,
+  travel = fireBoltTravel(bolt)
+): CSSProperties | null {
+  if (bolt.trajectory !== "ballistic") return null;
+  const visualPoint = projectBattleWorldToScreen(point.x, point.y);
+  const lift = ballisticArcVisualLift(bolt, travel);
+  const scale = clamp(1 - lift / 260, 0.42, 0.9);
+  return {
+    left: visualPoint.x,
+    top: visualPoint.y,
+    opacity: opacity * clamp(0.5 + lift / 300, 0.5, 0.82),
+    transform: `translate(-50%, -50%) scale(${scale})`,
+    zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex - 1,
+  };
+}
+
 function vfxFrameIndex(sheet: VfxSpriteSheet, ttl: number, duration: number, loop: boolean) {
   const elapsed = Math.max(0, duration - ttl);
   const index = Math.floor(elapsed * sheet.fps);
@@ -6979,7 +7525,8 @@ function fireBoltVfxLayerStyle(
   depthIndex: number,
   opacity: number,
   transformSuffix = "",
-  fakeZ = FIRE_BOLT_FAKE_Z
+  fakeZ = FIRE_BOLT_FAKE_Z,
+  vfxScale = 1
 ): CSSProperties {
   const visualPoint = projectBattleWorldToScreen(worldPoint.x, worldPoint.y);
   return {
@@ -6990,7 +7537,7 @@ function fireBoltVfxLayerStyle(
     opacity,
     zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex,
     mixBlendMode: sheet.blendMode,
-    transform: `translate(${-sheet.anchorX * 100}%, ${-sheet.anchorY * 100}%)${transformSuffix}`
+    transform: `translate(${-sheet.anchorX * 100}%, ${-sheet.anchorY * 100}%)${transformSuffix} scale(${vfxScale})`
   };
 }
 
@@ -7001,11 +7548,14 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
   }
 
   const sheets = projectileVfxSheets(vfxKind);
+  const vfxScale = normalizedVfxScale(bolt.vfxScale);
   const duration = Math.max(0.001, bolt.duration);
   const aliveRemaining = fireBoltAliveRemaining(bolt);
   const opacity = projectileBodyOpacity(bolt);
   const travel = fireBoltTravel(bolt);
   const point = fireBoltWorldPoint(bolt, travel);
+  const visualLift = ballisticArcVisualLift(bolt, travel);
+  const shadowStyle = ballisticShadowStyle(bolt, point, depthIndex, opacity, travel);
   const direction = normalizedWorldDirection({
     x: typeof bolt.velocityX === "number" ? bolt.velocityX : bolt.directionX,
     y: typeof bolt.velocityY === "number" ? bolt.velocityY : bolt.directionY
@@ -7017,6 +7567,15 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
 
   return (
     <>
+      {shadowStyle && (
+        <span
+          className="ballistic-projectile-shadow"
+          style={shadowStyle}
+          data-skill-event="projectile_spawn"
+          data-projectile-id={bolt.projectileId}
+          aria-hidden="true"
+        />
+      )}
       {sheets.muzzle && muzzleOpacity > 0 && (
         <span
           className={`fire-bolt-vfx ${vfxKind}-vfx penetrating_shot-muzzle-vfx`}
@@ -7026,7 +7585,8 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
             depthIndex,
             muzzleOpacity,
             ` rotate(${projectileAngle}rad) scale(${0.92 + (1 - muzzleOpacity) * 0.1})`,
-            sheets.projectileFakeZ
+            sheets.projectileFakeZ,
+            vfxScale
           )}
           data-skill-event="cast_start"
           data-vfx-key={bolt.vfxKey}
@@ -7044,10 +7604,14 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
       {Array.from({ length: sheets.trailLength }, (_, index) => {
         const speedScale = clamp((bolt.projectileSpeed ?? 520) / 760, 0.72, 1.34);
         const backDistance = (index + 1) * (vfxKind === "penetrating_shot" ? 13 * speedScale : 9);
-        const trailPoint = {
-          x: point.x - direction.x * backDistance,
-          y: point.y - direction.y * backDistance
-        };
+        const trailTravel = clamp(travel - (index + 1) * 0.055, 0, 1);
+        const trailPoint = bolt.trajectory === "ballistic"
+          ? fireBoltWorldPoint(bolt, trailTravel)
+          : {
+              x: point.x - direction.x * backDistance,
+              y: point.y - direction.y * backDistance
+            };
+        const trailLift = bolt.trajectory === "ballistic" ? ballisticArcVisualLift(bolt, trailTravel) : 0;
         const frameIndex = Math.min(sheets.trail.frameCount - 1, index);
         const trailOpacity = opacity * (1 - index / sheets.trailLength) * (vfxKind === "penetrating_shot" ? 0.52 : 0.68);
         const scale = Math.max(0.42, (vfxKind === "penetrating_shot" ? 0.86 : 0.92) - index * 0.055);
@@ -7055,7 +7619,7 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
           <span
             key={`trail-${bolt.id}-${index}`}
             className={`fire-bolt-vfx ${vfxKind}-vfx fire-bolt-trail-puff ${vfxKind}-trail-vfx`}
-            style={fireBoltVfxLayerStyle(trailPoint, sheets.trail, depthIndex, trailOpacity, ` rotate(${angle}rad) scale(${scale})`, sheets.projectileFakeZ)}
+            style={fireBoltVfxLayerStyle(trailPoint, sheets.trail, depthIndex, trailOpacity, ` rotate(${angle}rad) scale(${scale})`, sheets.projectileFakeZ + trailLift, vfxScale)}
             aria-hidden="true"
           >
             <span className="vfx-sprite" style={vfxSpriteStyle(sheets.trail, frameIndex)} />
@@ -7064,7 +7628,7 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
       })}
       <span
         className={`fire-bolt-vfx ${vfxKind}-vfx fire-bolt-projectile-vfx ${vfxKind}-projectile-vfx`}
-        style={fireBoltVfxLayerStyle(point, sheets.projectile, depthIndex, opacity, ` rotate(${projectileAngle}rad)`, sheets.projectileFakeZ)}
+        style={fireBoltVfxLayerStyle(point, sheets.projectile, depthIndex, opacity, ` rotate(${projectileAngle}rad)`, sheets.projectileFakeZ + visualLift, vfxScale)}
         data-skill-template={bolt.skillTemplateId}
         data-skill-event="projectile_spawn"
         data-vfx-key={bolt.vfxKey}
@@ -7086,6 +7650,9 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
         data-local-spread-angle={bolt.localSpreadAngle}
         data-pierce-remaining={bolt.pierceRemaining}
         data-projectile-speed={bolt.projectileSpeed}
+        data-projectile-trajectory={bolt.trajectory}
+        data-projectile-arc-height={bolt.arcHeight}
+        data-projectile-visual-lift={visualLift}
         data-projectile-alive-remaining={aliveRemaining}
         data-projectile-fade-duration={fireBoltExitFadeDuration(bolt)}
         data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
@@ -7098,6 +7665,7 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
 }
 
 function LegacyFireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number }) {
+  const vfxScale = normalizedVfxScale(bolt.vfxScale);
   const startVisual = projectBattleWorldToScreen(bolt.x, bolt.y);
   const targetVisual = projectBattleWorldToScreen(bolt.targetX, bolt.targetY);
   const length = Math.hypot(targetVisual.x - startVisual.x, targetVisual.y - startVisual.y);
@@ -7111,7 +7679,10 @@ function LegacyFireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: 
   const travel = fireBoltTravel(bolt);
   const projectileX = startVisual.x + (targetVisual.x - startVisual.x) * travel;
   const projectileY = startVisual.y + (targetVisual.y - startVisual.y) * travel;
-  const burstSize = Math.max(74, 92 * bolt.areaScale);
+  const groundPoint = fireBoltWorldPoint(bolt, travel);
+  const visualLift = ballisticArcVisualLift(bolt, travel);
+  const shadowStyle = ballisticShadowStyle(bolt, groundPoint, depthIndex, opacity, travel);
+  const burstSize = Math.max(74, 92 * bolt.areaScale) * vfxScale;
   const burstPoint = behavior === "melee" ? startVisual : targetVisual;
   const style: CSSProperties = isBurst
     ? {
@@ -7134,32 +7705,46 @@ function LegacyFireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: 
         }
     : {
         left: projectileX,
-        top: projectileY - FIRE_BOLT_FAKE_Z,
+        top: projectileY - FIRE_BOLT_FAKE_Z - visualLift,
         width: 38,
         height: 24,
         opacity,
         zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex,
-        transform: `translate(-50%, -50%) rotate(${angle}rad)`
+        transform: `translate(-50%, -50%) rotate(${angle}rad) scale(${vfxScale})`
       };
   return (
-    <div
-      className={`fire-bolt skill-vfx skill-vfx-${behavior} skill-vfx-${tone} skill-vfx-${cssToken(bolt.vfxKey || bolt.visualEffect)}`}
-      style={style}
-      data-skill-template={bolt.skillTemplateId}
-      data-skill-event="projectile_spawn"
-      data-vfx-key={bolt.vfxKey}
-      data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
-    >
-      <span className="skill-vfx-core" />
-      {bolt.shapeEffects.slice(0, 5).map((effect, index) => (
+    <>
+      {shadowStyle && (
         <span
-          key={`${effect.id}-${index}`}
-          className={`skill-shape skill-shape-${shapeClass(effect.id)} skill-shape-${visualTone(effect.id)}`}
-          style={{ "--shape-index": index } as CSSProperties}
-          title={effect.text}
+          className="ballistic-projectile-shadow"
+          style={shadowStyle}
+          data-skill-event="projectile_spawn"
+          data-projectile-id={bolt.projectileId}
+          aria-hidden="true"
         />
-      ))}
-    </div>
+      )}
+      <div
+        className={`fire-bolt skill-vfx skill-vfx-${behavior} skill-vfx-${tone} skill-vfx-${cssToken(bolt.vfxKey || bolt.visualEffect)}`}
+        style={style}
+        data-skill-template={bolt.skillTemplateId}
+        data-skill-event="projectile_spawn"
+        data-vfx-key={bolt.vfxKey}
+        data-projectile-trajectory={bolt.trajectory}
+        data-projectile-arc-height={bolt.arcHeight}
+        data-projectile-visual-lift={visualLift}
+        data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
+      >
+        <span className="skill-vfx-core" />
+        {bolt.shapeEffects.slice(0, 5).map((effect, index) => (
+          <span
+            key={`${effect.id}-${index}`}
+            className={`skill-shape skill-shape-${shapeClass(effect.id)} skill-shape-${visualTone(effect.id)}`}
+            style={{ "--shape-index": index } as CSSProperties}
+            title={effect.text}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -7170,6 +7755,7 @@ function HitVfxView({ vfx, depthIndex }: { vfx: HitVfx; depthIndex: number }) {
   }
 
   const sheets = projectileVfxSheets(vfxKind);
+  const vfxScale = normalizedVfxScale(vfx.vfxScale);
   const duration = Math.max(0.001, vfx.duration);
   const opacity = Math.max(0, vfx.ttl / duration);
   const impactSheet = sheets.impact;
@@ -7184,8 +7770,8 @@ function HitVfxView({ vfx, depthIndex }: { vfx: HitVfx; depthIndex: number }) {
   const impactScale = vfxKind === "penetrating_shot"
     ? (vfx.impactKind === "projectile_final_impact" ? 1.06 : 0.86)
     : 1 + (1 - opacity) * 0.08;
-  const impactStyle = fireBoltVfxLayerStyle(impactPoint, impactSheet, depthIndex, opacity, ` scale(${impactScale})`, fakeZ);
-  const sparksStyle = sparksSheet ? fireBoltVfxLayerStyle(sparksPoint, sparksSheet, depthIndex, opacity * 0.86, ` scale(${1 + (1 - opacity) * 0.18})`, fakeZ) : null;
+  const impactStyle = fireBoltVfxLayerStyle(impactPoint, impactSheet, depthIndex, opacity, ` scale(${impactScale})`, fakeZ, vfxScale);
+  const sparksStyle = sparksSheet ? fireBoltVfxLayerStyle(sparksPoint, sparksSheet, depthIndex, opacity * 0.86, ` scale(${1 + (1 - opacity) * 0.18})`, fakeZ, vfxScale) : null;
   if (vfxKind !== "penetrating_shot") {
     impactStyle.top = Number(impactStyle.top) + fakeZ * 0.45;
     if (sparksStyle) sparksStyle.top = Number(sparksStyle.top) + fakeZ * 0.35;
@@ -7231,7 +7817,7 @@ function HitVfxView({ vfx, depthIndex }: { vfx: HitVfx; depthIndex: number }) {
 function LegacyHitVfxView({ vfx, depthIndex }: { vfx: HitVfx; depthIndex: number }) {
   const duration = Math.max(0.001, vfx.duration);
   const opacity = Math.max(0, vfx.ttl / duration);
-  const scale = 1 + (1 - opacity) * 0.55;
+  const scale = (1 + (1 - opacity) * 0.55) * normalizedVfxScale(vfx.vfxScale);
   const visualPoint = projectBattleWorldToScreen(vfx.x, vfx.y);
   return (
     <div
@@ -7256,10 +7842,46 @@ function SkillRuntimeGuideLayer({
   guidePackage: SkillPackageData | null;
   debugOptions: SkillEditorDebugOptions;
 }) {
-  const skill = skills.find((item) => item.skill_package_id && isProjectileSkillTemplate(item.behavior_template));
+  const skill = skills.find((item) => item.skill_package_id && (
+    isProjectileSkillTemplate(item.behavior_template)
+    || item.behavior_template === "damage_zone"
+    || item.behavior_template === "module_chain"
+  ));
   if (!skill && !guidePackage) return null;
   const runtimeParams = guidePackage?.behavior.params ?? skill?.runtime_params ?? {};
   const behaviorTemplate = guidePackage?.behavior.template ?? skill?.behavior_template;
+  const moduleChainDamageZone = behaviorTemplate === "module_chain"
+    ? damageZoneModuleGuideParams(guidePackage, skill)
+    : null;
+  if (behaviorTemplate === "damage_zone") {
+    return (
+      <DamageZoneRuntimeGuide
+        params={runtimeParams}
+        cast={guidePackage?.cast ?? skill?.cast ?? {}}
+        hitRadius={guidePackage?.hit.hit_radius ?? skill?.hit?.hit_radius}
+        damageType={guidePackage?.classification.damage_type ?? skill?.damage_type ?? "physical"}
+        player={player}
+        enemies={enemies}
+        originPolicy={String(runtimeParams.origin_policy ?? "caster")}
+        debugOptions={debugOptions}
+      />
+    );
+  }
+  if (moduleChainDamageZone) {
+    return (
+      <DamageZoneRuntimeGuide
+        params={moduleChainDamageZone.params}
+        cast={guidePackage?.cast ?? skill?.cast ?? {}}
+        hitRadius={guidePackage?.hit.hit_radius ?? skill?.hit?.hit_radius}
+        damageType={guidePackage?.classification.damage_type ?? skill?.damage_type ?? "physical"}
+        player={player}
+        enemies={enemies}
+        originPolicy={String(moduleChainDamageZone.params.origin_policy ?? "trigger_position")}
+        debugOptions={debugOptions}
+      />
+    );
+  }
+  if (!behaviorTemplate || !isProjectileSkillTemplate(behaviorTemplate)) return null;
   const guideVfxKind = projectileVfxKind(skill?.presentation_keys?.projectile_vfx_key ?? skill?.visual_effect ?? guidePackage?.presentation.projectile_vfx_key ?? guidePackage?.presentation.vfx);
   const guideDebugLabel = guideVfxKind === "ice_shards" ? "冰棱" : guideVfxKind === "penetrating_shot" ? "贯穿射击" : "投射物";
   const cast = guidePackage?.cast ?? skill?.cast ?? {};
@@ -7347,20 +7969,158 @@ function SkillRuntimeGuideLayer({
               debugOptions={debugOptions}
             />
             {debugOptions.showCollisionRadius && (
-              <span
-                className="runtime-skill-collision-ring"
-                title="投射物碰撞范围线圈"
-                style={{
-                  left: collisionVisual.x,
-                  top: collisionVisual.y,
-                  width: collisionDiameter,
-                  height: collisionDiameter
-                }}
-              />
+              <>
+                <span
+                  className="runtime-skill-collision-ring"
+                  title={`投射物碰撞范围线圈：半径 ${formatPreviewNumber(collisionRadius)}`}
+                  style={{
+                    left: collisionVisual.x,
+                    top: collisionVisual.y,
+                    width: collisionDiameter,
+                    height: collisionDiameter
+                  }}
+                />
+                <span
+                  className="runtime-projectile-collision-dimension"
+                  title={`投射物碰撞范围线圈：半径 ${formatPreviewNumber(collisionRadius)}`}
+                  style={{
+                    left: collisionVisual.x,
+                    top: collisionVisual.y
+                  }}
+                >
+                  碰撞半径 {formatPreviewNumber(collisionRadius)}
+                </span>
+              </>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function damageZoneModuleGuideParams(guidePackage: SkillPackageData | null, skill: SkillPreview | undefined) {
+  const packageModule = guidePackage?.modules?.find((module) => module.type === "damage_zone");
+  if (packageModule) return packageModule;
+  const runtimeModules = Array.isArray(skill?.runtime_params?.modules) ? skill?.runtime_params.modules : [];
+  return runtimeModules.find((module): module is { type?: string; params: Record<string, unknown> } => (
+    typeof module === "object"
+    && module !== null
+    && (module as { type?: unknown }).type === "damage_zone"
+    && typeof (module as { params?: unknown }).params === "object"
+    && (module as { params?: unknown }).params !== null
+  ));
+}
+
+function DamageZoneRuntimeGuide({
+  params,
+  cast,
+  hitRadius,
+  damageType,
+  player,
+  enemies,
+  originPolicy,
+  debugOptions
+}: {
+  params: Record<string, unknown>;
+  cast: Partial<SkillPackageData["cast"]>;
+  hitRadius?: number;
+  damageType: string;
+  player: { x: number; y: number };
+  enemies: Enemy[];
+  originPolicy: string;
+  debugOptions: SkillEditorDebugOptions;
+}) {
+  const shape = String(params.shape ?? "circle") === "rectangle" ? "rectangle" : "circle";
+  const searchRange = Math.max(1, Number(cast.search_range ?? hitRadius ?? params.radius ?? params.length ?? 360));
+  const target = nearestGuideTarget(player, enemies, searchRange, searchRange);
+  const origin = originPolicy === "trigger_position" ? target : player;
+  const originVisual = projectBattleWorldToScreen(origin.x, origin.y);
+  const targetVisual = projectBattleWorldToScreen(target.x, target.y);
+  const facingTarget = originPolicy === "trigger_position"
+    ? nearestGuideTarget(origin, enemies, searchRange, searchRange)
+    : target;
+  const baseDirection = guideDirection(origin, facingTarget);
+  const direction = shape === "rectangle"
+    ? rotateDirection(baseDirection, Number(params.angle_offset_deg ?? 0))
+    : { x: 0, y: 0 };
+  const directionEnd = {
+    x: origin.x + direction.x * Math.max(48, Math.min(searchRange, Number(params.length ?? hitRadius ?? searchRange))),
+    y: origin.y + direction.y * Math.max(48, Math.min(searchRange, Number(params.length ?? hitRadius ?? searchRange)))
+  };
+  const directionEndVisual = projectBattleWorldToScreen(directionEnd.x, directionEnd.y);
+  const guideLineLength = Math.hypot(directionEndVisual.x - originVisual.x, directionEndVisual.y - originVisual.y);
+  const guideLineAngle = Math.atan2(directionEndVisual.y - originVisual.y, directionEndVisual.x - originVisual.x);
+  const radius = Math.max(1, Number(params.radius ?? hitRadius ?? searchRange));
+  const length = Math.max(1, Number(params.length ?? hitRadius ?? searchRange));
+  const width = Math.max(1, Number(params.width ?? 96));
+  const rectangleAngle = worldDirectionToBattleScreenAngle(direction, origin);
+  const rangeLabel = shape === "rectangle"
+    ? `damage_zone 矩形范围：长 ${formatPreviewNumber(length)}，宽 ${formatPreviewNumber(width)}`
+    : `damage_zone 圆形范围：半径 ${formatPreviewNumber(radius)}`;
+  const dimensionLabel = shape === "rectangle"
+    ? `长 ${formatPreviewNumber(length)} / 宽 ${formatPreviewNumber(width)}`
+    : `半径 ${formatPreviewNumber(radius)}`;
+  const dimensionVisual = shape === "rectangle"
+    ? projectBattleWorldToScreen(origin.x + direction.x * length * 0.5, origin.y + direction.y * length * 0.5)
+    : projectBattleWorldToScreen(origin.x, origin.y - radius);
+
+  return (
+    <div className="runtime-skill-guides" aria-label="编辑器 damage_zone 范围辅助线" data-damage-zone-shape={shape}>
+      {debugOptions.showSearchRange && (
+        <div
+          className="runtime-skill-search-ring"
+          title="技能搜索范围线圈"
+          style={{
+            left: originVisual.x,
+            top: originVisual.y,
+            width: searchRange * 2,
+            height: searchRange * 2 * DIMETRIC_GROUND_EFFECT_Y_SCALE
+          }}
+        />
+      )}
+      {debugOptions.showTargetPoint && (
+        <>
+          <span className="fire-bolt-debug-point fire-bolt-debug-logic-spawn" style={{ left: originVisual.x, top: originVisual.y }} title="damage_zone 原点" />
+          <span className="fire-bolt-debug-point fire-bolt-debug-target" style={{ left: targetVisual.x, top: targetVisual.y }} title="damage_zone 参考目标" />
+        </>
+      )}
+      <div
+        className={`runtime-damage-zone-range runtime-damage-zone-range-${shape} damage-zone-${damageType}`}
+        title={rangeLabel}
+        style={{
+          left: originVisual.x,
+          top: originVisual.y,
+          width: shape === "circle" ? radius * 2 : length,
+          height: shape === "circle" ? radius * 2 * DIMETRIC_GROUND_EFFECT_Y_SCALE : width,
+          transform: shape === "circle"
+            ? "translate(-50%, -50%)"
+            : `translate(0, -50%) rotate(${rectangleAngle}rad)`
+        }}
+        data-zone-shape={shape}
+        data-zone-radius={shape === "circle" ? radius : undefined}
+        data-zone-length={shape === "rectangle" ? length : undefined}
+        data-zone-width={shape === "rectangle" ? width : undefined}
+      />
+      <span
+        className={`runtime-damage-zone-dimension runtime-damage-zone-dimension-${shape}`}
+        style={{ left: dimensionVisual.x, top: dimensionVisual.y }}
+        title={rangeLabel}
+      >
+        {dimensionLabel}
+      </span>
+      {shape === "rectangle" && debugOptions.showDirectionLines && (
+        <span
+          className="runtime-skill-trajectory-line runtime-damage-zone-facing-line"
+          title="damage_zone 朝向"
+          style={{
+            left: originVisual.x,
+            top: originVisual.y,
+            width: guideLineLength,
+            transform: `rotate(${guideLineAngle}rad)`
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -7447,22 +8207,23 @@ function DamageZoneLayer({ zones }: { zones: DamageZoneVfx[] }) {
         const angle = zone.shape === "rectangle"
           ? worldDirectionToBattleScreenAngle({ x: zone.directionX || 1, y: zone.directionY || 0 }, { x: zone.x, y: zone.y })
           : 0;
+        const vfxScale = normalizedVfxScale(zone.vfxScale);
         return (
           <div
             key={zone.id}
-            className={`damage-zone-vfx damage-zone-vfx-${zone.shape} damage-zone-${zone.damageType}`}
+            className={`damage-zone-vfx damage-zone-vfx-${zone.shape} damage-zone-${zone.damageType} ${zone.warning ? "damage-zone-vfx-warning" : ""}`}
             style={{
               left: `${position.x}px`,
               top: `${position.y}px`,
-              width: `${zone.shape === "circle" ? zone.radius * 2 : zone.length}px`,
-              height: `${zone.shape === "circle" ? zone.radius * 2 : zone.width}px`,
+              width: `${(zone.shape === "circle" ? zone.radius * 2 : zone.length) * vfxScale}px`,
+              height: `${(zone.shape === "circle" ? zone.radius * 2 : zone.width) * vfxScale}px`,
               transform: zone.shape === "rectangle"
                 ? `translate(0, -50%) rotate(${angle}rad)`
                 : "translate(-50%, -50%)",
-              opacity: Math.max(0, 1 - progress * 0.75),
+              opacity: zone.warning ? Math.max(0.2, 0.65 - progress * 0.35) : Math.max(0, 1 - progress * 0.75),
               zIndex: BATTLE_ENTITY_Z_INDEX_BASE - 2,
             }}
-            data-skill-event="damage_zone"
+            data-skill-event={zone.warning ? "damage_zone_prime" : "damage_zone"}
             data-vfx-key={zone.vfxKey}
             data-zone-id={zone.zoneId}
             data-skill-id={zone.skillId}
@@ -7481,8 +8242,9 @@ function AreaNovaLayer({ novas }: { novas: AreaNova[] }) {
         const duration = Math.max(0.001, nova.duration);
         const progress = clamp(1 - nova.ttl / duration, 0, 1);
         const opacity = Math.max(0, nova.ttl / duration);
-        const diameter = Math.max(1, nova.radius * 2 * (0.18 + progress * 0.82));
-        const ringWidth = Math.max(3, nova.ringWidth * (0.45 + progress * 0.55));
+        const vfxScale = normalizedVfxScale(nova.vfxScale);
+        const diameter = Math.max(1, nova.radius * 2 * (0.18 + progress * 0.82) * vfxScale);
+        const ringWidth = Math.max(3, nova.ringWidth * (0.45 + progress * 0.55) * vfxScale);
         return (
           <div
             key={nova.id}
@@ -7520,7 +8282,8 @@ function MeleeArcLayer({ arcs }: { arcs: MeleeArcVfx[] }) {
         const duration = Math.max(0.001, arc.duration);
         const progress = clamp(1 - arc.ttl / duration, 0, 1);
         const opacity = Math.max(0, arc.ttl / duration);
-        const diameter = Math.max(1, arc.radius * 2);
+        const vfxScale = normalizedVfxScale(arc.vfxScale);
+        const diameter = Math.max(1, arc.radius * 2 * vfxScale);
         const angle = worldDirectionToBattleScreenAngle({ x: arc.directionX, y: arc.directionY }, { x: arc.x, y: arc.y }) * 180 / Math.PI;
         return (
           <div
@@ -7563,6 +8326,7 @@ function ChainSegmentLayer({ segments }: { segments: ChainSegmentVfx[] }) {
         const length = Math.max(1, Math.hypot(dx, dy));
         const angle = Math.atan2(dy, dx);
         const progress = clamp(1 - segment.ttl / Math.max(0.001, segment.duration), 0, 1);
+        const vfxScale = normalizedVfxScale(segment.vfxScale);
         return (
           <div
             key={segment.id}
@@ -7572,7 +8336,7 @@ function ChainSegmentLayer({ segments }: { segments: ChainSegmentVfx[] }) {
               top: start.y,
               width: length,
               opacity: Math.max(0, 1 - progress * 0.65),
-              transform: `rotate(${angle}rad)`,
+              transform: `rotate(${angle}rad) scaleY(${vfxScale})`,
               zIndex: BATTLE_ENTITY_Z_INDEX_BASE - 1,
             }}
             data-skill-event="chain_segment"
