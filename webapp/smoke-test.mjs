@@ -111,6 +111,29 @@ for (const text of requiredCode) {
   }
 }
 
+const projectileVfxLifetimeChecks = [
+  "PROJECTILE_BODY_EXIT_FADE_DURATION",
+  "fireBoltAliveRemaining",
+  "projectileBodyOpacity",
+  "event.payload?.expire_world_position ?? event.payload?.end_position",
+  "ttl: aliveDuration + PROJECTILE_BODY_EXIT_FADE_DURATION",
+  "const opacity = projectileBodyOpacity(bolt)",
+  "vfxFrameIndexInRow(sheets.projectile, sheets.projectileFrameRow, aliveRemaining, duration)",
+  "data-projectile-alive-remaining",
+  "data-projectile-fade-duration"
+];
+
+for (const text of projectileVfxLifetimeChecks) {
+  if (!app.includes(text)) {
+    throw new Error(`缂哄皯鎶曞皠鐗╃敓瀛樻湡/娣″嚭鍒嗙妫€鏌ワ細${text}`);
+  }
+}
+
+const fireBoltViewSource = app.slice(app.indexOf("function FireBoltView"), app.indexOf("function LegacyFireBoltView"));
+if (fireBoltViewSource.includes("const opacity = Math.max(0, bolt.ttl / duration);")) {
+  throw new Error("鎶曞皠鐗╂湰浣撻€忔槑搴︿笉鑳藉啀缁戝畾鍒版暣娈甸琛?ttl/duration銆?");
+}
+
 const unitAnimationCodeChecks = [
   "resolveUnitAnimation",
   "resolveDirection",

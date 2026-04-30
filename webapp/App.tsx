@@ -630,6 +630,7 @@ type FireBolt = {
   projectileSpeed?: number;
   ttl: number;
   duration: number;
+  fadeDuration: number;
   skillTemplateId: string;
   behaviorType: string;
   damageType: string;
@@ -850,6 +851,7 @@ const FIRE_BOLT_IMPACT_DURATION_MS = 420;
 const FIRE_BOLT_PROJECTILE_FRAME_ROW = 0;
 const FIRE_BOLT_PROJECTILE_ART_FACING_OFFSET_DEG = 0;
 const FIRE_BOLT_PROJECTILE_ART_FACING_OFFSET = FIRE_BOLT_PROJECTILE_ART_FACING_OFFSET_DEG * Math.PI / 180;
+const PROJECTILE_BODY_EXIT_FADE_DURATION = 0.16;
 const ICE_SHARDS_FAKE_Z = 24;
 const ICE_SHARDS_PROJECTILE_FAKE_Z = 0;
 const ICE_SHARDS_TRAIL_LENGTH = 8;
@@ -1725,8 +1727,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         localSpreadAngle: 0,
         pierceRemaining: 0,
         projectileSpeed: Math.hypot(launch.velocityWorld.x, launch.velocityWorld.y),
-        ttl: 0.42,
+        ttl: 0.42 + PROJECTILE_BODY_EXIT_FADE_DURATION,
         duration: 0.42,
+        fadeDuration: PROJECTILE_BODY_EXIT_FADE_DURATION,
         skillTemplateId: skill.skill_template_id,
         behaviorType: skill.behavior_type,
         damageType: skill.damage_type,
@@ -2456,8 +2459,10 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       return;
     }
     if (event.type === "projectile_spawn") {
-      const endPosition = event.payload?.end_position ?? event.position;
+      const endPosition = event.payload?.expire_world_position ?? event.payload?.end_position ?? event.position;
       const velocityWorld = event.payload?.velocity_world as { x?: number; y?: number } | undefined;
+      const lifetimeMs = Number(event.payload?.lifetime_ms ?? event.duration_ms);
+      const aliveDuration = Math.max(0.001, lifetimeMs / 1000);
       setBolts((items) => [
         ...items,
         {
@@ -2478,8 +2483,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           localSpreadAngle: Number(event.payload?.local_spread_angle ?? 0),
           pierceRemaining: Number(event.payload?.pierce_remaining ?? 0),
           projectileSpeed: Number(event.payload?.projectile_speed ?? Math.hypot(velocityWorld?.x ?? 0, velocityWorld?.y ?? 0)),
-          ttl: Math.max(0.001, event.duration_ms / 1000),
-          duration: Math.max(0.001, event.duration_ms / 1000),
+          ttl: aliveDuration + PROJECTILE_BODY_EXIT_FADE_DURATION,
+          duration: aliveDuration,
+          fadeDuration: PROJECTILE_BODY_EXIT_FADE_DURATION,
           skillTemplateId: event.skill_instance_id,
           behaviorType: "projectile",
           damageType: event.damage_type,
@@ -6527,8 +6533,22 @@ function projectileVfxSheets(vfxKind: ProjectileVfxKind) {
   };
 }
 
+function fireBoltExitFadeDuration(bolt: FireBolt) {
+  return Math.max(0, bolt.fadeDuration ?? PROJECTILE_BODY_EXIT_FADE_DURATION);
+}
+
+function fireBoltAliveRemaining(bolt: FireBolt) {
+  return Math.max(0, bolt.ttl - fireBoltExitFadeDuration(bolt));
+}
+
 function fireBoltTravel(bolt: FireBolt) {
-  return clamp(1 - bolt.ttl / Math.max(0.001, bolt.duration), 0, 1);
+  return clamp(1 - fireBoltAliveRemaining(bolt) / Math.max(0.001, bolt.duration), 0, 1);
+}
+
+function projectileBodyOpacity(bolt: FireBolt) {
+  const fadeDuration = fireBoltExitFadeDuration(bolt);
+  if (fadeDuration <= 0 || bolt.ttl > fadeDuration) return 1;
+  return clamp(bolt.ttl / fadeDuration, 0, 1);
 }
 
 function fireBoltWorldPoint(bolt: FireBolt, travel = fireBoltTravel(bolt)) {
@@ -6591,7 +6611,8 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
 
   const sheets = projectileVfxSheets(vfxKind);
   const duration = Math.max(0.001, bolt.duration);
-  const opacity = Math.max(0, bolt.ttl / duration);
+  const aliveRemaining = fireBoltAliveRemaining(bolt);
+  const opacity = projectileBodyOpacity(bolt);
   const travel = fireBoltTravel(bolt);
   const point = fireBoltWorldPoint(bolt, travel);
   const direction = normalizedWorldDirection({
@@ -6600,7 +6621,7 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
   });
   const angle = worldDirectionToBattleScreenAngle(direction, point);
   const projectileAngle = angle - sheets.artFacingOffset;
-  const projectileFrame = vfxFrameIndexInRow(sheets.projectile, sheets.projectileFrameRow, bolt.ttl, duration);
+  const projectileFrame = vfxFrameIndexInRow(sheets.projectile, sheets.projectileFrameRow, aliveRemaining, duration);
   const muzzleOpacity = vfxKind === "penetrating_shot" ? clamp(1 - travel / 0.18, 0, 1) : 0;
 
   return (
@@ -6626,7 +6647,7 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
           data-direction-world-y={direction.y}
           aria-hidden="true"
         >
-          <span className="vfx-sprite" style={vfxSpriteStyle(sheets.muzzle, vfxFrameIndex(sheets.muzzle, bolt.ttl, duration, false))} />
+          <span className="vfx-sprite" style={vfxSpriteStyle(sheets.muzzle, vfxFrameIndex(sheets.muzzle, aliveRemaining, duration, false))} />
         </span>
       )}
       {Array.from({ length: sheets.trailLength }, (_, index) => {
@@ -6674,6 +6695,8 @@ function FireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: number
         data-local-spread-angle={bolt.localSpreadAngle}
         data-pierce-remaining={bolt.pierceRemaining}
         data-projectile-speed={bolt.projectileSpeed}
+        data-projectile-alive-remaining={aliveRemaining}
+        data-projectile-fade-duration={fireBoltExitFadeDuration(bolt)}
         data-shape-effects={bolt.shapeEffects.map((effect) => effect.id).join(",")}
         aria-hidden="true"
       >
@@ -6691,10 +6714,10 @@ function LegacyFireBoltView({ bolt, depthIndex }: { bolt: FireBolt; depthIndex: 
   const behavior = cssToken(bolt.behaviorType || "projectile");
   const tone = visualTone(bolt.vfxKey || bolt.visualEffect || bolt.damageType);
   const duration = Math.max(0.001, bolt.duration);
-  const opacity = Math.max(0, bolt.ttl / duration);
   const isBurst = ["area", "melee", "orbit", "trap_or_mine"].includes(behavior);
   const isLine = behavior === "chain";
-  const travel = clamp(1 - bolt.ttl / duration, 0, 1);
+  const opacity = isBurst ? Math.max(0, Math.min(1, bolt.ttl / duration)) : projectileBodyOpacity(bolt);
+  const travel = fireBoltTravel(bolt);
   const projectileX = startVisual.x + (targetVisual.x - startVisual.x) * travel;
   const projectileY = startVisual.y + (targetVisual.y - startVisual.y) * travel;
   const burstSize = Math.max(74, 92 * bolt.areaScale);

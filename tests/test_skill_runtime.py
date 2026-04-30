@@ -113,6 +113,9 @@ class SkillRuntimeTest(unittest.TestCase):
         else:
             self.assertEqual(spawn.payload["end_position"], {"x": 100.0, "y": 0.0})
         self.assertEqual(spawn.duration_ms, expected_duration_ms)
+        self.assertEqual(spawn.payload["lifetime_ms"], expected_duration_ms)
+        self.assertEqual(spawn.payload["expire_time_ms"], 10 + expected_duration_ms)
+        self.assertEqual(spawn.payload["expire_world_position"], spawn.payload["end_position"])
         self.assertEqual(damage.delay_ms, spawn.duration_ms)
         self.assertEqual(damage.timestamp_ms, 10 + expected_duration_ms)
         self.assertEqual(damage.target_entity, "monster_1")
