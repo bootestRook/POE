@@ -65,6 +65,11 @@ const requiredCode = [
   "viewportToBattleWorld",
   "unprojectScreenToWorld",
   "scheduledSkillEvents",
+  "runtimePerfSummary",
+  "RUNTIME_PERF_SYNC_INTERVAL_MS",
+  "consumed_events_this_frame",
+  "dropped_frame_count",
+  "consumeSkillEventBatch",
   "createProjectileSkillEvents",
   "consumeSkillEvent",
   "createMeleeArcSkillEvents",
@@ -80,7 +85,7 @@ const requiredCode = [
   "data-skill-event=\"projectile_spawn\"",
   "data-skill-event=\"melee_arc\"",
   "data-skill-event=\"chain_segment\"",
-  "data-skill-event=\"damage_zone\"",
+  "zone.warning ? \"damage_zone_prime\" : \"damage_zone\"",
   "hover-linked",
   "hover-dim",
   "right-workbench",
@@ -123,6 +128,12 @@ for (const text of requiredCode) {
 
 const projectileVfxLifetimeChecks = [
   "PROJECTILE_BODY_EXIT_FADE_DURATION",
+  "MAX_RUNTIME_PROJECTILE_VISUALS",
+  "MAX_RUNTIME_HIT_VFX",
+  "MAX_RUNTIME_FLOATING_TEXT",
+  "MAX_RUNTIME_AREA_VFX",
+  "capRuntimeVisualBudget",
+  "advanceRuntimeVisuals",
   "fireBoltAliveRemaining",
   "projectileBodyOpacity",
   "event.payload?.expire_world_position ?? event.payload?.end_position",
@@ -405,6 +416,22 @@ const skillEditorChecks = [
   "timeline_checks",
   "payload_text"
 ];
+
+const runtimePerformanceChecks = [
+  "运行性能",
+  "帧耗时",
+  "逻辑",
+  "掉帧",
+  "MAX_SKILL_EDITOR_TIMELINE_ROWS",
+  "skill-event-timeline-limit",
+  "已限制首屏渲染"
+];
+
+for (const text of runtimePerformanceChecks) {
+  if (!app.includes(text) && !css.includes(text)) {
+    throw new Error(`缺少运行时性能优化或时间线限流能力：${text}`);
+  }
+}
 
 for (const text of skillEditorChecks) {
   if (!app.includes(text) && !skillEditorAdapter.includes(text) && !webApi.includes(text) && !localization.includes(text) && !skillEditorRunner.includes(text)) {

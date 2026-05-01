@@ -1915,7 +1915,8 @@ button {
 
 .skill-editor-event-panel,
 .skill-editor-bottom-bar,
-.skill-editor-run-log {
+.skill-editor-run-log,
+.skill-editor-runtime-perf {
   display: grid;
   gap: 10px;
   border: 1px solid rgba(116, 109, 91, 0.62);
@@ -1946,8 +1947,19 @@ button {
 }
 
 .skill-editor-run-log strong,
-.skill-editor-run-log span {
+.skill-editor-run-log span,
+.skill-editor-runtime-perf strong,
+.skill-editor-runtime-perf span {
   color: #d8cfbd;
+}
+
+.skill-editor-runtime-perf {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  align-items: center;
+}
+
+.skill-editor-runtime-perf strong {
+  color: #f2d68f;
 }
 
 .skill-editor-list {
@@ -2511,6 +2523,12 @@ button {
   gap: 10px;
   margin: 0;
   padding-left: 22px;
+}
+
+.skill-event-timeline-limit {
+  margin: 8px 0 0;
+  color: #d8cfbd;
+  font-size: 12px;
 }
 
 .skill-event-timeline-item {

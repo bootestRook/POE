@@ -796,6 +796,19 @@ type ScheduledSkillEvent = {
   remaining: number;
 };
 
+type RuntimePerfSummary = {
+  frame_ms: number;
+  logic_ms: number;
+  active_projectiles: number;
+  active_hit_vfx: number;
+  active_area_vfx: number;
+  active_floating_text: number;
+  active_enemies: number;
+  scheduled_events: number;
+  consumed_events_this_frame: number;
+  dropped_frame_count: number;
+};
+
 type ProjectileDamageTarget = {
   enemy: Enemy;
   projectileIndex: number;
@@ -953,6 +966,14 @@ const PENETRATING_SHOT_IMPACT_DURATION_MS = 260;
 const PENETRATING_SHOT_PROJECTILE_FRAME_ROW = 0;
 const PENETRATING_SHOT_ART_FACING_OFFSET_DEG = 0;
 const PENETRATING_SHOT_ART_FACING_OFFSET = PENETRATING_SHOT_ART_FACING_OFFSET_DEG * Math.PI / 180;
+const RUNTIME_PERF_SYNC_INTERVAL_MS = 500;
+const RUNTIME_DROPPED_FRAME_MS = 33;
+const RUNTIME_SLOW_LOGIC_MS = 16;
+const MAX_RUNTIME_PROJECTILE_VISUALS = 80;
+const MAX_RUNTIME_HIT_VFX = 80;
+const MAX_RUNTIME_FLOATING_TEXT = 60;
+const MAX_RUNTIME_AREA_VFX = 80;
+const MAX_SKILL_EDITOR_TIMELINE_ROWS = 40;
 const ENEMY_ATTACK_VISUAL_RANGE = 76;
 const ENEMY_ATTACK_VISUAL_SCREEN_RANGE = 64;
 const ENEMY_ATTACK_VISUAL_DURATION_MS = 640;
@@ -1553,6 +1574,18 @@ function GameApp() {
   const [kills, setKills] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [combatLogs, setCombatLogs] = useState<string[]>([]);
+  const [runtimePerfSummary, setRuntimePerfSummary] = useState<RuntimePerfSummary>({
+    frame_ms: 0,
+    logic_ms: 0,
+    active_projectiles: 0,
+    active_hit_vfx: 0,
+    active_area_vfx: 0,
+    active_floating_text: 0,
+    active_enemies: 0,
+    scheduled_events: 0,
+    consumed_events_this_frame: 0,
+    dropped_frame_count: 0
+  });
   const [hoveredGemId, setHoveredGemId] = useState<string | null>(null);
   const [hoveredBoardCell, setHoveredBoardCell] = useState<string | null>(null);
   const [hoveredBagSlot, setHoveredBagSlot] = useState<number | null>(null);
@@ -1575,9 +1608,24 @@ function GameApp() {
   const nextPromptId = useRef(1);
   const attackTimers = useRef<Record<string, number>>({});
   const scheduledSkillEvents = useRef<ScheduledSkillEvent[]>([]);
+  const runtimePerf = useRef<RuntimePerfSummary>({
+    frame_ms: 0,
+    logic_ms: 0,
+    active_projectiles: 0,
+    active_hit_vfx: 0,
+    active_area_vfx: 0,
+    active_floating_text: 0,
+    active_enemies: 0,
+    scheduled_events: 0,
+    consumed_events_this_frame: 0,
+    dropped_frame_count: 0
+  });
+  const runtimePerfLastSync = useRef(0);
   const spawnTimer = useRef(0);
   const playerVisual = useRef<UnitVisualRuntime>({ direction: "down", movementVector: { x: 0, y: 0 } });
   const enemyVisuals = useRef(new Map<number, EnemyVisualRuntime>());
+  const elapsedRef = useRef(0);
+  const elapsedLastUiSync = useRef(0);
 
   useEffect(() => {
     requestState("/api/state")
@@ -1671,22 +1719,30 @@ function GameApp() {
     let frame = 0;
     function tick(now: number) {
       if (lastFrame.current === null) lastFrame.current = now;
-      const dt = Math.min(0.05, (now - lastFrame.current) / 1000);
+      const frameMs = now - lastFrame.current;
+      const dt = Math.min(0.05, frameMs / 1000);
       lastFrame.current = now;
-      stepGame(dt);
+      const logicStart = performance.now();
+      const consumedEvents = stepGame(dt);
+      const logicMs = performance.now() - logicStart;
+      recordRuntimePerf(frameMs, logicMs, consumedEvents, now);
       frame = requestAnimationFrame(tick);
     }
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, activeSkills, player.x, player.y, elapsed, state?.player_stats?.move_speed?.value]);
+  }, [playing, activeSkills, player.x, player.y, state?.player_stats?.move_speed?.value]);
 
   function stepGame(dt: number) {
-    setElapsed((value) => value + dt);
+    elapsedRef.current += dt;
+    if (elapsedRef.current - elapsedLastUiSync.current >= 0.1) {
+      elapsedLastUiSync.current = elapsedRef.current;
+      setElapsed(elapsedRef.current);
+    }
     const playerSpeed = PLAYER_SPEED * (state?.player_stats?.move_speed?.value ?? 1);
     const playerMoveVector = playerInputVector(keys.current);
     syncPlayerVisual(playerMoveVector);
-    syncEnemyVisuals(enemies, player, elapsed * 1000);
+    syncEnemyVisuals(enemies, player, elapsedRef.current * 1000);
     setPlayer((current) => {
       const dx = playerMoveVector.x;
       const dy = playerMoveVector.y;
@@ -1700,20 +1756,22 @@ function GameApp() {
 
     if (!skillEditorMode) {
       spawnTimer.current -= dt;
+      let spawnEnemy = false;
       if (spawnTimer.current <= 0) {
-        spawnTimer.current = Math.max(0.45, 1.2 - elapsed / 80);
-        setEnemies((current) => [...current, createEnemy(nextEnemyId.current++, player.x, player.y)]);
+        spawnTimer.current = Math.max(0.45, 1.2 - elapsedRef.current / 80);
+        spawnEnemy = true;
       }
 
-      setEnemies((current) =>
-        current.map((enemy) => {
+      setEnemies((current) => {
+        const movingEnemies = current.map((enemy) => {
           const dx = player.x - enemy.x;
           const dy = player.y - enemy.y;
           const length = Math.hypot(dx, dy) || 1;
           const speed = 58;
           return { ...enemy, x: enemy.x + (dx / length) * speed * dt, y: enemy.y + (dy / length) * speed * dt };
-        })
-      );
+        });
+        return spawnEnemy ? [...movingEnemies, createEnemy(nextEnemyId.current++, player.x, player.y)] : movingEnemies;
+      });
     }
 
     if (activeSkills.length > 0) {
@@ -1731,16 +1789,35 @@ function GameApp() {
       }
     }
 
-    setTexts((current) =>
-      current.map((text) => ({ ...text, ttl: text.ttl - dt })).filter((text) => text.ttl > 0)
-    );
-    setBolts((current) => current.map((bolt) => ({ ...bolt, ttl: bolt.ttl - dt })).filter((bolt) => bolt.ttl > 0));
-    setAreaNovas((current) => current.map((nova) => ({ ...nova, ttl: nova.ttl - dt })).filter((nova) => nova.ttl > 0));
-    setMeleeArcs((current) => current.map((arc) => ({ ...arc, ttl: arc.ttl - dt })).filter((arc) => arc.ttl > 0));
-    setChainSegments((current) => current.map((segment) => ({ ...segment, ttl: segment.ttl - dt })).filter((segment) => segment.ttl > 0));
-    setDamageZones((current) => current.map((zone) => ({ ...zone, ttl: zone.ttl - dt })).filter((zone) => zone.ttl > 0));
-    setHitVfxs((current) => current.map((vfx) => ({ ...vfx, ttl: vfx.ttl - dt })).filter((vfx) => vfx.ttl > 0));
-    consumeScheduledSkillEvents(dt);
+    setTexts((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_FLOATING_TEXT));
+    setBolts((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_PROJECTILE_VISUALS));
+    setAreaNovas((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_AREA_VFX));
+    setMeleeArcs((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_AREA_VFX));
+    setChainSegments((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_AREA_VFX));
+    setDamageZones((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_AREA_VFX));
+    setHitVfxs((current) => advanceRuntimeVisuals(current, dt, MAX_RUNTIME_HIT_VFX));
+    return consumeScheduledSkillEvents(dt);
+  }
+
+  function recordRuntimePerf(frameMs: number, logicMs: number, consumedEvents: number, now: number) {
+    const previous = runtimePerf.current;
+    const next = {
+      frame_ms: frameMs,
+      logic_ms: logicMs,
+      active_projectiles: bolts.length,
+      active_hit_vfx: hitVfxs.length,
+      active_area_vfx: areaNovas.length + meleeArcs.length + chainSegments.length + damageZones.length,
+      active_floating_text: texts.length,
+      active_enemies: enemies.length,
+      scheduled_events: scheduledSkillEvents.current.length,
+      consumed_events_this_frame: consumedEvents,
+      dropped_frame_count: previous.dropped_frame_count + (frameMs > RUNTIME_DROPPED_FRAME_MS || logicMs > RUNTIME_SLOW_LOGIC_MS ? 1 : 0)
+    };
+    runtimePerf.current = next;
+    if (now - runtimePerfLastSync.current >= RUNTIME_PERF_SYNC_INTERVAL_MS) {
+      runtimePerfLastSync.current = now;
+      setRuntimePerfSummary(next);
+    }
   }
 
 function syncPlayerVisual(moveVector: { x: number; y: number }) {
@@ -1963,7 +2040,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     if (!primaryTarget) return [];
     const targetPosition = { x: primaryTarget.x, y: primaryTarget.y };
     const directionWorld = guideDirection(spawnWorldPosition, targetPosition);
-    const timestampMs = Math.round(elapsed * 1000);
+    const timestampMs = Math.round(elapsedRef.current * 1000);
     const travelTimeMs = Math.max(1, Math.round(Number(projectileParams.travel_time_ms ?? 520)));
     const arcHeight = Math.max(0, Number(projectileParams.arc_height ?? 0));
     const impactMarkerId = String(projectileParams.impact_marker_id ?? "");
@@ -2072,7 +2149,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const width = Math.max(1, Number(runtimeParams.width ?? 96));
     const ringWidth = Math.max(1, Number(runtimeParams.ring_width ?? 48));
     const expandDurationMs = Math.max(0, Math.round(Number(runtimeParams.expand_duration_ms ?? hitAtMs)));
-    const timestampMs = Math.round(elapsed * 1000);
+    const timestampMs = Math.round(elapsedRef.current * 1000);
     const vfxKey = String(runtimeParams.zone_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
     const hitVfxKey = skill.presentation_keys?.hit_vfx_key ?? vfxKey;
     const sfxKey = skill.presentation_keys?.sfx ?? "";
@@ -2170,7 +2247,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const guideTarget = primaryTarget ?? fallbackTarget ?? { x: origin.x + 1, y: origin.y };
     const facingDirection = guideDirection(origin, guideTarget);
     const selectedTargets = targets.slice(0, maxTargets);
-    const timestampMs = Math.round(elapsed * 1000);
+    const timestampMs = Math.round(elapsedRef.current * 1000);
     const vfxKey = skill.presentation_keys?.hit_vfx_key ?? String(runtimeParams.slash_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
     const sfxKey = skill.presentation_keys?.sfx ?? "";
     const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
@@ -2304,7 +2381,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const damageFalloffPerChain = clamp(Number(runtimeParams.damage_falloff_per_chain ?? 0), 0, 1);
     const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? chainCount)));
     const selectedTargets = targets.slice(0, Math.min(chainCount, maxTargets));
-    const timestampMs = Math.round(elapsed * 1000);
+    const timestampMs = Math.round(elapsedRef.current * 1000);
     const initialDelayMs = Math.max(0, Math.round(Number(skill.cast?.windup_ms ?? skill.hit?.hit_delay_ms ?? 0)));
     const segmentVfxKey = String(runtimeParams.segment_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
     const hitVfxKey = skill.presentation_keys?.hit_vfx_key ?? segmentVfxKey;
@@ -2395,7 +2472,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const sfxKey = skill.presentation_keys?.sfx ?? "";
     const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
     const floatingKey = skill.presentation_keys?.floating_text ?? "";
-    const timestampMs = Math.round(elapsed * 1000);
+    const timestampMs = Math.round(elapsedRef.current * 1000);
     const areaId = `${skill.active_gem_instance_id}.${timestampMs}.area.1`;
     const primaryTarget = targets[0];
     const base = {
@@ -2518,7 +2595,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     const maxDurationMs = optionalNumber(runtimeParams.max_duration_ms);
     const hitPolicy = String(runtimeParams.hit_policy ?? "first_hit");
     const pierceCount = Math.max(0, Math.round(Number(runtimeParams.pierce_count ?? 0)));
-    const isPiercingProjectile = hitPolicy === "pierce" || pierceCount > 0;
+    const isPiercingProjectile = pierceCount > 0;
     const farthestTarget = damageTargets.reduce((farthest, item) => (
       distance(item.enemy, player) > distance(farthest, player) ? item.enemy : farthest
     ), target);
@@ -2550,9 +2627,9 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         x: projectileDirection.x * projectileSpeed,
         y: projectileDirection.y * projectileSpeed
       };
-      const projectileId = `${skill.active_gem_instance_id}.${Math.round(elapsed * 1000)}.projectile.${index + 1}`;
+      const projectileId = `${skill.active_gem_instance_id}.${Math.round(elapsedRef.current * 1000)}.projectile.${index + 1}`;
       return {
-        timestamp_ms: Math.round(elapsed * 1000) + shotDelayMs,
+        timestamp_ms: Math.round(elapsedRef.current * 1000) + shotDelayMs,
         source_entity: "player",
         target_entity: String(target.id),
         direction: projectileDirection,
@@ -2560,7 +2637,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         skill_instance_id: skill.active_gem_instance_id,
         vfx_key: projectileVfxKey,
         sfx_key: sfxKey,
-        event_id: `${skill.active_gem_instance_id}.${target.id}.projectile_spawn.${index + 1}.${Math.round(elapsed * 1000)}`,
+        event_id: `${skill.active_gem_instance_id}.${target.id}.projectile_spawn.${index + 1}.${Math.round(elapsedRef.current * 1000)}`,
         type: "projectile_spawn" as const,
         position: spawnWorldPosition,
         delay_ms: shotDelayMs,
@@ -2583,12 +2660,17 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           spread_angle_deg: spreadAngleDeg,
           angle_step: angleStepDeg,
           vfx_scale: vfxScale,
+          pierce_remaining: pierceCount,
+          projectile_speed: projectileSpeed,
+          lifetime_ms: durationMs,
+          expire_time_ms: Math.round(elapsedRef.current * 1000) + shotDelayMs + durationMs,
+          expire_world_position: laneEnd,
           skill_name: skill.name_text
         }
       };
     });
     const base = {
-      timestamp_ms: Math.round(elapsed * 1000),
+      timestamp_ms: Math.round(elapsedRef.current * 1000),
       source_entity: "player",
       target_entity: String(target.id),
       direction,
@@ -2606,6 +2688,15 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           x: start.x + projectileDirection.x * hitDistance,
           y: start.y + projectileDirection.y * hitDistance
         };
+        const projectileEnd = {
+          x: start.x + projectileDirection.x * visualLength,
+          y: start.y + projectileDirection.y * visualLength
+        };
+        const projectileHitOrder = damageTargets
+          .slice(0, hitIndex)
+          .filter((item) => item.projectileIndex === projectileIndex)
+          .length;
+        const pierceRemaining = Math.max(0, pierceCount - projectileHitOrder);
         const hitDurationMs = clampProjectileDuration(Math.round((hitDistance / projectileSpeed) * 1000), minDurationMs, maxDurationMs);
         const projectileDelayMs = projectileIndex * burstIntervalMs;
         const totalDelayMs = projectileDelayMs + hitDurationMs;
@@ -2622,7 +2713,17 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           projectile_id: `${skill.active_gem_instance_id}.${base.timestamp_ms}.projectile.${projectileIndex + 1}`,
           skill_id: skill.skill_package_id ?? skill.skill_template_id,
           impact_world_position: hitEnd,
+          hit_world_position: hitEnd,
           direction_world: projectileDirection,
+          pierce_remaining: pierceRemaining,
+          projectile_speed: projectileSpeed,
+          lifetime_ms: durationMs,
+          expire_time_ms: base.timestamp_ms + projectileDelayMs + durationMs,
+          expire_world_position: projectileEnd,
+          projectile_continues: pierceRemaining > 0,
+          impact_kind: pierceRemaining > 0 ? "projectile_hit_continue" : "projectile_final_impact",
+          hit_policy: hitPolicy,
+          pierce_count: pierceCount,
           vfx_scale: vfxScale
         };
         return [
@@ -2682,9 +2783,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
   }
 
   function consumeImmediateSkillEvents(events: SkillEvent[]) {
-    for (const event of events) {
-      if (event.delay_ms === 0) consumeSkillEvent(event);
-    }
+    consumeSkillEventBatch(events.filter((event) => event.delay_ms === 0));
   }
 
   function consumeScheduledSkillEvents(dt: number) {
@@ -2699,10 +2798,275 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       }
     }
     scheduledSkillEvents.current = pending;
-    for (const event of ready) consumeSkillEvent(event);
+    consumeSkillEventBatch(ready);
+    return ready.length;
   }
 
   function consumeSkillEvent(event: SkillEvent) {
+    consumeSkillEventBatch([event]);
+  }
+
+  function consumeSkillEventBatch(events: SkillEvent[]) {
+    if (events.length === 0) return;
+    const nextChainSegments: ChainSegmentVfx[] = [];
+    const nextDamageZones: DamageZoneVfx[] = [];
+    const replaceDamageZoneIds = new Set<string>();
+    const nextHitVfxs: HitVfx[] = [];
+    const nextAreaNovas: AreaNova[] = [];
+    const nextMeleeArcs: MeleeArcVfx[] = [];
+    const nextBolts: FireBolt[] = [];
+    const nextTexts: FloatingText[] = [];
+    const damageEvents: SkillEvent[] = [];
+
+    for (const event of events) {
+      if (event.type === "chain_segment") {
+        const payload = event.payload ?? {};
+        const start = (payload.start_position ?? event.position) as { x?: number; y?: number };
+        const end = (payload.end_position ?? payload.target_world_position ?? event.position) as { x?: number; y?: number };
+        const duration = Math.max(0.16, event.duration_ms / 1000);
+        nextChainSegments.push({
+          id: nextChainSegmentId.current++,
+          startX: Number(start.x ?? event.position.x),
+          startY: Number(start.y ?? event.position.y),
+          endX: Number(end.x ?? event.position.x),
+          endY: Number(end.y ?? event.position.y),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          segmentIndex: Number(payload.segment_index ?? 0),
+          segmentId: typeof payload.segment_id === "string" ? payload.segment_id : event.event_id,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "damage_zone_prime" || event.type === "damage_zone") {
+        const payload = event.payload ?? {};
+        const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
+        const direction = (payload.direction_world ?? payload.facing_direction ?? event.direction) as { x?: number; y?: number };
+        const shape = String(payload.shape ?? "circle") === "rectangle" ? "rectangle" : "circle";
+        const duration = Math.max(0.18, event.duration_ms / 1000);
+        const zoneId = typeof payload.zone_id === "string" ? payload.zone_id : event.event_id;
+        if (event.type === "damage_zone") replaceDamageZoneIds.add(zoneId);
+        nextDamageZones.push({
+          id: nextDamageZoneId.current++,
+          x: Number(origin.x ?? event.position.x),
+          y: Number(origin.y ?? event.position.y),
+          shape,
+          radius: Math.max(1, Number(payload.radius ?? 120)),
+          length: Math.max(1, Number(payload.length ?? 160)),
+          width: Math.max(1, Number(payload.width ?? 80)),
+          directionX: Number(direction.x ?? event.direction.x),
+          directionY: Number(direction.y ?? event.direction.y),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          zoneId,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          warning: event.type === "damage_zone_prime",
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "projectile_impact") {
+        const payload = event.payload ?? {};
+        const impact = (payload.impact_position ?? event.position) as { x?: number; y?: number };
+        nextHitVfxs.push({
+          id: nextHitVfxId.current++,
+          x: Number(impact.x ?? event.position.x),
+          y: Number(impact.y ?? event.position.y),
+          projectileId: typeof payload.projectile_id === "string" ? payload.projectile_id : undefined,
+          ttl: 0.18,
+          duration: 0.18,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          skillTemplateId: event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "melee_arc") {
+        const payload = event.payload ?? {};
+        const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
+        const direction = (payload.direction_world ?? payload.facing_direction ?? event.direction) as { x?: number; y?: number };
+        const duration = Math.max(0.18, event.duration_ms / 1000);
+        nextMeleeArcs.push({
+          id: nextMeleeArcId.current++,
+          x: Number(origin.x ?? event.position.x),
+          y: Number(origin.y ?? event.position.y),
+          radius: Math.max(1, Number(payload.arc_radius ?? 160)),
+          arcAngle: clamp(Number(payload.arc_angle ?? 70), 1, 180),
+          directionX: Number(direction.x ?? event.direction.x),
+          directionY: Number(direction.y ?? event.direction.y),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          arcId: typeof payload.arc_id === "string" ? payload.arc_id : event.event_id,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "area_spawn") {
+        const payload = event.payload ?? {};
+        const center = (payload.center_world_position ?? payload.center ?? event.position) as { x?: number; y?: number };
+        const duration = Math.max(0.25, event.duration_ms / 1000);
+        nextAreaNovas.push({
+          id: nextAreaNovaId.current++,
+          x: Number(center.x ?? event.position.x),
+          y: Number(center.y ?? event.position.y),
+          radius: Math.max(1, Number(payload.radius ?? 120)),
+          ringWidth: Math.max(1, Number(payload.ring_width ?? 48)),
+          ttl: duration,
+          duration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          areaId: typeof payload.area_id === "string" ? payload.area_id : event.event_id,
+          skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "projectile_spawn") {
+        const endPosition = event.payload?.expire_world_position ?? event.payload?.end_position ?? event.position;
+        const velocityWorld = event.payload?.velocity_world as { x?: number; y?: number } | undefined;
+        const lifetimeMs = Number(event.payload?.lifetime_ms ?? event.duration_ms);
+        const aliveDuration = Math.max(0.001, lifetimeMs / 1000);
+        nextBolts.push({
+          id: nextBoltId.current++,
+          x: event.position.x,
+          y: event.position.y,
+          targetX: endPosition.x,
+          targetY: endPosition.y,
+          directionX: (event.payload?.direction_world as { x?: number; y?: number } | undefined)?.x ?? event.direction.x,
+          directionY: (event.payload?.direction_world as { x?: number; y?: number } | undefined)?.y ?? event.direction.y,
+          velocityX: velocityWorld?.x,
+          velocityY: velocityWorld?.y,
+          projectileId: typeof event.payload?.projectile_id === "string" ? event.payload.projectile_id : event.event_id,
+          skillId: typeof event.payload?.skill_id === "string" ? event.payload.skill_id : event.skill_instance_id,
+          projectileIndex: Number(event.payload?.projectile_index ?? 1),
+          projectileCount: Number(event.payload?.projectile_count ?? 1),
+          fanAngle: Number(event.payload?.fan_angle ?? event.payload?.spread_angle_deg ?? 0),
+          localSpreadAngle: Number(event.payload?.local_spread_angle ?? 0),
+          pierceRemaining: Number(event.payload?.pierce_remaining ?? 0),
+          projectileSpeed: Number(event.payload?.projectile_speed ?? Math.hypot(velocityWorld?.x ?? 0, velocityWorld?.y ?? 0)),
+          trajectory: String(event.payload?.trajectory ?? "linear"),
+          arcHeight: Number(event.payload?.arc_height ?? 0),
+          ttl: aliveDuration + PROJECTILE_BODY_EXIT_FADE_DURATION,
+          duration: aliveDuration,
+          fadeDuration: PROJECTILE_BODY_EXIT_FADE_DURATION,
+          skillTemplateId: event.skill_instance_id,
+          behaviorType: "projectile",
+          damageType: event.damage_type,
+          visualEffect: event.vfx_key,
+          vfxKey: event.vfx_key,
+          shapeEffects: [],
+          areaScale: 1,
+          vfxScale: normalizedVfxScale(event.payload?.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "damage") {
+        damageEvents.push(event);
+        continue;
+      }
+      if (event.type === "hit_vfx") {
+        const eventVfxKind = projectileVfxKind(event.vfx_key) ?? projectileVfxKind(event.skill_instance_id);
+        const visualDuration = eventVfxKind === "penetrating_shot" ? PENETRATING_SHOT_IMPACT_DURATION_MS / 1000 : Math.max(0.12, event.duration_ms / 1000);
+        nextHitVfxs.push({
+          id: nextHitVfxId.current++,
+          x: event.position.x,
+          y: event.position.y,
+          projectileId: typeof event.payload?.projectile_id === "string" ? event.payload.projectile_id : undefined,
+          projectileIndex: Number(event.payload?.projectile_index ?? 1),
+          projectileCount: Number(event.payload?.projectile_count ?? 1),
+          pierceRemaining: Number(event.payload?.pierce_remaining ?? 0),
+          impactKind: typeof event.payload?.impact_kind === "string" ? event.payload.impact_kind : undefined,
+          ttl: visualDuration,
+          duration: visualDuration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          skillTemplateId: event.skill_instance_id,
+          vfxScale: normalizedVfxScale(event.payload?.vfx_scale)
+        });
+        continue;
+      }
+      if (event.type === "floating_text") {
+        nextTexts.push({
+          id: nextTextId.current++,
+          x: event.position.x,
+          y: event.position.y,
+          text: typeof event.payload?.text === "string" ? event.payload.text : Math.round(Number(event.amount ?? 0)).toString(),
+          ttl: Math.max(0.3, event.duration_ms / 1000),
+          duration: Math.max(0.3, event.duration_ms / 1000)
+        });
+      }
+    }
+
+    if (nextChainSegments.length > 0) {
+      setChainSegments((items) => capRuntimeVisualBudget([...items, ...nextChainSegments], MAX_RUNTIME_AREA_VFX));
+    }
+    if (nextDamageZones.length > 0) {
+      setDamageZones((items) => capRuntimeVisualBudget(
+        [
+          ...items.filter((zone) => !zone.zoneId || !replaceDamageZoneIds.has(zone.zoneId)),
+          ...nextDamageZones
+        ],
+        MAX_RUNTIME_AREA_VFX
+      ));
+    }
+    if (nextHitVfxs.length > 0) {
+      setHitVfxs((items) => capRuntimeVisualBudget([...items, ...nextHitVfxs], MAX_RUNTIME_HIT_VFX));
+    }
+    if (nextAreaNovas.length > 0) {
+      setAreaNovas((items) => capRuntimeVisualBudget([...items, ...nextAreaNovas], MAX_RUNTIME_AREA_VFX));
+    }
+    if (nextMeleeArcs.length > 0) {
+      setMeleeArcs((items) => capRuntimeVisualBudget([...items, ...nextMeleeArcs], MAX_RUNTIME_AREA_VFX));
+    }
+    if (nextBolts.length > 0) {
+      setBolts((items) => capRuntimeVisualBudget([...items, ...nextBolts], MAX_RUNTIME_PROJECTILE_VISUALS));
+    }
+    if (nextTexts.length > 0) {
+      setTexts((items) => capRuntimeVisualBudget([...items, ...nextTexts], MAX_RUNTIME_FLOATING_TEXT));
+    }
+    if (damageEvents.length > 0) {
+      applyDamageEventBatch(damageEvents);
+    }
+  }
+
+  function applyDamageEventBatch(events: SkillEvent[]) {
+    const damageByTarget = new Map<number, number>();
+    for (const event of events) {
+      const targetId = Number(event.target_entity);
+      if (!Number.isFinite(targetId)) continue;
+      damageByTarget.set(targetId, (damageByTarget.get(targetId) ?? 0) + Number(event.amount ?? 0));
+    }
+    if (damageByTarget.size === 0) return;
+    let killed = 0;
+    setEnemies((current) => {
+      const next = current
+        .map((enemy) => {
+          const damage = damageByTarget.get(enemy.id) ?? 0;
+          if (damage <= 0) return enemy;
+          const hp = enemy.hp - damage;
+          if (hp <= 0) killed += 1;
+          return { ...enemy, hp };
+        })
+        .filter((enemy) => enemy.hp > 0);
+      return next;
+    });
+    if (killed > 0) {
+      const skillName = events.find((event) => typeof event.payload?.skill_name === "string")?.payload?.skill_name ?? "技能";
+      setKills((value) => value + killed);
+      setCombatLogs((logs) => [`${skillName} 击杀 ${killed} 个怪物。`, ...logs].slice(0, 8));
+    }
+  }
+
+  function consumeSkillEventLegacy(event: SkillEvent) {
     if (event.type === "chain_segment") {
       const payload = event.payload ?? {};
       const start = (payload.start_position ?? event.position) as { x?: number; y?: number };
@@ -3219,6 +3583,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           battleCamera={battleCamera}
           cameraSettings={skillEditorCameraSettings}
           debugOptions={skillEditorDebugOptions}
+          runtimePerfSummary={runtimePerfSummary}
           onCameraSettingsChange={setSkillEditorCameraSettings}
           onDebugOptionsChange={setSkillEditorDebugOptions}
           onClose={() => {
@@ -3957,6 +4322,7 @@ function SkillEditorPanel({
   battleCamera,
   cameraSettings,
   debugOptions,
+  runtimePerfSummary,
   onCameraSettingsChange,
   onDebugOptionsChange,
   onClose
@@ -3970,6 +4336,7 @@ function SkillEditorPanel({
   battleCamera: Camera2D;
   cameraSettings: SkillEditorCameraSettings;
   debugOptions: SkillEditorDebugOptions;
+  runtimePerfSummary: RuntimePerfSummary;
   onCameraSettingsChange: (settings: SkillEditorCameraSettings) => void;
   onDebugOptionsChange: (options: SkillEditorDebugOptions) => void;
   onClose: () => void;
@@ -4790,6 +5157,14 @@ function SkillEditorPanel({
                 {saveMessage}
               </p>
             )}
+            <div className="skill-editor-runtime-perf" aria-label="运行性能摘要">
+              <strong>运行性能</strong>
+              <span>帧耗时 {formatPreviewNumber(runtimePerfSummary.frame_ms)} 毫秒</span>
+              <span>逻辑 {formatPreviewNumber(runtimePerfSummary.logic_ms)} 毫秒</span>
+              <span>事件 {runtimePerfSummary.consumed_events_this_frame} / 排队 {runtimePerfSummary.scheduled_events}</span>
+              <span>对象 投射物 {runtimePerfSummary.active_projectiles}，特效 {runtimePerfSummary.active_hit_vfx + runtimePerfSummary.active_area_vfx}，浮字 {runtimePerfSummary.active_floating_text}</span>
+              <span>掉帧 {runtimePerfSummary.dropped_frame_count}</span>
+            </div>
             <div className="skill-editor-run-log" aria-label="运行日志">
               <strong>运行日志</strong>
               {runLogs.length > 0 ? runLogs.map((log, index) => <span key={`${log}-${index}`}>{log}</span>) : <span>暂无运行日志。</span>}
@@ -5358,7 +5733,8 @@ function SkillEditorEventList({
   selectedEventType: string;
   onSelectEventType: (type: string) => void;
 }) {
-  const groupedEvents = timelineEvents.length > 0 ? timelineEvents : [];
+  const groupedEvents = timelineEvents.length > 0 ? timelineEvents.slice(0, MAX_SKILL_EDITOR_TIMELINE_ROWS) : [];
+  const hiddenEventCount = Math.max(0, timelineEvents.length - groupedEvents.length);
   return (
     <section className="skill-editor-event-panel" aria-label="技能事件列表">
       <div className="skill-event-timeline-heading">
@@ -5369,16 +5745,21 @@ function SkillEditorEventList({
         <span>{timelineEvents.length > 0 ? `${timelineEvents.length} 个事件` : `${supportedEventTypes.length} 类事件`}</span>
       </div>
       {groupedEvents.length > 0 ? (
-        <ol className="skill-event-timeline-list">
-          {groupedEvents.map((event) => (
-            <li key={event.event_id} className={`skill-event-timeline-item skill-event-${event.type}`}>
-              <button type="button" className="skill-editor-event-select" onClick={() => onSelectEventType(event.type)}>
-                <strong>{event.type_text}</strong>
-                <span>事件时间 {event.timestamp_ms} 毫秒</span>
-              </button>
-            </li>
-          ))}
-        </ol>
+        <>
+          <ol className="skill-event-timeline-list">
+            {groupedEvents.map((event) => (
+              <li key={event.event_id} className={`skill-event-timeline-item skill-event-${event.type}`}>
+                <button type="button" className="skill-editor-event-select" onClick={() => onSelectEventType(event.type)}>
+                  <strong>{event.type_text}</strong>
+                  <span>事件时间 {event.timestamp_ms} 毫秒</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+          {hiddenEventCount > 0 && (
+            <p className="skill-event-timeline-limit">已限制首屏渲染，剩余 {hiddenEventCount} 个事件可通过事件类型筛选查看。</p>
+          )}
+        </>
       ) : (
         <div className="skill-editor-logical-events">
           {supportedEventTypes.map((eventType) => (
@@ -6203,7 +6584,8 @@ function SkillTestArenaResultView({
 }
 
 function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTestArenaResult; visibleEventCount: number }) {
-  const visibleEvents = result.event_timeline.slice(0, visibleEventCount);
+  const visibleEvents = result.event_timeline.slice(0, Math.min(visibleEventCount, MAX_SKILL_EDITOR_TIMELINE_ROWS));
+  const hiddenEventCount = Math.max(0, visibleEventCount - visibleEvents.length);
   return (
     <div className="skill-event-timeline">
       <div className="skill-event-timeline-heading">
@@ -6243,30 +6625,35 @@ function SkillEventTimelineView({ result, visibleEventCount }: { result: SkillTe
         <TimelineCheck label="基础时序检查" passed={result.timeline_checks.basic_timing_passed} />
       </div>
       {visibleEvents.length > 0 ? (
-        <ol className="skill-event-timeline-list">
-          {visibleEvents.map((event) => (
-            <li key={event.event_id} className={`skill-event-timeline-item skill-event-${event.type}`}>
-              <div className="skill-event-timeline-item-head">
-                <strong>{event.type_text}</strong>
-                <span>事件时间 {event.timestamp_ms} 毫秒</span>
-              </div>
-              <dl>
-                <div><dt>延迟</dt><dd>{event.delay_ms} 毫秒</dd></div>
-                <div><dt>持续时间</dt><dd>{event.duration_ms} 毫秒</dd></div>
-                <div><dt>来源实体</dt><dd>{event.source_entity || "无"}</dd></div>
-                <div><dt>目标实体</dt><dd>{event.target_entity || "无"}</dd></div>
-                <div><dt>数值</dt><dd>{event.amount === null ? "无" : formatPreviewNumber(event.amount)}</dd></div>
-                <div><dt>伤害类型</dt><dd>{event.damage_type ? damageTypeText(event.damage_type) : "无"}</dd></div>
-                <div><dt>特效标识</dt><dd>{event.vfx_key || "无"}</dd></div>
-                <div><dt>原因标识</dt><dd>{event.reason_key || "无"}</dd></div>
-              </dl>
-              <details>
-                <summary>附加数据</summary>
-                <pre>{event.payload_text || JSON.stringify(event.payload, null, 2)}</pre>
-              </details>
-            </li>
-          ))}
-        </ol>
+        <>
+          <ol className="skill-event-timeline-list">
+            {visibleEvents.map((event) => (
+              <li key={event.event_id} className={`skill-event-timeline-item skill-event-${event.type}`}>
+                <div className="skill-event-timeline-item-head">
+                  <strong>{event.type_text}</strong>
+                  <span>事件时间 {event.timestamp_ms} 毫秒</span>
+                </div>
+                <dl>
+                  <div><dt>延迟</dt><dd>{event.delay_ms} 毫秒</dd></div>
+                  <div><dt>持续时间</dt><dd>{event.duration_ms} 毫秒</dd></div>
+                  <div><dt>来源实体</dt><dd>{event.source_entity || "无"}</dd></div>
+                  <div><dt>目标实体</dt><dd>{event.target_entity || "无"}</dd></div>
+                  <div><dt>数值</dt><dd>{event.amount === null ? "无" : formatPreviewNumber(event.amount)}</dd></div>
+                  <div><dt>伤害类型</dt><dd>{event.damage_type ? damageTypeText(event.damage_type) : "无"}</dd></div>
+                  <div><dt>特效标识</dt><dd>{event.vfx_key || "无"}</dd></div>
+                  <div><dt>原因标识</dt><dd>{event.reason_key || "无"}</dd></div>
+                </dl>
+                <details>
+                  <summary>附加数据</summary>
+                  <pre>{event.payload_text || JSON.stringify(event.payload, null, 2)}</pre>
+                </details>
+              </li>
+            ))}
+          </ol>
+          {hiddenEventCount > 0 && (
+            <p className="skill-event-timeline-limit">当前阶段还有 {hiddenEventCount} 个事件未在首屏展开，完整事件仍保留在测试结果中。</p>
+          )}
+        </>
       ) : (
         <p className="skill-editor-test-empty">当前测试阶段尚无可显示事件。</p>
       )}
@@ -6426,7 +6813,7 @@ function selectProjectileTargets(enemies: Enemy[], skill: SkillPreview, player: 
   );
   const pierceCount = Math.max(0, Math.round(Number(runtimeParams.pierce_count ?? 0)));
   const hitPolicy = String(runtimeParams.hit_policy ?? "first_hit");
-  const maxHitsPerProjectile = hitPolicy === "pierce" || pierceCount > 0 ? pierceCount + 1 : 1;
+  const maxHitsPerProjectile = pierceCount > 0 ? pierceCount + 1 : 1;
   const projectileCount = Math.max(1, Math.round(Number(runtimeParams.projectile_count ?? skill.projectile_count ?? 1)));
   const spreadAngleDeg = projectileSpreadAngleDeg(skill.behavior_template, runtimeParams);
   const angleStepDeg = projectileAngleStepDeg(skill.behavior_template, runtimeParams);
@@ -6455,10 +6842,7 @@ function selectProjectileTargets(enemies: Enemy[], skill: SkillPreview, player: 
         ));
       selected.push(...pathAssistTargets.slice(0, maxHitsPerProjectile - selected.length));
     }
-    for (const enemy of lineTargets) {
-      result.push({ enemy: enemy.enemy, projectileIndex });
-    }
-    for (const target of selected.slice(lineTargets.length, maxHitsPerProjectile)) {
+    for (const target of selected) {
       result.push({ enemy: target.enemy, projectileIndex });
     }
   }
@@ -8148,10 +8532,12 @@ function FireBoltAlignmentDebug({
   label?: string;
   debugOptions: SkillEditorDebugOptions;
 }) {
-  const startVisual = projectBattleWorldToScreen(start.x, start.y);
-  const currentVisual = projectBattleWorldToScreen(current.x, current.y);
-  const hitVisual = projectBattleWorldToScreen(hit.x, hit.y);
-  const facingAngle = worldDirectionToBattleScreenAngle(direction, start);
+  const { startVisual, currentVisual, hitVisual, facingAngle } = useMemo(() => ({
+    startVisual: projectBattleWorldToScreen(start.x, start.y),
+    currentVisual: projectBattleWorldToScreen(current.x, current.y),
+    hitVisual: projectBattleWorldToScreen(hit.x, hit.y),
+    facingAngle: worldDirectionToBattleScreenAngle(direction, start)
+  }), [current.x, current.y, direction.x, direction.y, hit.x, hit.y, start.x, start.y]);
   const suffix = projectileIndex && projectileCount ? `（${projectileIndex}/${projectileCount}）` : "";
   return (
     <div className="fire-bolt-alignment-debug" aria-label={`${label}对齐调试层`} data-projectile-index={projectileIndex} data-projectile-count={projectileCount}>
@@ -8423,3 +8809,16 @@ function clamp(value: number, min: number, max: number) {
 function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
+
+function advanceRuntimeVisuals<T extends { ttl: number }>(items: T[], dt: number, maxCount: number) {
+  return capRuntimeVisualBudget(
+    items.map((item) => ({ ...item, ttl: item.ttl - dt })).filter((item) => item.ttl > 0),
+    maxCount
+  );
+}
+
+function capRuntimeVisualBudget<T>(items: T[], maxCount: number) {
+  if (items.length <= maxCount) return items;
+  return items.slice(items.length - maxCount);
+}
+
