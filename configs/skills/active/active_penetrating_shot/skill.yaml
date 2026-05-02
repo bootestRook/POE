@@ -10,7 +10,7 @@ classification:
 cast:
   mode: attack
   target_selector: nearest_enemy
-  search_range: 680
+  search_range: 520
   cooldown_ms: 850
   windup_ms: 0
   recovery_ms: 0
@@ -26,7 +26,7 @@ behavior:
     projectile_speed: 760
     projectile_width: 64
     projectile_height: 18
-    max_distance: 680
+    max_distance: 520
     hit_policy: pierce
     pierce_count: 3
     collision_radius: 16

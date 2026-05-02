@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UNIT_ROOT = ROOT / "assest" / "battle" / "units"
+UNIT_ROOT = ROOT / "assets" / "battle" / "units"
 CROPPED_DIR = UNIT_ROOT / "cropped"
 SHEETS_DIR = UNIT_ROOT / "sheets"
 MANIFEST_DIR = UNIT_ROOT / "manifests"

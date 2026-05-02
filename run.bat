@@ -2,7 +2,8 @@
 setlocal
 
 cd /d "%~dp0"
-set PORT=8766
+set "PORT=8766"
+set "DIST_DIR=dist-webapp"
 
 echo ========================================
 echo V1 WebApp runner
@@ -34,11 +35,17 @@ if not exist node_modules (
 )
 
 echo Building WebApp...
+set "VITE_OUT_DIR=%DIST_DIR%"
 call npm.cmd run build
 if errorlevel 1 (
   echo WebApp build failed.
   pause
   exit /b 1
+)
+
+if /I "%~1"=="--check" (
+  echo WebApp runner check passed.
+  exit /b 0
 )
 
 echo Stopping stale WebApp server on port %PORT%...
@@ -50,7 +57,10 @@ if errorlevel 1 (
 )
 
 echo Starting WebApp...
-echo Browser URL: http://127.0.0.1:%PORT%
-python tools\webapp_server.py --port %PORT% --open
+set "CACHE_BUST=%RANDOM%%RANDOM%"
+set "BROWSER_URL=http://127.0.0.1:%PORT%/?clear_cache=1&v=%CACHE_BUST%"
+echo Browser URL: "%BROWSER_URL%"
+start "" powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Start-Process '%BROWSER_URL%'"
+python tools\webapp_server.py --port %PORT% --dist-dir "%DIST_DIR%"
 
 endlocal

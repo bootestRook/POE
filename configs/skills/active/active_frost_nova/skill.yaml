@@ -10,8 +10,8 @@ classification:
 cast:
   mode: spell
   target_selector: self
-  search_range: 430
-  cooldown_ms: 1200
+  search_range: 340
+  cooldown_ms: 1100
   windup_ms: 0
   recovery_ms: 0
 behavior:
@@ -20,7 +20,7 @@ behavior:
     shape: circle
     origin_policy: caster
     facing_policy: none
-    radius: 430
+    radius: 340
     expand_duration_ms: 520
     hit_at_ms: 260
     max_targets: 8

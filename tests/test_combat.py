@@ -134,23 +134,33 @@ class CombatTest(unittest.TestCase):
         else:
             self.assertEqual(second_events, ())
 
-    def test_non_packaged_active_skills_keep_legacy_immediate_path(self) -> None:
+    def test_lava_orb_uses_packaged_orbit_event_pipeline(self) -> None:
         self.inventory.add_instance("active", "active_lava_orb")
         self.board.mount_gem("active", 0, 0)
         session = CombatSession.start(
             player=self.player(),
-            monsters=[Monster("monster_1", current_life=30, max_life=30, position=Position(1, 0))],
+            monsters=[Monster("monster_1", current_life=30, max_life=30, position=Position(146, 56))],
             inventory=self.inventory,
             skill_effect_calculator=self.calculator(),
             loot_runtime=self.loot_runtime(),
         )
 
-        events = session.tick(1)
+        first_events = session.tick(1)
 
-        self.assertEqual(len(events), 1)
-        self.assertEqual(session.active_skill_instances[0].skill_package_id, "")
+        self.assertEqual(first_events, ())
+        self.assertEqual(session.active_skill_instances[0].skill_package_id, "active_lava_orb")
+        self.assertEqual(session.active_skill_instances[0].behavior_template, "module_chain")
+        self.assertEqual(session.monsters[0].current_life, 30)
+        event_types = [event.type for event in session.skill_events]
+        self.assertIn("orbit_spawn", event_types)
+        self.assertIn("orbit_tick", event_types)
+        self.assertIn("damage_zone", event_types)
+        self.assertIn("damage", event_types)
+
+        damage_events = session.tick(300)
+
+        self.assertGreaterEqual(len(damage_events), 1)
         self.assertLess(session.monsters[0].current_life, 30)
-        self.assertEqual(session.skill_events, [])
 
     def test_passive_self_stat_applies_before_combat_and_does_not_release(self) -> None:
         self.inventory.add_instance("active", "active_fire_bolt")

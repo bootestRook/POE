@@ -8,7 +8,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROP_ROOT = ROOT / "assest" / "battle" / "props"
+PROP_ROOT = ROOT / "assets" / "battle" / "props"
 RAW_IMAGE = PROP_ROOT / "raw" / "battle-props-sheet-generated.png"
 CROPPED_DIR = PROP_ROOT / "cropped"
 ATLAS_DIR = PROP_ROOT / "atlas"
@@ -200,7 +200,7 @@ def build_atlas(images: list[tuple[str, Image.Image, float]]) -> tuple[Image.Ima
                 "height": image.height,
                 "anchorX": 0.5,
                 "anchorY": anchor_y,
-                "src": f"/assest/battle/props/cropped/{prop_type}.png",
+                "src": f"/assets/battle/props/cropped/{prop_type}.png",
             }
         )
 
@@ -227,7 +227,7 @@ def main() -> int:
     atlas.save(ATLAS_DIR / "battle-props-atlas.png")
 
     manifest = {
-        "atlas": "/assest/battle/props/atlas/battle-props-atlas.png",
+        "atlas": "/assets/battle/props/atlas/battle-props-atlas.png",
         "frames": frames,
     }
     (ATLAS_DIR / "battle-props-atlas.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

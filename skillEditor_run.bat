@@ -2,7 +2,8 @@
 setlocal
 
 cd /d "%~dp0"
-set PORT=8765
+set "PORT=8765"
+set "DIST_DIR=dist-skill-editor"
 
 echo ========================================
 echo SkillEditor one-click runner
@@ -34,6 +35,7 @@ if not exist node_modules (
 )
 
 echo Building WebApp...
+set "VITE_OUT_DIR=%DIST_DIR%"
 call npm.cmd run build
 if errorlevel 1 (
   echo WebApp build failed.
@@ -55,8 +57,10 @@ if errorlevel 1 (
 )
 
 echo Starting SkillEditor...
-echo Browser URL: http://127.0.0.1:%PORT%/skill-editor
-start "" powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:%PORT%/skill-editor'"
-python tools\webapp_server.py --port %PORT%
+set "CACHE_BUST=%RANDOM%%RANDOM%"
+set "BROWSER_URL=http://127.0.0.1:%PORT%/skill-editor?clear_cache=1&v=%CACHE_BUST%"
+echo Browser URL: "%BROWSER_URL%"
+start "" powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Start-Process '%BROWSER_URL%'"
+python tools\webapp_server.py --port %PORT% --dist-dir "%DIST_DIR%"
 
 endlocal

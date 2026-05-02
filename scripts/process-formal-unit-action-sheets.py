@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UNIT_ROOT = ROOT / "assest" / "battle" / "units"
+UNIT_ROOT = ROOT / "assets" / "battle" / "units"
 RAW_DIR = UNIT_ROOT / "raw"
 CROPPED_DIR = UNIT_ROOT / "cropped"
 SHEETS_DIR = UNIT_ROOT / "sheets"

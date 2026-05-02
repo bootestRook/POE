@@ -1,0 +1,21 @@
+{
+  "id": "dungeon_001",
+  "biome": "dungeon",
+  "display_name": "???? 001",
+  "background": "background.png",
+  "walkable_mask": "walkable_mask.png",
+  "blocker_mask": "blocker_mask.png",
+  "spawn_mask": "spawn_mask.png",
+  "pixel_width": 2048,
+  "pixel_height": 2048,
+  "world_width": 2048,
+  "world_height": 2048,
+  "grid_size": 32,
+  "player_spawn_policy": "blue_mask_centroid",
+  "enemy_spawn_policy": "green_mask_random_points",
+  "elite_spawn_policy": "yellow_mask_random_points",
+  "boss_spawn_policy": "magenta_mask_centroid",
+  "exit_policy": "cyan_mask_centroid",
+  "collision_source": "blocker_mask",
+  "navigation_source": "walkable_mask"
+}

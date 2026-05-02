@@ -325,8 +325,19 @@ class SkillRuntime:
         modules = runtime_params.get("modules", [])
         if not isinstance(modules, list):
             raise SkillRuntimeError("module chain requires modules")
-        projectile_module = _first_module(modules, "projectile")
+        orbit_module = _first_module(modules, "orbit_emitter")
         damage_zone_module = _first_module(modules, "damage_zone")
+        if orbit_module is not None and damage_zone_module is not None:
+            return self._orbit_module_chain_events(
+                skill,
+                source_entity=source_entity,
+                source_position=source_position,
+                targets=targets,
+                timestamp_ms=timestamp_ms,
+                orbit_module=orbit_module,
+                damage_zone_module=damage_zone_module,
+            )
+        projectile_module = _first_module(modules, "projectile")
         if projectile_module is None or damage_zone_module is None:
             raise SkillRuntimeError("module chain requires projectile and damage_zone modules")
         projectile_params = _module_params(projectile_module)
@@ -568,6 +579,271 @@ class SkillRuntime:
                     )
                 )
                 next_index += 1
+        return _sorted_events(events)
+
+    def _orbit_module_chain_events(
+        self,
+        skill: FinalSkillInstance,
+        *,
+        source_entity: str,
+        source_position: dict[str, float],
+        targets: tuple[_RuntimeTarget, ...],
+        timestamp_ms: int,
+        orbit_module: dict[str, Any],
+        damage_zone_module: dict[str, Any],
+    ) -> tuple[SkillEvent, ...]:
+        orbit_params = _module_params(orbit_module)
+        zone_params = _module_params(damage_zone_module)
+        trigger_params = _module_trigger(damage_zone_module)
+        presentation = skill.presentation_keys or {}
+        origin = dict(source_position)
+        primary_target = _nearest_target(origin, targets) or _RuntimeTarget("", origin)
+        direction = _direction(origin, primary_target.position)
+        center_policy = str(orbit_params.get("orbit_center_policy", "caster"))
+        if center_policy != "caster":
+            raise SkillRuntimeError("orbit_emitter currently supports caster center only")
+        duration_ms = max(1, int(orbit_params.get("duration_ms", 1)))
+        tick_interval_ms = max(1, int(orbit_params.get("tick_interval_ms", duration_ms)))
+        if tick_interval_ms > duration_ms:
+            raise SkillRuntimeError("orbit tick interval must not exceed duration")
+        orbit_radius = max(1.0, float(orbit_params.get("orbit_radius", 1.0)))
+        orbit_speed = float(orbit_params.get("orbit_speed_deg_per_sec", 0.0))
+        orb_count = max(1, int(orbit_params.get("orb_count", 1)))
+        start_angle = float(orbit_params.get("start_angle_deg", 0.0))
+        tick_marker_id = str(orbit_params.get("tick_marker_id", ""))
+        trigger_marker_id = str(trigger_params.get("trigger_marker_id", zone_params.get("trigger_marker_id", "")))
+        trigger_delay_ms = max(0, int(trigger_params.get("trigger_delay_ms", zone_params.get("trigger_delay_ms", 0))))
+        if not tick_marker_id or trigger_marker_id != tick_marker_id:
+            raise SkillRuntimeError("module chain trigger does not match orbit tick marker")
+        shape = str(zone_params.get("shape", "circle"))
+        if shape != "circle":
+            raise SkillRuntimeError("orbit module chain damage_zone currently supports circle")
+        radius = max(1.0, float(zone_params.get("radius", skill.hit.get("hit_radius", 72.0) if skill.hit else 72.0)))
+        max_targets = _max_targets(zone_params.get("max_targets"), len(targets) or 1)
+        hit_at_ms = max(0, int(zone_params.get("hit_at_ms", 0)))
+        spawn_vfx_key = str(orbit_params.get("spawn_vfx_key") or presentation.get("vfx", skill.visual_effect))
+        tick_vfx_key = str(orbit_params.get("tick_vfx_key") or spawn_vfx_key)
+        zone_vfx_key = str(zone_params.get("vfx_key") or zone_params.get("zone_vfx_key") or presentation.get("vfx", skill.visual_effect))
+        hit_vfx_key = presentation.get("hit_vfx_key", zone_vfx_key)
+        sfx_key = presentation.get("sfx", "")
+        floating_key = presentation.get("floating_text", "skill_event.lava_orb.floating_text")
+        reason_key = _damage_reason_key(skill)
+        damage_amount = skill.final_damage
+        orbit_id = f"{skill.active_gem_instance_id}.{timestamp_ms}.orbit.1"
+        events: list[SkillEvent] = [
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 0, "cast_start"),
+                type="cast_start",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction=direction,
+                delay_ms=0,
+                duration_ms=0,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=presentation.get("cast_vfx_key", spawn_vfx_key),
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={"skill_id": skill.skill_package_id or skill.skill_template_id},
+            ),
+            SkillEvent(
+                event_id=_event_id(skill, timestamp_ms, 1, "orbit_spawn"),
+                type="orbit_spawn",
+                timestamp_ms=timestamp_ms,
+                source_entity=source_entity,
+                target_entity=primary_target.entity_id,
+                position=origin,
+                direction={"x": 0.0, "y": 0.0},
+                delay_ms=0,
+                duration_ms=duration_ms,
+                amount=None,
+                damage_type=skill.damage_type,
+                skill_instance_id=skill.active_gem_instance_id,
+                vfx_key=spawn_vfx_key,
+                sfx_key=sfx_key,
+                reason_key="",
+                payload={
+                    "orbit_id": orbit_id,
+                    "skill_id": skill.skill_package_id or skill.skill_template_id,
+                    "orbit_center": dict(origin),
+                    "orbit_center_policy": center_policy,
+                    "orbit_radius": orbit_radius,
+                    "duration_ms": duration_ms,
+                    "tick_interval_ms": tick_interval_ms,
+                    "orb_count": orb_count,
+                    "orbit_speed_deg_per_sec": orbit_speed,
+                    "start_angle_deg": start_angle,
+                    "spawn_vfx_key": spawn_vfx_key,
+                },
+            ),
+        ]
+        next_index = 2
+        floating_text = _damage_text(damage_amount, skill.damage_type)
+        for tick_index, tick_time_ms in tick_schedule(duration_ms, tick_interval_ms):
+            for orb_index in range(orb_count):
+                orb_position = _orbit_position(
+                    origin,
+                    radius=orbit_radius,
+                    speed_deg_per_sec=orbit_speed,
+                    start_angle_deg=start_angle + (360.0 / orb_count) * orb_index,
+                    timestamp_ms=tick_time_ms,
+                )
+                tick_event_id = _event_id(skill, timestamp_ms, next_index, "orbit_tick")
+                tick_payload = {
+                    "orbit_id": orbit_id,
+                    "skill_id": skill.skill_package_id or skill.skill_template_id,
+                    "tick_index": tick_index,
+                    "tick_time_ms": tick_time_ms,
+                    "orb_index": orb_index,
+                    "orb_count": orb_count,
+                    "orb_position": dict(orb_position),
+                    "tick_marker_id": tick_marker_id,
+                    "marker_id": tick_marker_id,
+                    "tick_vfx_key": tick_vfx_key,
+                    "orbit_radius": orbit_radius,
+                    "orbit_speed_deg_per_sec": orbit_speed,
+                }
+                events.append(
+                    SkillEvent(
+                        event_id=tick_event_id,
+                        type="orbit_tick",
+                        timestamp_ms=timestamp_ms + tick_time_ms,
+                        source_entity=source_entity,
+                        target_entity=primary_target.entity_id,
+                        position=orb_position,
+                        direction={"x": 0.0, "y": 0.0},
+                        delay_ms=tick_time_ms,
+                        duration_ms=0,
+                        amount=None,
+                        damage_type=skill.damage_type,
+                        skill_instance_id=skill.active_gem_instance_id,
+                        vfx_key=tick_vfx_key,
+                        sfx_key=sfx_key,
+                        reason_key="",
+                        payload=tick_payload,
+                    )
+                )
+                next_index += 1
+                zone_delay_ms = tick_time_ms + trigger_delay_ms
+                damage_delay_ms = zone_delay_ms + hit_at_ms
+                zone_id = f"{skill.active_gem_instance_id}.{timestamp_ms}.damage_zone.{tick_index}.{orb_index}"
+                hit_targets = _damage_zone_hit_targets(
+                    orb_position,
+                    {"x": 0.0, "y": 0.0},
+                    targets,
+                    shape="circle",
+                    radius=radius,
+                    length=0.0,
+                    width=0.0,
+                    max_targets=max_targets,
+                )
+                zone_payload = {
+                    "zone_id": zone_id,
+                    "orbit_id": orbit_id,
+                    "skill_id": skill.skill_package_id or skill.skill_template_id,
+                    "shape": "circle",
+                    "origin": dict(orb_position),
+                    "origin_world_position": dict(orb_position),
+                    "origin_policy": "trigger_position",
+                    "trigger_marker_id": trigger_marker_id,
+                    "source_tick_event_id": tick_event_id,
+                    "tick_index": tick_index,
+                    "tick_time_ms": tick_time_ms,
+                    "orb_index": orb_index,
+                    "orb_position": dict(orb_position),
+                    "delay_ms": trigger_delay_ms,
+                    "radius": radius,
+                    "ring_width": float(zone_params.get("ring_width", 28.0)),
+                    "hit_at_ms": hit_at_ms,
+                    "max_targets": max_targets,
+                    "damage_type": skill.damage_type,
+                    "vfx_key": zone_vfx_key,
+                    "zone_vfx_key": zone_vfx_key,
+                    "hit_target_count": len(hit_targets),
+                }
+                events.append(
+                    SkillEvent(
+                        event_id=_event_id(skill, timestamp_ms, next_index, "damage_zone"),
+                        type="damage_zone",
+                        timestamp_ms=timestamp_ms + zone_delay_ms,
+                        source_entity=source_entity,
+                        target_entity=primary_target.entity_id,
+                        position=orb_position,
+                        direction={"x": 0.0, "y": 0.0},
+                        delay_ms=zone_delay_ms,
+                        duration_ms=max(180, hit_at_ms),
+                        amount=None,
+                        damage_type=skill.damage_type,
+                        skill_instance_id=skill.active_gem_instance_id,
+                        vfx_key=zone_vfx_key,
+                        sfx_key=sfx_key,
+                        reason_key="",
+                        payload=zone_payload,
+                    )
+                )
+                next_index += 1
+                if hit_targets:
+                    events.append(
+                        SkillEvent(
+                            event_id=_event_id(skill, timestamp_ms, next_index, "hit_vfx"),
+                            type="hit_vfx",
+                            timestamp_ms=timestamp_ms + damage_delay_ms,
+                            source_entity=source_entity,
+                            target_entity=primary_target.entity_id,
+                            position=dict(orb_position),
+                            direction={"x": 0.0, "y": 0.0},
+                            delay_ms=damage_delay_ms,
+                            duration_ms=420,
+                            amount=None,
+                            damage_type=skill.damage_type,
+                            skill_instance_id=skill.active_gem_instance_id,
+                            vfx_key=hit_vfx_key,
+                            sfx_key=sfx_key,
+                            reason_key=reason_key,
+                            payload={**zone_payload, "hit_world_position": dict(orb_position), "skill_name": skill.skill_package_id or skill.skill_template_id},
+                        )
+                    )
+                    next_index += 1
+                for target, target_payload in hit_targets:
+                    target_direction = _direction(orb_position, target.position)
+                    hit_payload = {
+                        **zone_payload,
+                        **target_payload,
+                        "target_world_position": dict(target.position),
+                        "hit_world_position": dict(target.position),
+                        "skill_name": skill.skill_package_id or skill.skill_template_id,
+                    }
+                    for event_type, amount, duration, event_vfx, event_reason, position in (
+                        ("damage", damage_amount, 0, hit_vfx_key, reason_key, target.position),
+                        ("floating_text", damage_amount, 800, hit_vfx_key, floating_key, {"x": target.position["x"], "y": target.position["y"] - 28.0}),
+                    ):
+                        payload = {**hit_payload}
+                        if event_type == "floating_text":
+                            payload["text"] = floating_text
+                        events.append(
+                            SkillEvent(
+                                event_id=_event_id(skill, timestamp_ms, next_index, event_type),
+                                type=event_type,
+                                timestamp_ms=timestamp_ms + damage_delay_ms,
+                                source_entity=source_entity,
+                                target_entity=target.entity_id,
+                                position=dict(position),
+                                direction=target_direction,
+                                delay_ms=damage_delay_ms,
+                                duration_ms=duration,
+                                amount=amount,
+                                damage_type=skill.damage_type,
+                                skill_instance_id=skill.active_gem_instance_id,
+                                vfx_key=event_vfx,
+                                sfx_key=sfx_key,
+                                reason_key=event_reason,
+                                payload=payload,
+                            )
+                        )
+                        next_index += 1
         return _sorted_events(events)
 
     def _chain_events(
@@ -1048,7 +1324,7 @@ class SkillRuntime:
         max_distance = max(1.0, float(runtime_params.get("max_distance", 520.0)))
         pierce_count = max(0, int(runtime_params.get("pierce_count", 0)))
         hit_policy = str(runtime_params.get("hit_policy", "first_hit"))
-        visual_distance = max_distance if hit_policy == "pierce" or pierce_count > 0 else 0.0
+        visual_distance = max_distance if pierce_count > 0 else 0.0
         spawn_position = _spawn_position(source_position, runtime_params)
         distance = hypot(target_position["x"] - spawn_position["x"], target_position["y"] - spawn_position["y"])
         visual_distance = visual_distance or distance
@@ -1118,7 +1394,7 @@ class SkillRuntime:
                     "vfx_direction_world": dict(projectile_direction),
                     "projectile_index": index + 1,
                     "projectile_count": projectile_count,
-                    "pierce_remaining": pierce_count if hit_policy == "pierce" or pierce_count > 0 else 0,
+                    "pierce_remaining": pierce_count,
                     "projectile_speed": projectile_speed,
                     "lifetime_ms": duration_ms,
                     "expire_time_ms": timestamp_ms + index * burst_interval_ms + duration_ms,
@@ -1151,13 +1427,13 @@ class SkillRuntime:
                     "x": projectile_direction["x"] * projectile_speed,
                     "y": projectile_direction["y"] * projectile_speed,
                 },
-                "pierce_remaining": pierce_count if hit_policy == "pierce" or pierce_count > 0 else 0,
+                "pierce_remaining": pierce_count,
                 "projectile_speed": projectile_speed,
                 "lifetime_ms": duration_ms,
                 "expire_time_ms": timestamp_ms + projectile_delay_ms + duration_ms,
                 "expire_world_position": _projectile_end_position(spawn_position, projectile_direction, visual_distance),
-                "projectile_continues": impact_delay_ms < projectile_delay_ms + duration_ms,
-                "impact_kind": "projectile_hit_continue" if impact_delay_ms < projectile_delay_ms + duration_ms else "projectile_final_impact",
+                "projectile_continues": pierce_count > 0,
+                "impact_kind": "projectile_hit_continue" if pierce_count > 0 else "projectile_final_impact",
                 "local_spread_angle": spread_angles[index],
                 "fan_angle": spread_angle_deg,
                 "hit_policy": hit_policy,
@@ -1270,8 +1546,8 @@ class SkillRuntime:
         )
         pierce_count = max(0, int(runtime_params.get("pierce_count", 0)))
         hit_policy = str(runtime_params.get("hit_policy", "first_hit"))
-        max_hits_per_projectile = pierce_count + 1 if hit_policy == "pierce" or pierce_count > 0 else 1
-        visual_distance = max_distance if hit_policy == "pierce" or pierce_count > 0 else 0.0
+        max_hits_per_projectile = pierce_count + 1 if pierce_count > 0 else 1
+        visual_distance = max_distance if pierce_count > 0 else 0.0
         spawn_position = _spawn_position(source_position, runtime_params)
         primary_target = min(
             targets,
@@ -1355,7 +1631,7 @@ class SkillRuntime:
                         "vfx_direction_world": dict(projectile_direction),
                         "projectile_index": projectile_index,
                         "projectile_count": projectile_count,
-                        "pierce_remaining": pierce_count if hit_policy == "pierce" or pierce_count > 0 else 0,
+                        "pierce_remaining": pierce_count,
                         "projectile_speed": projectile_speed,
                         "lifetime_ms": duration_ms,
                         "expire_time_ms": timestamp_ms + projectile_delay_ms + duration_ms,
@@ -1390,7 +1666,7 @@ class SkillRuntime:
                 impact_delay_ms = projectile_delay_ms + impact_duration_ms
                 impact_position = _projectile_end_position(spawn_position, projectile_direction, forward)
                 pierce_remaining = max(0, max_hits_per_projectile - hit_order - 1)
-                projectile_continues = pierce_remaining > 0 or impact_delay_ms < projectile_delay_ms + duration_ms
+                projectile_continues = pierce_remaining > 0
                 projectile_payload = {
                     "projectile_index": projectile_index,
                     "projectile_count": projectile_count,
@@ -1513,8 +1789,10 @@ def _runtime_event_sort_order(event_type: str) -> int:
         "area_spawn": 1,
         "chain_segment": 1,
         "melee_arc": 1,
+        "orbit_spawn": 1,
         "damage_zone": 1,
         "projectile_spawn": 1,
+        "orbit_tick": 2,
         "projectile_impact": 2,
         "damage_zone_prime": 3,
         "projectile_hit": 4,
@@ -1577,6 +1855,35 @@ def _duration_ms(distance: float, projectile_speed: float, min_duration_ms: int,
     if max_duration_ms is not None:
         duration_ms = min(duration_ms, max_duration_ms)
     return max(min_duration_ms, duration_ms)
+
+
+def tick_schedule(duration_ms: int, tick_interval_ms: int) -> tuple[tuple[int, int], ...]:
+    if duration_ms <= 0 or tick_interval_ms <= 0:
+        raise SkillRuntimeError("tick schedule duration and interval must be positive")
+    if tick_interval_ms > duration_ms:
+        raise SkillRuntimeError("tick schedule interval must not exceed duration")
+    ticks: list[tuple[int, int]] = []
+    timestamp = tick_interval_ms
+    while timestamp <= duration_ms:
+        ticks.append((len(ticks), timestamp))
+        timestamp += tick_interval_ms
+    return tuple(ticks)
+
+
+def _orbit_position(
+    center: dict[str, float],
+    *,
+    radius: float,
+    speed_deg_per_sec: float,
+    start_angle_deg: float,
+    timestamp_ms: int,
+) -> dict[str, float]:
+    angle_deg = start_angle_deg + speed_deg_per_sec * (timestamp_ms / 1000.0)
+    angle_rad = angle_deg * pi / 180.0
+    return {
+        "x": center["x"] + cos(angle_rad) * radius,
+        "y": center["y"] + sin(angle_rad) * radius,
+    }
 
 
 def _optional_int(value: Any) -> int | None:

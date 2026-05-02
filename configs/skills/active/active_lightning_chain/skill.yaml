@@ -10,7 +10,7 @@ classification:
 cast:
   mode: spell
   target_selector: nearest_enemy
-  search_range: 520
+  search_range: 380
   cooldown_ms: 1000
   windup_ms: 80
   recovery_ms: 100
@@ -18,8 +18,8 @@ behavior:
   template: chain
   params:
     chain_count: 4
-    chain_radius: 180
-    chain_delay_ms: 120
+    chain_radius: 165
+    chain_delay_ms: 90
     damage_falloff_per_chain: 0.18
     target_policy: nearest_not_hit
     allow_repeat_target: false

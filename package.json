@@ -1,10 +1,11 @@
 {
   "scripts": {
     "dev": "python tools\\dev_webapp.py",
-    "dev:vite": "vite --host 127.0.0.1",
+    "dev:vite": "vite",
     "build": "vite build",
     "start": "python tools\\webapp_server.py --open",
-    "test": "node webapp\\smoke-test.mjs"
+    "test": "node webapp\\smoke-test.mjs",
+    "check:hygiene": "python tools\\check_repo_hygiene.py"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.0",

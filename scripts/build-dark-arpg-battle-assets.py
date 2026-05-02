@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BATTLE_ROOT = ROOT / "assest" / "battle"
+BATTLE_ROOT = ROOT / "assets" / "battle"
 TILE_ROOT = BATTLE_ROOT / "tiles"
 EDGE_ROOT = BATTLE_ROOT / "edges"
 PROP_ROOT = BATTLE_ROOT / "props"

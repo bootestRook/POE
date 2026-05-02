@@ -63,6 +63,7 @@
             "player_nova",
             "melee_arc",
             "damage_zone",
+            "orbit_emitter",
             "line_pierce",
             "orbit",
             "delayed_area"
@@ -130,6 +131,16 @@
             "damage_falloff_per_chain": { "type": "number", "minimum": 0, "maximum": 1 },
             "allow_repeat_target": { "type": "boolean" },
             "segment_vfx_key": { "$ref": "#/$defs/localization_key" }
+            ,"orbit_center_policy": { "enum": ["caster"] },
+            "duration_ms": { "type": "integer", "minimum": 1 },
+            "tick_interval_ms": { "type": "integer", "minimum": 1 },
+            "orbit_radius": { "type": "number", "minimum": 1 },
+            "orbit_speed_deg_per_sec": { "type": "number" },
+            "orb_count": { "type": "integer", "minimum": 1 },
+            "start_angle_deg": { "type": "number" },
+            "tick_marker_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            "spawn_vfx_key": { "$ref": "#/$defs/localization_key" },
+            "tick_vfx_key": { "$ref": "#/$defs/localization_key" }
           }
         }
       }
@@ -143,7 +154,7 @@
         "required": ["id", "type", "params"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-          "type": { "enum": ["projectile", "damage_zone", "chain", "player_nova", "melee_arc", "line_pierce", "orbit"] },
+          "type": { "enum": ["projectile", "damage_zone", "orbit_emitter", "chain", "player_nova", "melee_arc", "line_pierce", "orbit"] },
           "trigger": {
             "type": "object",
             "additionalProperties": false,
@@ -215,6 +226,11 @@
               "base_cooldown_ms",
               "damage_type",
               "damage_form"
+              ,"duration_ms",
+              "tick_interval_ms",
+              "orbit_radius",
+              "orb_count",
+              "radius"
             ]
           },
           "minItems": 1

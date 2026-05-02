@@ -10,7 +10,7 @@ classification:
 cast:
   mode: spell
   target_selector: nearest_enemy
-  search_range: 520
+  search_range: 420
   cooldown_ms: 1300
   windup_ms: 120
   recovery_ms: 120
@@ -18,15 +18,15 @@ behavior:
   template: projectile
   params:
     trajectory: ballistic
-    travel_time_ms: 760
+    travel_time_ms: 620
     arc_height: 220
     target_policy: target_position
     impact_marker_id: fungal_impact
     projectile_count: 1
-    projectile_speed: 690
+    projectile_speed: 620
     projectile_width: 34
     projectile_height: 34
-    max_distance: 520
+    max_distance: 420
     hit_policy: first_hit
     pierce_count: 0
     collision_radius: 18
@@ -34,9 +34,9 @@ behavior:
       x: 0
       y: -12
     projectile_radius: 16
-    impact_radius: 180
+    impact_radius: 150
     max_targets: 999
-modules: [{"id": "fungal_projectile", "type": "projectile", "params": {"trajectory": "ballistic", "travel_time_ms": 760, "arc_height": 220, "target_policy": "target_position", "impact_marker_id": "fungal_impact", "projectile_count": 1, "projectile_speed": 690, "projectile_width": 34, "projectile_height": 34, "max_distance": 520, "hit_policy": "first_hit", "pierce_count": 0, "collision_radius": 18, "spawn_offset": {"x": 0, "y": -12}, "projectile_radius": 16, "impact_radius": 180, "max_targets": 999, "vfx_key": "skill_event.fungal_petards.projectile"}}, {"id": "fungal_explosion_zone", "type": "damage_zone", "trigger": {"trigger_marker_id": "fungal_impact", "trigger_delay_ms": 420}, "params": {"shape": "circle", "origin_policy": "trigger_position", "facing_policy": "none", "radius": 180, "hit_at_ms": 420, "max_targets": 999, "status_chance_scale": 1, "vfx_key": "skill_event.fungal_petards.explode", "ring_width": 54}}]
+modules: [{"id": "fungal_projectile", "type": "projectile", "params": {"trajectory": "ballistic", "travel_time_ms": 620, "arc_height": 220, "target_policy": "target_position", "impact_marker_id": "fungal_impact", "projectile_count": 1, "projectile_speed": 620, "projectile_width": 34, "projectile_height": 34, "max_distance": 420, "hit_policy": "first_hit", "pierce_count": 0, "collision_radius": 18, "spawn_offset": {"x": 0, "y": -12}, "projectile_radius": 16, "impact_radius": 150, "max_targets": 999, "vfx_key": "skill_event.fungal_petards.projectile"}}, {"id": "fungal_explosion_zone", "type": "damage_zone", "trigger": {"trigger_marker_id": "fungal_impact", "trigger_delay_ms": 320}, "params": {"shape": "circle", "origin_policy": "trigger_position", "facing_policy": "none", "radius": 150, "hit_at_ms": 420, "max_targets": 999, "status_chance_scale": 1, "vfx_key": "skill_event.fungal_petards.explode", "ring_width": 54}}]
 hit:
   base_damage: 18
   can_crit: true

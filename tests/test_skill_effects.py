@@ -45,11 +45,24 @@ class SkillEffectTest(unittest.TestCase):
             },
         )
 
+    def _fresh_calculator(self) -> tuple[GemInventory, SudokuGemBoard, SkillEffectCalculator]:
+        inventory = GemInventory(self.definitions)
+        board = SudokuGemBoard(load_board_rules(self.config_root), inventory)
+        calculator = SkillEffectCalculator(
+            board=board,
+            definitions=self.definitions,
+            skill_templates=load_skill_templates(self.config_root),
+            relation_coefficients=load_relation_coefficients(self.config_root),
+            scaling_rules=load_skill_scaling_rules(self.config_root),
+            affix_definitions={},
+        )
+        return inventory, board, calculator
+
     def test_active_fire_bolt_loads_from_skill_package(self) -> None:
         packages = load_skill_packages(self.config_root)
         templates = load_skill_templates(self.config_root)
 
-        self.assertEqual(set(packages), {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain"})
+        self.assertEqual(set(packages), {"active_fire_bolt", "active_ice_shards", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_lightning_chain", "active_fungal_petards", "active_lava_orb"})
         self.assertEqual(packages["active_fire_bolt"]["behavior"]["template"], "projectile")
         self.assertEqual(packages["active_ice_shards"]["behavior"]["template"], "projectile")
         self.assertEqual(packages["active_penetrating_shot"]["behavior"]["template"], "projectile")
@@ -76,6 +89,147 @@ class SkillEffectTest(unittest.TestCase):
         self.assertEqual(templates["skill_lightning_chain"].skill_package_id, "active_lightning_chain")
         self.assertEqual(templates["skill_lightning_chain"].behavior_template, "chain")
         self.assertEqual(templates["skill_lightning_chain"].damage_type, "lightning")
+        self.assertEqual(templates["skill_fungal_petards"].skill_package_id, "active_fungal_petards")
+        self.assertEqual(templates["skill_fungal_petards"].behavior_template, "module_chain")
+        self.assertEqual(templates["skill_lava_orb"].skill_package_id, "active_lava_orb")
+        self.assertEqual(templates["skill_lava_orb"].behavior_template, "module_chain")
+
+    def test_gem_definitions_load_from_skill_package_dirs(self) -> None:
+        self.assertFalse((self.config_root / "gems" / "active_skill_gems.toml").exists())
+        self.assertFalse((self.config_root / "gems" / "passive_skill_gems.toml").exists())
+        self.assertFalse((self.config_root / "gems" / "support_gems.toml").exists())
+        self.assertEqual(sum(1 for definition in self.definitions.values() if definition.gem_kind == "active_skill"), 8)
+        self.assertEqual(sum(1 for definition in self.definitions.values() if definition.gem_kind == "passive_skill"), 3)
+        self.assertEqual(sum(1 for definition in self.definitions.values() if definition.gem_kind == "support"), 65)
+
+    def test_all_migrated_active_and_passive_skill_gems_take_effect(self) -> None:
+        active_ids = sorted(
+            definition.base_gem_id
+            for definition in self.definitions.values()
+            if definition.gem_kind == "active_skill"
+        )
+        for active_id in active_ids:
+            with self.subTest(active=active_id):
+                inventory, board, calculator = self._fresh_calculator()
+                inventory.add_instance("active", active_id)
+                board.mount_gem("active", 0, 0)
+                final_skill = calculator.calculate_all()[0]
+                self.assertEqual(final_skill.base_gem_id, active_id)
+                self.assertEqual(final_skill.skill_package_id, active_id)
+                self.assertGreater(final_skill.final_damage, 0)
+
+        for passive_id in ["passive_fire_focus", "passive_vitality", "passive_swift_gathering"]:
+            with self.subTest(passive=passive_id):
+                inventory, board, calculator = self._fresh_calculator()
+                inventory.add_instance("active", "active_fire_bolt")
+                inventory.add_instance("passive", passive_id)
+                board.mount_gem("active", 0, 0)
+                board.mount_gem("passive", 1, 0)
+                if passive_id == "passive_fire_focus":
+                    final_skill = calculator.calculate_all()[0]
+                    self.assertTrue(
+                        any(
+                            modifier.source_base_gem_id == passive_id
+                            and modifier.reason_key == "modifier.passive_base"
+                            and modifier.applied
+                            for modifier in final_skill.applied_modifiers
+                        )
+                    )
+                else:
+                    class PlayerStub:
+                        current_life = 100
+                        max_life = 100
+                        move_speed = 1.0
+
+                    player = PlayerStub()
+                    calculator.apply_player_stat_contributions(player)
+                    if passive_id == "passive_vitality":
+                        self.assertEqual(player.max_life, 125)
+                    if passive_id == "passive_swift_gathering":
+                        self.assertAlmostEqual(player.move_speed, 1.1)
+
+    def test_all_migrated_support_skill_gems_take_effect(self) -> None:
+        active_definitions = [
+            definition
+            for definition in self.definitions.values()
+            if definition.gem_kind == "active_skill"
+        ]
+
+        def matches_active(support_definition: object, active_definition: object) -> bool:
+            if "active_skill" not in support_definition.apply_filter_target_kinds:
+                return False
+            if support_definition.apply_filter_tags_any and not (
+                support_definition.apply_filter_tags_any & active_definition.tags
+            ):
+                return False
+            if support_definition.apply_filter_tags_all and not (
+                support_definition.apply_filter_tags_all <= active_definition.tags
+            ):
+                return False
+            if support_definition.apply_filter_tags_none and (
+                support_definition.apply_filter_tags_none & active_definition.tags
+            ):
+                return False
+            return True
+
+        conduit_positions = {
+            "support_row_conduit": ((0, 0), (0, 3), (0, 6)),
+            "support_column_conduit": ((0, 0), (3, 0), (6, 0)),
+            "support_box_conduit": ((0, 0), (1, 1), (2, 2)),
+        }
+        support_definitions = sorted(
+            (
+                definition
+                for definition in self.definitions.values()
+                if definition.gem_kind == "support"
+            ),
+            key=lambda definition: definition.base_gem_id,
+        )
+        for support_definition in support_definitions:
+            support_id = support_definition.base_gem_id
+            with self.subTest(support=support_id):
+                inventory, board, calculator = self._fresh_calculator()
+                if support_id in conduit_positions:
+                    active_pos, support_pos, conduit_pos = conduit_positions[support_id]
+                    inventory.add_instance("active", "active_fire_bolt")
+                    inventory.add_instance("support", "support_fire_mastery")
+                    inventory.add_instance("conduit", support_id)
+                    board.mount_gem("active", *active_pos)
+                    board.mount_gem("support", *support_pos)
+                    board.mount_gem("conduit", *conduit_pos)
+                    final_skill = calculator.calculate_all()[0]
+                    self.assertTrue(
+                        any(
+                            modifier.source_base_gem_id == support_id
+                            and modifier.reason_key == "modifier.conduit_amplifier"
+                            and modifier.applied
+                            for modifier in final_skill.applied_modifiers
+                        )
+                    )
+                    continue
+
+                candidates = [
+                    definition.base_gem_id
+                    for definition in active_definitions
+                    if matches_active(support_definition, definition)
+                ]
+                self.assertTrue(candidates)
+                inventory.add_instance("active", candidates[0])
+                inventory.add_instance("support", support_id)
+                board.mount_gem("active", 0, 0)
+                board.mount_gem("support", 0, 1)
+                final_skill = calculator.calculate_all()[0]
+                if support_definition.shape_effect:
+                    self.assertIn(support_definition.shape_effect, final_skill.shape_effects)
+                else:
+                    self.assertTrue(
+                        any(
+                            modifier.source_base_gem_id == support_id
+                            and modifier.reason_key == "modifier.support_base"
+                            and modifier.applied
+                            for modifier in final_skill.applied_modifiers
+                        )
+                    )
 
     def test_skill_package_schema_rejects_missing_required_field(self) -> None:
         package = deepcopy(load_skill_packages(self.config_root)["active_fire_bolt"])

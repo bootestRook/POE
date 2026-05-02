@@ -22,7 +22,7 @@ from liufang.config import (
 from liufang.gem_board import SudokuGemBoard
 from liufang.inventory import GemInventory
 from liufang.skill_effects import SkillEffectCalculator
-from liufang.skill_runtime import SkillRuntime
+from liufang.skill_runtime import SkillRuntime, tick_schedule
 
 
 class SkillRuntimeTest(unittest.TestCase):
@@ -209,6 +209,47 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertEqual(len(damage_events), 4)
         self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2"})
 
+    def test_projectile_with_zero_pierce_stops_on_first_hit_even_with_pierce_policy(self) -> None:
+        self.inventory.add_instance("active", "active_fire_bolt")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        runtime_params = {
+            **(final_skill.runtime_params or {}),
+            "projectile_count": 1,
+            "spread_angle_deg": 0,
+            "hit_policy": "pierce",
+            "pierce_count": 0,
+            "max_distance": 520,
+        }
+        final_skill = replace(final_skill, projectile_count=1, runtime_params=runtime_params)
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, 0),
+            target_entity="monster_1",
+            target_position=Position(100, 0),
+            timestamp_ms=10,
+            target_entities=[
+                {"entity_id": "monster_1", "position": {"x": 100, "y": 0}},
+                {"entity_id": "monster_2", "position": {"x": 160, "y": 0}},
+            ],
+        )
+
+        spawn = next(event for event in events if event.type == "projectile_spawn")
+        hit = next(event for event in events if event.type == "projectile_hit")
+        damage_events = [event for event in events if event.type == "damage"]
+
+        self.assertEqual(len(damage_events), 1)
+        self.assertEqual(damage_events[0].target_entity, "monster_1")
+        self.assertAlmostEqual(spawn.payload["end_position"]["x"], hit.position["x"])
+        self.assertAlmostEqual(spawn.payload["end_position"]["y"], hit.position["y"])
+        self.assertAlmostEqual(spawn.payload["expire_world_position"]["x"], hit.position["x"])
+        self.assertAlmostEqual(spawn.payload["expire_world_position"]["y"], hit.position["y"])
+        self.assertFalse(hit.payload["projectile_continues"])
+        self.assertEqual(hit.payload["impact_kind"], "projectile_final_impact")
+        self.assertEqual(hit.payload["pierce_remaining"], 0)
+
     def test_fire_bolt_projectile_respects_angle_step(self) -> None:
         self.inventory.add_instance("active", "active_fire_bolt")
         self.board.mount_gem("active", 0, 0)
@@ -309,17 +350,17 @@ class SkillRuntimeTest(unittest.TestCase):
         prime = by_type["damage_zone_prime"]
         zone = by_type["damage_zone"]
         self.assertEqual(spawn.payload["trajectory"], "ballistic")
-        self.assertEqual(spawn.payload["travel_time_ms"], 760)
+        self.assertEqual(spawn.payload["travel_time_ms"], 620)
         self.assertEqual(spawn.payload["arc_height"], 220)
         self.assertEqual(spawn.payload["impact_marker_id"], "fungal_impact")
         self.assertEqual(impact.payload["marker_id"], "fungal_impact")
         self.assertEqual(impact.payload["impact_position"], {"x": 360.0, "y": -12.0})
         self.assertEqual(prime.payload["trigger_marker_id"], "fungal_impact")
-        self.assertEqual(prime.payload["delay_ms"], 420)
+        self.assertEqual(prime.payload["delay_ms"], 320)
         self.assertEqual(zone.payload["shape"], "circle")
         self.assertEqual(zone.payload["origin"], impact.payload["impact_position"])
-        self.assertEqual(zone.payload["radius"], 180)
-        self.assertEqual(zone.timestamp_ms, impact.timestamp_ms + 420)
+        self.assertEqual(zone.payload["radius"], 150)
+        self.assertEqual(zone.timestamp_ms, impact.timestamp_ms + 320)
         self.assertTrue(all(event.timestamp_ms >= zone.timestamp_ms for event in damage_events))
         self.assertEqual({event.target_entity for event in damage_events}, {"monster_1", "monster_2"})
         self.assertTrue(all(event.damage_type == "physical" for event in damage_events))
@@ -507,6 +548,103 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertLess(len(narrow_damage), len(long_damage))
         self.assertTrue(all(event.delay_ms == 260 for event in narrow_damage))
 
+    def test_tick_schedule_outputs_reusable_interval_ticks(self) -> None:
+        self.assertEqual(tick_schedule(900, 300), ((0, 300), (1, 600), (2, 900)))
+        self.assertEqual(tick_schedule(1000, 400), ((0, 400), (1, 800)))
+
+    def test_lava_orb_module_chain_emits_orbit_ticks_and_triggered_damage_zones(self) -> None:
+        self.inventory.add_instance("active", "active_lava_orb")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+
+        events = SkillRuntime().execute(
+            final_skill,
+            source_entity="player_1",
+            source_position=Position(0, -12),
+            target_entity="near",
+            target_position=Position(180, -12),
+            timestamp_ms=100,
+            target_entities=[
+                {"entity_id": "near", "position": {"x": 146, "y": 44}},
+                {"entity_id": "mid", "position": {"x": 154, "y": 80}},
+                {"entity_id": "far", "position": {"x": 360, "y": -12}},
+            ],
+        )
+
+        event_types = [event.type for event in events]
+        orbit_spawn = next(event for event in events if event.type == "orbit_spawn")
+        orbit_ticks = [event for event in events if event.type == "orbit_tick"]
+        zones = [event for event in events if event.type == "damage_zone"]
+        damage_events = [event for event in events if event.type == "damage"]
+        first_tick = orbit_ticks[0]
+        first_zone = zones[0]
+
+        self.assertEqual(final_skill.skill_package_id, "active_lava_orb")
+        self.assertEqual(final_skill.behavior_template, "module_chain")
+        self.assertIn("cast_start", event_types)
+        self.assertEqual(orbit_spawn.payload["orbit_center"], {"x": 0.0, "y": -12.0})
+        self.assertEqual(orbit_spawn.payload["orbit_radius"], 150)
+        self.assertEqual(orbit_spawn.payload["duration_ms"], 3200)
+        self.assertEqual(orbit_spawn.payload["orb_count"], 1)
+        self.assertEqual(len(orbit_ticks), 8)
+        self.assertEqual(len(zones), len(orbit_ticks))
+        self.assertEqual(first_tick.payload["tick_marker_id"], "lava_orb_tick")
+        self.assertEqual(first_tick.payload["tick_time_ms"], 380)
+        self.assertIn("orb_position", first_tick.payload)
+        self.assertEqual(first_zone.payload["trigger_marker_id"], "lava_orb_tick")
+        self.assertEqual(first_zone.payload["origin"], first_tick.payload["orb_position"])
+        self.assertEqual(first_zone.payload["shape"], "circle")
+        self.assertEqual(first_zone.payload["damage_type"], "fire")
+        self.assertTrue(all(event.damage_type == "fire" for event in damage_events))
+        self.assertTrue(all(event.timestamp_ms >= first_zone.timestamp_ms for event in damage_events))
+        self.assertNotIn("damage", [event.type for event in events if event.timestamp_ms < first_zone.timestamp_ms])
+        self.assertNotIn("far", {event.target_entity for event in damage_events})
+
+    def test_lava_orb_parameters_change_ticks_positions_or_hit_range(self) -> None:
+        self.inventory.add_instance("active", "active_lava_orb")
+        self.board.mount_gem("active", 0, 0)
+        final_skill = self.calculator.calculate_all()[0]
+        base_params = dict(final_skill.runtime_params or {})
+        targets = [
+            {"entity_id": "near", "position": {"x": 146, "y": 44}},
+            {"entity_id": "mid", "position": {"x": 154, "y": 80}},
+            {"entity_id": "far", "position": {"x": 360, "y": -12}},
+        ]
+
+        def with_modules(mutator: object) -> object:
+            runtime_params = deepcopy(base_params)
+            mutator(runtime_params["modules"])
+            return replace(final_skill, runtime_params=runtime_params)
+
+        def run(skill: object) -> tuple:
+            return SkillRuntime().execute(
+                skill,
+                source_entity="player_1",
+                source_position=Position(0, -12),
+                target_entity="near",
+                target_position=Position(180, -12),
+                timestamp_ms=0,
+                target_entities=targets,
+            )
+
+        short = run(with_modules(lambda modules: modules[0]["params"].update({"duration_ms": 900})))
+        slow = run(with_modules(lambda modules: modules[0]["params"].update({"tick_interval_ms": 600})))
+        wide_orbit = run(with_modules(lambda modules: modules[0]["params"].update({"orbit_radius": 220})))
+        two_orbs = run(with_modules(lambda modules: modules[0]["params"].update({"orb_count": 2})))
+        narrow_zone = run(with_modules(lambda modules: modules[1]["params"].update({"radius": 24})))
+        wide_zone = run(with_modules(lambda modules: modules[1]["params"].update({"radius": 110})))
+
+        self.assertEqual(len([event for event in short if event.type == "orbit_tick"]), 2)
+        self.assertEqual(len([event for event in slow if event.type == "orbit_tick"]), 5)
+        base_first_position = next(event for event in run(final_skill) if event.type == "orbit_tick").payload["orb_position"]
+        wide_first_position = next(event for event in wide_orbit if event.type == "orbit_tick").payload["orb_position"]
+        self.assertNotEqual(base_first_position, wide_first_position)
+        self.assertEqual(len([event for event in two_orbs if event.type == "orbit_tick"]), 16)
+        self.assertLess(
+            len([event for event in narrow_zone if event.type == "damage"]),
+            len([event for event in wide_zone if event.type == "damage"]),
+        )
+
     def test_lightning_chain_outputs_ordered_chain_segments_and_timed_lightning_damage(self) -> None:
         self.inventory.add_instance("active", "active_lightning_chain")
         self.board.mount_gem("active", 0, 0)
@@ -540,8 +678,8 @@ class SkillRuntimeTest(unittest.TestCase):
         self.assertTrue(all(event.damage_type == "lightning" for event in damage_events))
         self.assertTrue(all(event.delay_ms >= final_skill.cast["windup_ms"] for event in damage_events))
         self.assertEqual([event.payload["segment_index"] for event in segments], [0, 1, 2])
-        self.assertEqual([event.delay_ms for event in segments], [80, 200, 320])
-        self.assertEqual([event.delay_ms for event in damage_events], [80, 200, 320])
+        self.assertEqual([event.delay_ms for event in segments], [80, 170, 260])
+        self.assertEqual([event.delay_ms for event in damage_events], [80, 170, 260])
         self.assertEqual(segments[0].payload["start_position"], {"x": 0, "y": 0})
         self.assertEqual(segments[1].payload["from_target"], "near")
         self.assertLess(damage_events[1].amount, damage_events[0].amount)

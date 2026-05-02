@@ -1,13 +1,12 @@
-import unitAnimationManifest from "../assest/battle/units/manifests/unit-animations-manifest.json";
+import unitAnimationManifest from "../assets/battle/units/manifests/unit-animations-manifest.json";
 
 export type UnitDirection = "down" | "down_right" | "right" | "up_right" | "up" | "up_left" | "left" | "down_left";
-export type UnitAnimationState = "idle" | "walk" | "run" | "attack";
+export type UnitAnimationState = "idle" | "walk" | "attack";
 export type UnitVisualType = "player_adventurer" | "enemy_imp" | "enemy_brute";
 
 export type UnitAnimationAsset = {
   id: string;
   path: string;
-  framesPath?: string;
   unitId: UnitVisualType;
   state: UnitAnimationState;
   direction: UnitDirection;
@@ -37,7 +36,8 @@ export type UnitAnimationManifest = {
 };
 
 const unitAnimationSheetUrls = import.meta.glob([
-  "../assest/battle/units/sheets/*.png"
+  "../assets/battle/units/sheets/*.png",
+  "!../assets/battle/units/sheets/*_run_*.png"
 ], {
   eager: true,
   query: "?url",
@@ -75,5 +75,5 @@ export function resolveUnitSprite(unitType: UnitVisualType, direction: UnitDirec
 
 export function selectEnemyUnitType(enemyId: number): UnitVisualType {
   void enemyId;
-  return "player_adventurer";
+  return "enemy_imp";
 }

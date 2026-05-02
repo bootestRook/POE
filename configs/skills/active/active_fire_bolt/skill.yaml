@@ -10,8 +10,8 @@ classification:
 cast:
   mode: spell
   target_selector: nearest_enemy
-  search_range: 520
-  cooldown_ms: 700
+  search_range: 380
+  cooldown_ms: 850
   windup_ms: 0
   recovery_ms: 0
 behavior:
@@ -19,18 +19,18 @@ behavior:
   params:
     max_targets: 1
     max_targets: 1
-    projectile_count: 3
-    spread_angle_deg: 60
-    projectile_speed: 520
-    projectile_width: 56
+    projectile_count: 1
+    spread_angle_deg: 0
+    projectile_speed: 620
+    projectile_width: 56.01
     projectile_height: 40
-    max_distance: 520
+    max_distance: 400
     hit_policy: first_hit
     pierce_count: 0
     collision_radius: 18
     spawn_offset:
-      x: -52
-      y: -53
+      x: -14
+      y: -20
     projectile_radius: 14
     impact_radius: 18
     max_targets: 1

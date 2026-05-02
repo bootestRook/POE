@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageEnhance
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TILE_ROOT = ROOT / "assest" / "battle" / "tiles"
+TILE_ROOT = ROOT / "assets" / "battle" / "tiles"
 RAW_IMAGE = TILE_ROOT / "raw" / "terrain-tiles-generated.png"
 CROPPED_DIR = TILE_ROOT / "cropped"
 MANIFEST_DIR = TILE_ROOT / "manifest"
@@ -77,7 +77,7 @@ def main() -> int:
                 "terrainKind": terrain_kind,
                 "width": TILE_SIZE,
                 "height": TILE_SIZE,
-                "src": f"/assest/battle/tiles/cropped/{tile_id}.png",
+                "src": f"/assets/battle/tiles/cropped/{tile_id}.png",
             }
         )
 

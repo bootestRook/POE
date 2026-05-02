@@ -9,7 +9,7 @@ from PIL import Image, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UNIT_ROOT = ROOT / "assest" / "battle" / "units"
+UNIT_ROOT = ROOT / "assets" / "battle" / "units"
 FRAME_ROOT = UNIT_ROOT / "frames" / "player_adventurer"
 SHEET_DIR = UNIT_ROOT / "sheets"
 MANIFEST_DIR = UNIT_ROOT / "manifests"
@@ -103,7 +103,6 @@ def write_sheet(action: str, direction: str, frames: list[Path]) -> dict[str, ob
         "direction": direction,
         "id": f"{UNIT_ID}_{action}_{direction}",
         "path": "/" + output.relative_to(ROOT).as_posix(),
-        "framesPath": "/" + (FRAME_ROOT / action / direction).relative_to(ROOT).as_posix(),
         "frameCount": FRAME_COUNT,
         "fps": fps,
         "loop": bool(ACTIONS[action]["loop"]),

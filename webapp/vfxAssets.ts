@@ -1,18 +1,18 @@
-import fireBoltManifest from "../assest/battle/vfx/fire_bolt/fire_bolt.vfx.json";
-import fireBoltImpactExplosionUrl from "../assest/battle/vfx/fire_bolt/fire_bolt_impact_explosion.png";
-import fireBoltProjectileLoopUrl from "../assest/battle/vfx/fire_bolt/fire_bolt_projectile_loop.png";
-import fireBoltSparksUrl from "../assest/battle/vfx/fire_bolt/fire_bolt_sparks.png";
-import fireBoltTrailPuffsUrl from "../assest/battle/vfx/fire_bolt/fire_bolt_trail_puffs.png";
-import iceShardsManifest from "../assest/battle/vfx/ice_shards/ice_shards.vfx.json";
-import iceShardsCrystalSparksUrl from "../assest/battle/vfx/ice_shards/ice_shards_crystal_sparks.png";
-import iceShardsImpactBurstUrl from "../assest/battle/vfx/ice_shards/ice_shards_impact_burst.png";
-import iceShardsProjectileLoopUrl from "../assest/battle/vfx/ice_shards/ice_shards_projectile_loop.png";
-import iceShardsTrailFrostUrl from "../assest/battle/vfx/ice_shards/ice_shards_trail_frost.png";
-import penetratingShotManifest from "../assest/battle/vfx/penetrating_shot/penetrating_shot.vfx.json";
-import penetratingShotImpactSparksUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_impact_sparks.png";
-import penetratingShotMuzzleFlashUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_muzzle_flash.png";
-import penetratingShotProjectileLoopUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_projectile_loop.png";
-import penetratingShotTrailLinesUrl from "../assest/battle/vfx/penetrating_shot/penetrating_shot_trail_lines.png";
+import fireBoltManifest from "../assets/battle/vfx/fire_bolt/fire_bolt.vfx.json";
+import fireBoltImpactExplosionUrl from "../assets/battle/vfx/fire_bolt/fire_bolt_impact_explosion.png";
+import fireBoltProjectileLoopUrl from "../assets/battle/vfx/fire_bolt/fire_bolt_projectile_loop.png";
+import fireBoltSparksUrl from "../assets/battle/vfx/fire_bolt/fire_bolt_sparks.png";
+import fireBoltTrailPuffsUrl from "../assets/battle/vfx/fire_bolt/fire_bolt_trail_puffs.png";
+import iceShardsManifest from "../assets/battle/vfx/ice_shards/ice_shards.vfx.json";
+import iceShardsCrystalSparksUrl from "../assets/battle/vfx/ice_shards/ice_shards_crystal_sparks.png";
+import iceShardsImpactBurstUrl from "../assets/battle/vfx/ice_shards/ice_shards_impact_burst.png";
+import iceShardsProjectileLoopUrl from "../assets/battle/vfx/ice_shards/ice_shards_projectile_loop.png";
+import iceShardsTrailFrostUrl from "../assets/battle/vfx/ice_shards/ice_shards_trail_frost.png";
+import penetratingShotManifest from "../assets/battle/vfx/penetrating_shot/penetrating_shot.vfx.json";
+import penetratingShotImpactSparksUrl from "../assets/battle/vfx/penetrating_shot/penetrating_shot_impact_sparks.png";
+import penetratingShotMuzzleFlashUrl from "../assets/battle/vfx/penetrating_shot/penetrating_shot_muzzle_flash.png";
+import penetratingShotProjectileLoopUrl from "../assets/battle/vfx/penetrating_shot/penetrating_shot_projectile_loop.png";
+import penetratingShotTrailLinesUrl from "../assets/battle/vfx/penetrating_shot/penetrating_shot_trail_lines.png";
 
 export type VfxBlendMode = "screen" | "normal";
 

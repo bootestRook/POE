@@ -17,6 +17,7 @@ EXPECTED_PLAYER_DESCRIPTIONS = {
     "active_puncture": "自动朝锁定敌人的方向发出一列地刺，命中矩形范围内敌人后造成物理伤害，并显示地刺命中特效与伤害浮字。",
     "active_lightning_chain": "自动向最近敌人释放闪电链，命中初始目标后，在一定半径内跳跃到附近未命中的敌人，造成多段闪电伤害，并显示连续电弧、命中特效与伤害浮字。",
     "active_fungal_petards": "自动向最近敌人位置投掷一枚真菌爆弹，爆弹以抛物线飞行到目标区域，落地后出现短暂预警，随后在落点产生圆形孢子爆炸，对范围内敌人造成物理伤害，并显示爆炸特效与伤害浮字。",
+    "active_lava_orb": "自动生成围绕玩家旋转的熔岩球，熔岩球在持续时间内周期性扫过附近敌人，每次 tick 在熔岩球当前位置产生小范围火焰伤害，并显示灼烧命中特效与伤害浮字。",
 }
 
 
@@ -153,10 +154,13 @@ def _report_checks(
     impact_events = [event for event in arena_result["event_timeline"] if event["type"] == "projectile_impact"]
     prime_events = [event for event in arena_result["event_timeline"] if event["type"] == "damage_zone_prime"]
     chain_events = [event for event in arena_result["event_timeline"] if event["type"] == "chain_segment"]
+    orbit_spawn_events = [event for event in arena_result["event_timeline"] if event["type"] == "orbit_spawn"]
+    orbit_tick_events = [event for event in arena_result["event_timeline"] if event["type"] == "orbit_tick"]
     uses_area_nova = entry.get("behavior_template") == "player_nova"
     uses_melee_arc = entry.get("behavior_template") == "melee_arc"
     uses_damage_zone = entry.get("behavior_template") == "damage_zone"
     uses_module_chain = entry.get("behavior_template") == "module_chain"
+    uses_orbit_chain = uses_module_chain and bool(orbit_spawn_events or orbit_tick_events)
     uses_chain = entry.get("behavior_template") == "chain"
     expected_damage_type = "lightning" if request.skill_id == "active_lightning_chain" else ("physical" if request.skill_id in {"active_puncture", "active_fungal_petards"} else ("cold" if request.skill_id in {"active_ice_shards", "active_frost_nova"} else "fire"))
     life_reduced = any(monster["current_life"] < monster["max_life"] for monster in arena_result["monsters"])
@@ -174,6 +178,7 @@ def _report_checks(
         "uses_melee_arc": uses_melee_arc,
         "uses_damage_zone": uses_damage_zone,
         "uses_module_chain": uses_module_chain,
+        "uses_orbit_chain": uses_orbit_chain,
         "uses_chain": uses_chain,
         "expected_damage_type": expected_damage_type,
         "has_projectile_spawn": bool(timeline_checks["has_projectile_spawn"]),
@@ -201,9 +206,17 @@ def _report_checks(
         "triggered_damage_zone_present": (not uses_module_chain) or bool(timeline_checks.get("has_damage_zone")),
         "damage_zone_origin_matches_projectile_impact": (not uses_module_chain) or bool(timeline_checks.get("damage_zone_origin_matches_projectile_impact")),
         "damage_after_or_at_triggered_zone": (not uses_module_chain) or bool(timeline_checks.get("damage_after_or_at_triggered_zone")),
-        "triggered_damage_zone_targets_passed": (not uses_module_chain) or _damage_zone_targets_passed(zone_events, damage_events),
+        "triggered_damage_zone_targets_passed": (not uses_module_chain) or (uses_orbit_chain and _orbit_damage_zone_targets_passed(damage_events)) or _damage_zone_targets_passed(zone_events, damage_events),
+        "orbit_damage_zone_targets_passed": (not uses_orbit_chain) or _orbit_damage_zone_targets_passed(damage_events),
         "projectile_impact_event_present": (not uses_module_chain) or bool(impact_events),
         "damage_zone_prime_event_present": (not uses_module_chain) or bool(prime_events),
+        "has_orbit_spawn": (not uses_orbit_chain) or bool(timeline_checks.get("has_orbit_spawn")),
+        "orbit_spawn_center_passed": (not uses_orbit_chain) or bool(timeline_checks.get("orbit_spawn_center_passed")),
+        "has_multiple_orbit_tick": (not uses_orbit_chain) or bool(timeline_checks.get("has_multiple_orbit_tick")),
+        "orbit_tick_count_matches_schedule": (not uses_orbit_chain) or bool(timeline_checks.get("orbit_tick_count_matches_schedule")),
+        "orbit_ticks_have_positions": (not uses_orbit_chain) or bool(timeline_checks.get("orbit_ticks_have_positions")),
+        "damage_zone_origin_matches_orbit_tick": (not uses_orbit_chain) or bool(timeline_checks.get("damage_zone_origin_matches_orbit_tick")),
+        "orbit_tick_has_no_direct_damage": (not uses_orbit_chain) or not any(event.get("type") == "orbit_tick" and event.get("amount") for event in orbit_tick_events),
         "has_chain_segment": (not uses_chain) or bool(timeline_checks.get("has_chain_segment")),
         "has_multiple_chain_segment": (not uses_chain) or bool(timeline_checks.get("has_multiple_chain_segment")),
         "chain_hits_multiple_targets": (not uses_chain) or bool(timeline_checks.get("chain_hits_multiple_targets")),
@@ -338,6 +351,23 @@ def _damage_zone_targets_passed(zone_events: list[dict[str, Any]], damage_events
     return False
 
 
+def _orbit_damage_zone_targets_passed(damage_events: list[dict[str, Any]]) -> bool:
+    if not damage_events:
+        return False
+    for event in damage_events:
+        payload = event.get("payload", {})
+        if not isinstance(payload, dict):
+            return False
+        origin = payload.get("origin", event.get("position", {}))
+        radius = float(payload.get("radius", 0.0))
+        target = _damage_target_position(event)
+        if not isinstance(origin, dict) or radius <= 0:
+            return False
+        if _point_distance(origin, target) > radius + 0.001:
+            return False
+    return True
+
+
 def _chain_targets_passed(chain_events: list[dict[str, Any]], damage_events: list[dict[str, Any]]) -> bool:
     if not chain_events or not damage_events:
         return False
@@ -389,6 +419,42 @@ def _parameter_variant_checks(
     request: SkillTestReportRequest,
     baseline_spawns: list[dict[str, Any]],
 ) -> dict[str, bool]:
+    if request.skill_id == "active_lava_orb":
+        package = entry.get("package_data")
+        if not isinstance(package, dict):
+            return {
+                "projectile_count_changes_events": True,
+                "spread_angle_changes_directions": True,
+                "duration_changes_tick_count": False,
+                "tick_interval_changes_frequency": False,
+                "orbit_radius_changes_positions": False,
+                "radius_changes_hit_targets": False,
+            }
+        base_result = _run_arena(service, request, package)
+        duration_package = deepcopy(package)
+        duration_params = _package_module_params(duration_package, "orbit_emitter")
+        duration_params["duration_ms"] = max(1, int(duration_params.get("duration_ms", 3600)) // 2)
+        duration_result = _run_arena(service, request, duration_package)
+        interval_package = deepcopy(package)
+        interval_params = _package_module_params(interval_package, "orbit_emitter")
+        interval_params["tick_interval_ms"] = int(interval_params.get("tick_interval_ms", 300)) + 150
+        interval_result = _run_arena(service, request, interval_package)
+        orbit_package = deepcopy(package)
+        orbit_params = _package_module_params(orbit_package, "orbit_emitter")
+        orbit_params["orbit_radius"] = float(orbit_params.get("orbit_radius", 180.0)) + 70.0
+        orbit_result = _run_arena(service, request, orbit_package)
+        radius_package = deepcopy(package)
+        radius_zone = _package_module_params(radius_package, "damage_zone")
+        radius_zone["radius"] = max(1.0, float(radius_zone.get("radius", 72.0)) * 0.35)
+        radius_result = _run_arena(service, request, radius_package)
+        return {
+            "projectile_count_changes_events": True,
+            "spread_angle_changes_directions": True,
+            "duration_changes_tick_count": _event_count(base_result, "orbit_tick") != _event_count(duration_result, "orbit_tick"),
+            "tick_interval_changes_frequency": _event_delays(base_result, "orbit_tick") != _event_delays(interval_result, "orbit_tick"),
+            "orbit_radius_changes_positions": _orbit_positions(base_result) != _orbit_positions(orbit_result),
+            "radius_changes_hit_targets": _hit_target_ids(base_result) != _hit_target_ids(radius_result),
+        }
     if request.skill_id == "active_fungal_petards":
         package = entry.get("package_data")
         if not isinstance(package, dict):
@@ -570,6 +636,18 @@ def _spawn_arc_heights(arena_result: dict[str, Any]) -> tuple[float, ...]:
     )
 
 
+def _orbit_positions(arena_result: dict[str, Any]) -> tuple[tuple[float, float], ...]:
+    positions: list[tuple[float, float]] = []
+    for event in arena_result.get("event_timeline", []):
+        if event.get("type") != "orbit_tick":
+            continue
+        payload = event.get("payload", {})
+        position = payload.get("orb_position") if isinstance(payload, dict) else None
+        if isinstance(position, dict):
+            positions.append((round(float(position.get("x", 0.0)), 4), round(float(position.get("y", 0.0)), 4)))
+    return tuple(positions)
+
+
 def _package_module_params(package: dict[str, Any], module_type: str) -> dict[str, Any]:
     for module in package.get("modules", []):
         if isinstance(module, dict) and module.get("type") == module_type:
@@ -601,7 +679,29 @@ def _damage_amounts(arena_result: dict[str, Any]) -> tuple[float, ...]:
 
 
 def _conclusion(checks: dict[str, bool]) -> tuple[str, tuple[str, ...]]:
-    if checks.get("uses_module_chain"):
+    if checks.get("uses_orbit_chain"):
+        critical = (
+            "has_orbit_spawn",
+            "orbit_spawn_center_passed",
+            "has_multiple_orbit_tick",
+            "orbit_tick_count_matches_schedule",
+            "orbit_ticks_have_positions",
+            "triggered_damage_zone_present",
+            "damage_zone_origin_matches_orbit_tick",
+            "has_damage",
+            "orbit_tick_has_no_direct_damage",
+            "damage_after_or_at_triggered_zone",
+            "flight_no_damage_passed",
+            "life_reduced_after_damage",
+            "damage_type_expected",
+            "hit_target_exists",
+            "orbit_damage_zone_targets_passed",
+            "duration_changes_tick_count",
+            "tick_interval_changes_frequency",
+            "orbit_radius_changes_positions",
+            "radius_changes_hit_targets",
+        )
+    elif checks.get("uses_module_chain"):
         critical = (
             "has_projectile_spawn",
             "projectile_spawn_ballistic",
@@ -735,9 +835,20 @@ def _check_failure_text(key: str) -> str:
         "damage_zone_origin_matches_projectile_impact": "damage_zone 原点没有使用 projectile_impact 位置。",
         "damage_after_or_at_triggered_zone": "damage 早于 projectile_impact + trigger_delay_ms。",
         "triggered_damage_zone_targets_passed": "触发伤害区内外命中判断不一致。",
+        "orbit_damage_zone_targets_passed": "熔岩球 tick 伤害区内外命中判断不一致。",
         "travel_time_changes_impact_timing": "修改 travel_time_ms 后落地时机没有变化。",
         "arc_height_changes_payload": "修改 arc_height 后 projectile_spawn 参数没有变化。",
         "trigger_delay_changes_damage_timing": "修改 trigger_delay_ms 后爆炸伤害时机没有变化。",
+        "has_orbit_spawn": "缺少环绕实体 orbit_spawn 事件。",
+        "orbit_spawn_center_passed": "orbit_spawn 未以玩家或 caster 为中心。",
+        "has_multiple_orbit_tick": "缺少多次 orbit_tick 事件。",
+        "orbit_tick_count_matches_schedule": "orbit_tick 数量不符合 duration_ms / tick_interval_ms。",
+        "orbit_ticks_have_positions": "orbit_tick 未携带 orb_position。",
+        "damage_zone_origin_matches_orbit_tick": "damage_zone 原点没有使用 orbit_tick 位置。",
+        "orbit_tick_has_no_direct_damage": "orbit_tick 直接携带了伤害或扣血信息。",
+        "duration_changes_tick_count": "修改 duration_ms 后 tick 数量没有变化。",
+        "tick_interval_changes_frequency": "修改 tick_interval_ms 后 tick 频率没有变化。",
+        "orbit_radius_changes_positions": "修改 orbit_radius 后 orb_position 没有变化。",
         "has_area_spawn": "缺少范围生成 area_spawn 事件。",
         "area_center_passed": "area_spawn 中心不是玩家或释放源位置。",
         "damage_after_or_at_area_hit": "damage 早于 hit_at_ms 结算。",
@@ -780,6 +891,8 @@ def _suggestions(inconsistencies: tuple[str, ...]) -> tuple[str, ...]:
     for item in inconsistencies:
         if "连锁" in item or "chain_" in item:
             suggestions.append("检查 chain 行为模板、SkillRuntime 链段选择和 SkillEvent 时序。")
+        elif "环绕" in item or "orbit_" in item or "tick" in item:
+            suggestions.append("检查 orbit_emitter、tick_schedule、marker / trigger 链接和 SkillEvent payload。")
         elif "投射物" in item or "伤害结算" in item:
             suggestions.append("检查 projectile 行为模板和 SkillRuntime 事件生成顺序。")
         elif "生命" in item:
@@ -835,6 +948,11 @@ def _markdown_report(
         "",
         "## 表现完整性检查",
         f"- projectile_impact：{_pass_text(checks.get('has_projectile_impact', True))}",
+        f"- orbit_spawn：{_pass_text(checks.get('has_orbit_spawn', True))}",
+        f"- orbit_spawn 玩家中心：{_pass_text(checks.get('orbit_spawn_center_passed', True))}",
+        f"- 多次 orbit_tick：{_pass_text(checks.get('has_multiple_orbit_tick', True))}",
+        f"- orbit_tick 数量：{_pass_text(checks.get('orbit_tick_count_matches_schedule', True))}",
+        f"- orbit_tick 位置：{_pass_text(checks.get('orbit_ticks_have_positions', True))}",
         f"- projectile_spawn ballistic：{_pass_text(checks.get('projectile_spawn_ballistic', True))}",
         f"- impact marker：{_pass_text(checks.get('projectile_impact_marker_present', True))}",
         f"- damage_zone_prime：{_pass_text(checks.get('has_damage_zone_prime', True))}",
@@ -865,6 +983,7 @@ def _markdown_report(
         f"- damage 不早于 melee_arc hit_at_ms：{_pass_text(checks.get('damage_after_or_at_melee_hit', True))}",
         f"- damage 不早于 damage_zone hit_at_ms：{_pass_text(checks.get('damage_after_or_at_damage_zone_hit', True))}",
         f"- damage 不早于 impact + trigger_delay_ms：{_pass_text(checks.get('damage_after_or_at_triggered_zone', True))}",
+        f"- orbit_tick 不直接扣血：{_pass_text(checks.get('orbit_tick_has_no_direct_damage', True))}",
         f"- damage 不早于 chain_segment：{_pass_text(checks.get('damage_after_or_at_chain_segment', True))}",
         f"- 投射物飞行期间未扣血：{_pass_text(checks['flight_no_damage_passed'])}",
         f"- damage 后目标生命减少：{_pass_text(checks['life_reduced_after_damage'])}",
@@ -873,6 +992,9 @@ def _markdown_report(
         f"- projectile_count 修改后事件数量变化：{_pass_text(checks['projectile_count_changes_events'])}",
         f"- spread_angle_deg 修改后方向变化：{_pass_text(checks['spread_angle_changes_directions'])}",
         f"- radius 修改后命中目标变化：{_pass_text(checks.get('radius_changes_hit_targets', True))}",
+        f"- duration_ms 修改后 tick 数量变化：{_pass_text(checks.get('duration_changes_tick_count', True))}",
+        f"- tick_interval_ms 修改后 tick 频率变化：{_pass_text(checks.get('tick_interval_changes_frequency', True))}",
+        f"- orbit_radius 修改后位置变化：{_pass_text(checks.get('orbit_radius_changes_positions', True))}",
         f"- length 修改后命中目标变化：{_pass_text(checks.get('length_changes_hit_targets', True))}",
         f"- width 修改后命中目标变化：{_pass_text(checks.get('width_changes_hit_targets', True))}",
         f"- chain_count 修改后链段数量变化：{_pass_text(checks.get('chain_count_changes_segments', True))}",
@@ -882,6 +1004,7 @@ def _markdown_report(
         f"- 范围内外命中判断：{_pass_text(checks.get('area_range_targets_passed', True))}",
         f"- 伤害区域命中判断：{_pass_text(checks.get('damage_zone_targets_passed', True))}",
         f"- 触发伤害区命中判断：{_pass_text(checks.get('triggered_damage_zone_targets_passed', True))}",
+        f"- 熔岩球 tick 伤害区命中判断：{_pass_text(checks.get('orbit_damage_zone_targets_passed', True))}",
         f"- travel_time_ms 修改后落地变化：{_pass_text(checks.get('travel_time_changes_impact_timing', True))}",
         f"- arc_height 修改后参数变化：{_pass_text(checks.get('arc_height_changes_payload', True))}",
         f"- trigger_delay_ms 修改后爆炸时机变化：{_pass_text(checks.get('trigger_delay_changes_damage_timing', True))}",

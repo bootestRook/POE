@@ -36,6 +36,7 @@ const EIGHT_TO_HORIZONTAL_DIRECTION: Record<UnitDirection, UnitDirection> = {
   left: "left",
   down_left: "left"
 };
+const GENERIC_FALLBACK_UNIT_ID: UnitVisualType = "player_adventurer";
 
 export function resolveDirection(vector: { x: number; y: number }, fallbackDirection: UnitDirection): UnitDirection {
   if (Math.hypot(vector.x, vector.y) < 0.001) return fallbackDirection;
@@ -46,7 +47,7 @@ export function resolveDirection(vector: { x: number; y: number }, fallbackDirec
 }
 
 export function resolveAnimationPlaybackRate(context: Pick<UnitAnimationContext, "requestedState" | "baseMoveSpeed" | "currentMoveSpeed">) {
-  if (context.requestedState !== "walk" && context.requestedState !== "run") return 1;
+  if (context.requestedState !== "walk") return 1;
   return animationSpeedMultiplier(context);
 }
 
@@ -68,7 +69,14 @@ export function fallbackAnimation(unitId: UnitVisualType, state: UnitAnimationSt
     ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, state, "left"))
     ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", implementedDirection))
     ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "right"))
-    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "left"))!
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(unitId, "idle", "left"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(GENERIC_FALLBACK_UNIT_ID, state, implementedDirection))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(GENERIC_FALLBACK_UNIT_ID, state, "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(GENERIC_FALLBACK_UNIT_ID, state, "left"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(GENERIC_FALLBACK_UNIT_ID, "idle", implementedDirection))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(GENERIC_FALLBACK_UNIT_ID, "idle", "right"))
+    ?? UNIT_ANIMATION_BY_KEY.get(unitAnimationKey(GENERIC_FALLBACK_UNIT_ID, "idle", "left"))
+    ?? UNIT_ANIMATION_ASSETS[0]
   );
 }
 

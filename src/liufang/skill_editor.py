@@ -59,6 +59,7 @@ RELATION_TEXT = {
     "same_box": "同宫",
 }
 TEST_ARENA_SOURCE = {"x": 0.0, "y": -12.0}
+TEST_ARENA_ORBIT_SOURCE = {"x": 180.0, "y": -12.0}
 TEST_ARENA_SCENES = (
     {
         "scene_id": "single_dummy",
@@ -106,6 +107,8 @@ TIMELINE_EVENT_TYPES = (
     "melee_arc",
     "chain_segment",
     "area_spawn",
+    "orbit_spawn",
+    "orbit_tick",
     "projectile_spawn",
     "projectile_impact",
     "projectile_hit",
@@ -417,10 +420,11 @@ class SkillEditorService:
                 conduit_power=conduit_power,
             )
             enemies = [self._enemy_runtime_view(enemy) for enemy in scene["enemies"]]
+            source_position = _test_arena_source_position(skill_id)
             events = SkillRuntime().execute(
                 final_skill,
                 source_entity="skill_test_player",
-                source_position=_ArenaPoint(TEST_ARENA_SOURCE["x"], TEST_ARENA_SOURCE["y"]),
+                source_position=_ArenaPoint(source_position["x"], source_position["y"]),
                 target_entity=enemies[0]["enemy_id"],
                 target_position=_ArenaPoint(enemies[0]["position"]["x"], enemies[0]["position"]["y"]),
                 timestamp_ms=0,
@@ -779,6 +783,12 @@ class SkillEditorService:
             "impact_marker_id": runtime_params.get("impact_marker_id", projectile_params.get("impact_marker_id", "")),
             "trigger_marker_id": runtime_params.get("trigger_marker_id", zone_trigger.get("trigger_marker_id", zone_params.get("trigger_marker_id", ""))),
             "trigger_delay_ms": runtime_params.get("trigger_delay_ms", zone_trigger.get("trigger_delay_ms", zone_params.get("trigger_delay_ms", 0))),
+            "duration_ms": runtime_params.get("duration_ms", _module_params(runtime_params, "orbit_emitter").get("duration_ms", 0)),
+            "tick_interval_ms": runtime_params.get("tick_interval_ms", _module_params(runtime_params, "orbit_emitter").get("tick_interval_ms", 0)),
+            "orbit_radius": runtime_params.get("orbit_radius", _module_params(runtime_params, "orbit_emitter").get("orbit_radius", 0)),
+            "orbit_speed_deg_per_sec": runtime_params.get("orbit_speed_deg_per_sec", _module_params(runtime_params, "orbit_emitter").get("orbit_speed_deg_per_sec", 0)),
+            "orb_count": runtime_params.get("orb_count", _module_params(runtime_params, "orbit_emitter").get("orb_count", 0)),
+            "tick_marker_id": runtime_params.get("tick_marker_id", _module_params(runtime_params, "orbit_emitter").get("tick_marker_id", "")),
             "shape": runtime_params.get("shape", zone_params.get("shape", "")),
             "radius": runtime_params.get("radius", zone_params.get("radius", 0)),
             "length": runtime_params.get("length", 0),
@@ -1088,6 +1098,12 @@ def _test_active_instance_id(skill_id: str) -> str:
     return f"skill_editor_test_{skill_id}"
 
 
+def _test_arena_source_position(skill_id: str) -> dict[str, float]:
+    if skill_id == "active_lava_orb":
+        return TEST_ARENA_ORBIT_SOURCE
+    return TEST_ARENA_SOURCE
+
+
 def _format_description(template: str, values: dict[str, str]) -> str:
     try:
         return template.format(**values)
@@ -1364,8 +1380,8 @@ def _module_trigger(runtime_params: dict[str, Any], module_type: str) -> dict[st
 
 
 def _arena_stages(enemies: list[dict[str, Any]], events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
-    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "projectile_impact", "damage_zone_prime", "area_spawn", "melee_arc", "damage_zone", "chain_segment"})
-    stage_name = "技能生效前" if any(event.type in {"area_spawn", "melee_arc", "damage_zone"} for event in spawn_events) else "投射物飞行中"
+    spawn_events = tuple(event for event in events if event.type in {"projectile_spawn", "projectile_impact", "damage_zone_prime", "area_spawn", "orbit_spawn", "orbit_tick", "melee_arc", "damage_zone", "chain_segment"})
+    stage_name = "技能生效前" if any(event.type in {"area_spawn", "orbit_spawn", "orbit_tick", "melee_arc", "damage_zone"} for event in spawn_events) else "投射物飞行中"
     stages = [_arena_stage(stage_name, enemies, events, spawn_events)]
     damage_delays = sorted({event.delay_ms for event in events if event.type == "damage"})
     for delay in damage_delays:
@@ -1425,6 +1441,7 @@ def _event_summary(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
             "amount": event.amount,
             "projectile_index": event.payload.get("projectile_index"),
             "segment_index": event.payload.get("segment_index"),
+            "tick_index": event.payload.get("tick_index"),
             "area_id": event.payload.get("zone_id") or event.payload.get("area_id") or event.payload.get("arc_id") or event.payload.get("segment_id") or event.payload.get("projectile_id") or event.payload.get("marker_id"),
         }
         for event in sorted(events, key=lambda item: (item.delay_ms, _event_sort_order(item.type), item.event_id))
@@ -1444,7 +1461,7 @@ def _event_timeline(events: tuple[SkillEvent, ...]) -> list[dict[str, Any]]:
 
 def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list[dict[str, Any]]) -> dict[str, Any]:
     event_counts = _event_counts(events)
-    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "projectile_impact", "damage_zone_prime", "area_spawn", "melee_arc", "damage_zone", "chain_segment"}]
+    spawn_times = [event.timestamp_ms for event in events if event.type in {"projectile_spawn", "projectile_impact", "damage_zone_prime", "area_spawn", "orbit_spawn", "orbit_tick", "melee_arc", "damage_zone", "chain_segment"}]
     projectile_spawn_times = [event.timestamp_ms for event in events if event.type == "projectile_spawn"]
     projectile_spawn_events = [event for event in events if event.type == "projectile_spawn"]
     projectile_impact_events = [event for event in events if event.type == "projectile_impact"]
@@ -1453,6 +1470,8 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
     melee_arc_events = [event for event in events if event.type == "melee_arc"]
     damage_zone_events = [event for event in events if event.type == "damage_zone"]
     chain_segment_events = [event for event in events if event.type == "chain_segment"]
+    orbit_spawn_events = [event for event in events if event.type == "orbit_spawn"]
+    orbit_tick_events = [event for event in events if event.type == "orbit_tick"]
     damage_times = [event.timestamp_ms for event in events if event.type == "damage"]
     damage_after_spawn = bool(spawn_times and damage_times and min(damage_times) >= min(spawn_times))
     damage_after_area_hit = bool(
@@ -1497,6 +1516,36 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
             for impact_event in projectile_impact_events
             for zone_event in damage_zone_events
             if zone_event.payload.get("trigger_marker_id") == impact_event.payload.get("marker_id")
+        )
+    )
+    damage_zone_origin_matches_orbit_tick = bool(
+        not orbit_tick_events
+        or not damage_zone_events
+        or all(
+            any(
+                zone_event.payload.get("origin") == tick_event.payload.get("orb_position", tick_event.position)
+                and zone_event.payload.get("source_tick_event_id") == tick_event.event_id
+                for tick_event in orbit_tick_events
+            )
+            for zone_event in damage_zone_events
+        )
+    )
+    orbit_spawn_center_passed = bool(
+        not orbit_spawn_events
+        or all(event.payload.get("orbit_center") == event.position for event in orbit_spawn_events)
+    )
+    orbit_ticks_have_positions = bool(
+        not orbit_tick_events
+        or all(isinstance(event.payload.get("orb_position"), dict) for event in orbit_tick_events)
+    )
+    orbit_tick_count_matches_schedule = bool(
+        not orbit_spawn_events
+        or not orbit_tick_events
+        or all(
+            event_counts.get("orbit_tick", 0)
+            == int(spawn.payload.get("orb_count", 1))
+            * (int(spawn.payload.get("duration_ms", 0)) // max(1, int(spawn.payload.get("tick_interval_ms", 1))))
+            for spawn in orbit_spawn_events
         )
     )
     damage_after_triggered_zone = bool(
@@ -1556,6 +1605,8 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
         (
             event_counts.get("projectile_spawn", 0) > 0
             or event_counts.get("area_spawn", 0) > 0
+            or event_counts.get("orbit_spawn", 0) > 0
+            or event_counts.get("orbit_tick", 0) > 0
             or event_counts.get("melee_arc", 0) > 0
             or event_counts.get("damage_zone", 0) > 0
             or event_counts.get("chain_segment", 0) > 0
@@ -1577,6 +1628,12 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
         "projectile_spawn_ballistic": projectile_spawn_ballistic,
         "projectile_impact_marker_present": projectile_impact_marker_present,
         "has_damage_zone_prime": event_counts.get("damage_zone_prime", 0) > 0,
+        "has_orbit_spawn": event_counts.get("orbit_spawn", 0) > 0,
+        "has_orbit_tick": event_counts.get("orbit_tick", 0) > 0,
+        "has_multiple_orbit_tick": event_counts.get("orbit_tick", 0) > 1,
+        "orbit_spawn_center_passed": orbit_spawn_center_passed,
+        "orbit_ticks_have_positions": orbit_ticks_have_positions,
+        "orbit_tick_count_matches_schedule": orbit_tick_count_matches_schedule,
         "damage_zone_prime_trigger_present": damage_zone_prime_trigger_present,
         "has_damage_zone": event_counts.get("damage_zone", 0) > 0,
         "has_area_spawn": event_counts.get("area_spawn", 0) > 0,
@@ -1599,6 +1656,7 @@ def _timeline_checks(events: tuple[SkillEvent, ...], flight_stage_monsters: list
         "melee_arc_origin_passed": melee_arc_origin_passed,
         "damage_zone_origin_passed": damage_zone_origin_passed,
         "damage_zone_origin_matches_projectile_impact": damage_zone_origin_matches_projectile_impact,
+        "damage_zone_origin_matches_orbit_tick": damage_zone_origin_matches_orbit_tick,
         "flight_no_damage_passed": flight_no_damage,
         "fan_direction_passed": _has_fan_directions(events),
         "basic_timing_passed": basic_timing_passed,
@@ -1611,6 +1669,8 @@ def _event_sort_order(event_type: str) -> int:
         "damage_zone": 0,
         "damage_zone_prime": 0,
         "area_spawn": 0,
+        "orbit_spawn": 0,
+        "orbit_tick": 1,
         "melee_arc": 0,
         "chain_segment": 1,
         "projectile_spawn": 0,
@@ -1639,6 +1699,8 @@ def _event_type_text(event_type: str) -> str:
     return {
         "cast_start": "释放开始",
         "area_spawn": "范围生成",
+        "orbit_spawn": "环绕生成",
+        "orbit_tick": "环绕 tick",
         "melee_arc": "近战扇形",
         "chain_segment": "连锁段",
         "projectile_spawn": "投射物生成",

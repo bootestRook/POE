@@ -41,26 +41,26 @@ attack
 原始图放置：
 
 ```text
-assest/battle/units/raw
+assets/battle/units/raw
 ```
 
 裁剪后的 spritesheet 放置：
 
 ```text
-assest/battle/units/cropped
+assets/battle/units/cropped
 ```
 
 清单与 QA 图放置：
 
 ```text
-assest/battle/units/manifests
+assets/battle/units/manifests
 ```
 
-不要重命名 `assest/` 目录。
+不要重命名 `assets/` 目录。
 
 ## 裁剪 / 去背景 / 缩放流程
 
-1. 将原始单位图或生成 sheet 放入 `assest/battle/units/raw`。
+1. 将原始单位图或生成 sheet 放入 `assets/battle/units/raw`。
 2. 确认背景为可去除的纯色或透明底。
 3. 运行资源脚本：
 
@@ -72,14 +72,14 @@ python scripts\build-unit-animation-sheets.py
 5. 检查：
 
 ```text
-assest/battle/units/manifests/unit-animations-contact-sheet.png
+assets/battle/units/manifests/unit-animations-contact-sheet.png
 ```
 
 重点看脚底锚点是否稳定、帧之间是否跳位、白边是否明显。
 
 ## Manifest 字段
 
-`assest/battle/units/manifests/unit-animations-manifest.json` 中每个动画条目必须包含：
+`assets/battle/units/manifests/unit-animations-manifest.json` 中每个动画条目必须包含：
 
 ```text
 unitId
@@ -170,7 +170,7 @@ webapp/unitAnimation.ts
 ## 新增一个单位动画的标准步骤
 
 1. 准备单位 idle 原图或完整动画原始 sheet。
-2. 放入 `assest/battle/units/raw`。
+2. 放入 `assets/battle/units/raw`。
 3. 在 `scripts/build-unit-animation-sheets.py` 中添加单位配置。
 4. 生成 spritesheet 和 manifest。
 5. 在 `webapp/unitAssets.ts` 中确保 `unitId` 能被运行时解析。

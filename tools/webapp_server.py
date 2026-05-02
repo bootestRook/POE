@@ -15,12 +15,10 @@ sys.path.insert(0, str(ROOT / "src"))
 from liufang.web_api import V1WebAppApi, encode_json
 
 
-DIST = ROOT / "dist"
-INDEX = DIST / "index.html"
-
-
 class V1RequestHandler(BaseHTTPRequestHandler):
     api = V1WebAppApi(ROOT / "configs")
+    dist_dir = ROOT / "dist"
+    index_file = dist_dir / "index.html"
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -73,7 +71,7 @@ class V1RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_static(self, path: str) -> None:
-        if not INDEX.exists():
+        if not self.index_file.exists():
             self._send_html(
                 "请先运行 npm install 和 npm run build，然后重新启动 WebApp。",
                 status=503,
@@ -81,12 +79,13 @@ class V1RequestHandler(BaseHTTPRequestHandler):
             return
 
         relative = path.lstrip("/") or "index.html"
-        target = (DIST / relative).resolve()
-        if DIST.resolve() not in target.parents and target != DIST.resolve():
+        dist = self.dist_dir.resolve()
+        target = (dist / relative).resolve()
+        if dist not in target.parents and target != dist:
             self._send_html("请求路径不合法。", status=400)
             return
         if not target.is_file():
-            target = INDEX
+            target = self.index_file
 
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         body = target.read_bytes()
@@ -118,8 +117,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=8000, type=int)
+    parser.add_argument("--dist-dir", default="dist")
     parser.add_argument("--open", action="store_true")
     args = parser.parse_args()
+
+    dist_dir = Path(args.dist_dir)
+    if not dist_dir.is_absolute():
+        dist_dir = ROOT / dist_dir
+    V1RequestHandler.dist_dir = dist_dir.resolve()
+    V1RequestHandler.index_file = V1RequestHandler.dist_dir / "index.html"
 
     server = ThreadingHTTPServer((args.host, args.port), V1RequestHandler)
     url = f"http://{args.host}:{args.port}"

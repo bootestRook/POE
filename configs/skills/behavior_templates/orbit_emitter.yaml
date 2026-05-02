@@ -1,0 +1,31 @@
+id: orbit_emitter
+allowed_params: ["orbit_center_policy", "duration_ms", "tick_interval_ms", "orbit_radius", "orbit_speed_deg_per_sec", "orb_count", "start_angle_deg", "tick_marker_id", "spawn_vfx_key", "tick_vfx_key"]
+param_constraints:
+  orbit_center_policy:
+    type: string
+    enum: ["caster"]
+  duration_ms:
+    type: integer
+    minimum: 1
+  tick_interval_ms:
+    type: integer
+    minimum: 1
+  orbit_radius:
+    type: number
+    minimum: 1
+  orbit_speed_deg_per_sec:
+    type: number
+  orb_count:
+    type: integer
+    minimum: 1
+  start_angle_deg:
+    type: number
+  tick_marker_id:
+    type: string
+    pattern: "^[a-z][a-z0-9_]*$"
+  spawn_vfx_key:
+    type: key
+  tick_vfx_key:
+    type: key
+events: ["cast_start", "orbit_spawn", "orbit_tick"]
+damage_timing: none
