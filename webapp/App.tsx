@@ -6319,6 +6319,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
 
       {bagOpen && (
         <section className="inventory-overlay" aria-label="背包界面">
+          <CharacterInfoPanel state={state} player={player} />
           <section className="right-workbench">
             <section className="board-panel">
               <div className="board-grid">
@@ -6424,6 +6425,105 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     </main>
   );
 }
+
+function CharacterInfoPanel({ state, player }: { state: AppState; player: { hp: number; maxHp: number } }) {
+  const maxLife = Math.round(state.player_stats?.max_life?.value ?? player.maxHp);
+  const currentLife = Math.min(maxLife, Math.round(player.hp));
+  const moveSpeed = state.player_stats?.move_speed?.value ?? 1;
+  const avatarFrame = resolveUnitAnimation({
+    unitId: "player_adventurer",
+    requestedState: "idle",
+    movementVector: { x: 0, y: 0 },
+    fallbackDirection: "right",
+    elapsedMs: 0,
+    baseMoveSpeed: PLAYER_SPEED,
+    currentMoveSpeed: 0
+  });
+  const coreCards = [
+    { tone: "life", icon: "生", label: "生命", value: String(currentLife) },
+    { tone: "shield", icon: "盾", label: "能量护盾", value: "0" },
+    { tone: "mana", icon: "魔", label: "魔力", value: "168" },
+    { tone: "armor", icon: "甲", label: "护甲", value: "0.0%" },
+    { tone: "evasion", icon: "闪", label: "闪避", value: "0.0%" }
+  ];
+  const resistances = [
+    { tone: "fire", icon: "火", label: "火焰", value: "0%" },
+    { tone: "cold", icon: "冰", label: "冰霜", value: "0%" },
+    { tone: "lightning", icon: "电", label: "闪电", value: "0%" },
+    { tone: "shadow", icon: "影", label: "暗影", value: "0%" }
+  ];
+  const detailGroups = [
+    { title: "生命", rows: [["每秒生命回复", "10"], ["最大生命", String(maxLife)]] },
+    { title: "稀有度", rows: [["战利品稀有度倍率", "1.0 倍"]] },
+    { title: "防御", rows: [["最大冰霜抗性", "75%"], ["最大火焰抗性", "75%"], ["最大闪电抗性", "75%"]] },
+    { title: "机动性", rows: [["移动速度", `${formatPreviewNumber(moveSpeed)} 米/秒`]] },
+    { title: "能量护盾", rows: [["能量护盾充能延迟", "2.0 秒"]] },
+    { title: "魔力", rows: [["最大魔力", "168"]] }
+  ];
+
+  return (
+    <aside className="character-info-panel" aria-label="角色信息">
+      <header className="character-info-header">
+        <div className="character-meta">
+          <strong>等级 1</strong>
+          <span>洞穴</span>
+          <span>第 1 赛季</span>
+        </div>
+        <div className="character-identity">
+          <strong>kiritokun</strong>
+          <div className="character-avatar" aria-hidden="true">
+            <UnitAnimationSprite frame={avatarFrame} />
+          </div>
+        </div>
+        <dl className="character-attributes">
+          <div><dt>力量</dt><dd>7</dd></div>
+          <div><dt>敏捷</dt><dd>7</dd></div>
+          <div><dt>智慧</dt><dd>17</dd></div>
+        </dl>
+      </header>
+
+      <section className="character-core-grid" aria-label="核心属性">
+        {coreCards.map((card) => (
+          <article key={card.label} className="character-core-card">
+            <span className={`character-stat-icon character-stat-${card.tone}`}>{card.icon}</span>
+            <strong>{card.label}</strong>
+            <span>{card.value}</span>
+          </article>
+        ))}
+      </section>
+
+      <section className="character-resistance-section" aria-label="抗性">
+        <h2>抗性</h2>
+        <div className="character-resistance-grid">
+          {resistances.map((resistance) => (
+            <div key={resistance.label} className="character-resistance-row">
+              <span className={`character-stat-icon character-stat-${resistance.tone}`}>{resistance.icon}</span>
+              <span>{resistance.label}</span>
+              <strong>{resistance.value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="character-detail-list" aria-label="角色属性明细">
+        {detailGroups.map((group) => (
+          <article key={group.title} className="character-detail-group">
+            <h2>{group.title}</h2>
+            <dl>
+              {group.rows.map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </article>
+        ))}
+      </section>
+    </aside>
+  );
+}
+
 
 function MapSelectionPanel({
   selectedMapId,
