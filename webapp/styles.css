@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --slot-size: 60px;
   --panel-padding: 10px;
   --panel-border: 2px;
@@ -78,6 +78,102 @@ button {
 
 .terrain-ground {
   z-index: 1;
+}
+
+.baked-map-background {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  object-fit: fill;
+  user-select: none;
+  pointer-events: none;
+}
+
+.editor-runtime-map-background {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  background: #030404;
+  user-select: none;
+  pointer-events: none;
+}
+
+.editor-runtime-map-tile {
+  position: absolute;
+  display: block;
+  overflow: hidden;
+}
+
+.map-debug-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 2px 3px #000;
+}
+
+.map-debug-cell {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.map-debug-walkable {
+  background: rgba(42, 220, 94, 0.18);
+}
+
+.map-debug-blocker {
+  background: rgba(255, 38, 38, 0.32);
+  border-color: rgba(255, 84, 84, 0.72);
+}
+
+.map-debug-marker {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+}
+
+.map-debug-marker span {
+  position: absolute;
+  left: 16px;
+  top: -6px;
+  display: block;
+  min-width: 96px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.72);
+  white-space: nowrap;
+}
+
+.map-debug-marker-player {
+  background: #0000ff;
+}
+
+.map-debug-marker-enemy {
+  background: #00d85a;
+}
+
+.map-debug-marker-elite {
+  background: #ffff00;
+}
+
+.map-debug-marker-boss {
+  background: #ff00ff;
+}
+
+.map-debug-marker-exit {
+  background: #00ffff;
+}
+
+.map-debug-marker-interaction {
+  background: #ff9900;
 }
 
 .battle-ground-decal-layer {
@@ -283,25 +379,6 @@ button {
   height: 15%;
 }
 
-.enemy-distance {
-  position: absolute;
-  left: 50%;
-  top: -104px;
-  z-index: 3;
-  min-width: 170px;
-  padding: 10px 24px;
-  transform: translateX(-50%);
-  border: 3px solid rgba(244, 216, 151, 0.82);
-  border-radius: 8px;
-  background: rgba(12, 10, 7, 0.82);
-  color: #ffe6a7;
-  font-size: 55px;
-  line-height: 1.2;
-  text-align: center;
-  white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92);
-}
-
 .enemy-health {
   position: absolute;
   left: 50%;
@@ -322,14 +399,870 @@ button {
   width: 54px;
 }
 
-.unit-visual-enemy_brute .enemy-distance {
-  top: -118px;
-}
-
 .enemy-health span {
   display: block;
   height: 100%;
   background: linear-gradient(90deg, #ff7676, #d82020);
+}
+
+.map-editor-screen {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 62% 34%, rgba(118, 128, 118, 0.16), transparent 42%),
+    linear-gradient(135deg, #101314, #20221f 42%, #111313);
+  color: #f4efe2;
+}
+
+.map-editor-toolbar {
+  min-width: 0;
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  border-right: 1px solid rgba(211, 213, 204, 0.18);
+  background: rgba(15, 18, 18, 0.94);
+  overflow: auto;
+}
+
+.map-editor-toolbar header,
+.map-editor-toolbar section {
+  display: grid;
+  gap: 10px;
+}
+
+.map-editor-toolbar h1,
+.map-editor-toolbar h2,
+.map-editor-toolbar p,
+.map-editor-stats {
+  margin: 0;
+}
+
+.map-editor-toolbar h1 {
+  font-size: 22px;
+  color: #f2dfaa;
+}
+
+.map-editor-toolbar h2 {
+  font-size: 14px;
+  color: #bfcbd2;
+}
+
+.map-editor-toolbar p {
+  color: #c8c1ae;
+  line-height: 1.45;
+}
+
+.map-editor-segment,
+.map-editor-actions,
+.map-editor-shift-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.map-editor-segment,
+.map-editor-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.map-editor-segment:has(button:nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.map-editor-shift-controls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.map-editor-segment button,
+.map-editor-actions button,
+.map-editor-shift-controls button {
+  min-height: 34px;
+  border: 1px solid rgba(182, 188, 179, 0.36);
+  border-radius: 6px;
+  background: rgba(40, 45, 44, 0.94);
+  color: #efe8d6;
+  cursor: pointer;
+}
+
+.map-editor-segment button:hover,
+.map-editor-actions button:hover,
+.map-editor-shift-controls button:hover,
+.map-editor-segment button.active,
+.map-editor-actions button.active {
+  border-color: rgba(245, 215, 146, 0.86);
+  background: rgba(86, 74, 48, 0.95);
+}
+
+.map-editor-segment button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.map-editor-cell-size {
+  display: grid;
+  gap: 8px;
+  color: #dfd3b6;
+}
+
+.map-editor-cell-size input,
+.map-editor-select-field select,
+.map-editor-collider-grid input {
+  width: 100%;
+}
+
+.map-editor-select-field,
+.map-editor-checkbox {
+  display: grid;
+  gap: 7px;
+  color: #dfd3b6;
+}
+
+.map-editor-select-field select,
+.map-editor-collider-grid input {
+  min-height: 32px;
+  border: 1px solid rgba(182, 188, 179, 0.34);
+  border-radius: 5px;
+  background: rgba(28, 32, 32, 0.96);
+  color: #efe8d6;
+}
+
+.map-editor-spawnPlan-controls {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(182, 188, 179, 0.24);
+  border-radius: 6px;
+  background: rgba(20, 25, 25, 0.72);
+}
+
+.map-editor-spawnPlan-controls strong {
+  color: #f4dfaa;
+  font-size: 13px;
+}
+
+.map-editor-spawnPlan-controls label {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #cfd6cb;
+  font-size: 12px;
+}
+
+.map-editor-spawnPlan-controls input,
+.map-editor-spawnPlan-controls select {
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid rgba(182, 188, 179, 0.34);
+  border-radius: 5px;
+  background: rgba(28, 32, 32, 0.96);
+  color: #f3ead8;
+}
+
+.map-editor-checkbox {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.map-editor-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #4ec597;
+}
+
+.map-editor-collider-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.map-editor-collider-grid label {
+  display: grid;
+  gap: 5px;
+  color: #b8c3c8;
+  font-size: 12px;
+}
+
+.map-editor-file-list {
+  max-height: 150px;
+  display: grid;
+  gap: 6px;
+  overflow: auto;
+}
+
+.map-editor-file-list button,
+.map-editor-file-list span {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid rgba(182, 188, 179, 0.22);
+  border-radius: 5px;
+  background: rgba(28, 32, 32, 0.74);
+  color: #d8d0bd;
+  text-align: left;
+}
+
+.map-editor-file-list button {
+  cursor: pointer;
+}
+
+.map-editor-file-list button:hover,
+.map-editor-file-list button.active {
+  border-color: rgba(78, 197, 151, 0.82);
+  background: rgba(31, 64, 52, 0.82);
+  color: #eef8e9;
+}
+
+.map-editor-stats {
+  display: grid;
+  gap: 8px;
+}
+
+.map-editor-stats div {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid rgba(182, 188, 179, 0.2);
+  border-radius: 6px;
+  background: rgba(33, 38, 38, 0.72);
+}
+
+.map-editor-stats dt {
+  color: #b8c3c8;
+}
+
+.map-editor-stats dd {
+  margin: 0;
+  color: #f4dfaa;
+}
+
+.map-editor-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  background: #050606;
+}
+
+.map-editor-grid {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  width: max-content;
+  height: max-content;
+  transform-origin: 0 0;
+  will-change: transform;
+  border: 1px solid rgba(226, 230, 224, 0.22);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.58);
+  isolation: isolate;
+}
+
+.map-editor-cell {
+  position: absolute;
+  z-index: 1;
+  width: var(--map-editor-cell-size);
+  height: var(--map-editor-cell-size);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  appearance: none;
+  background-repeat: repeat;
+  cursor: crosshair;
+}
+
+.map-editor-cell::before {
+  content: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-editor-tile-empty {
+  background: #030404;
+}
+
+.map-editor-tile-ground {
+  --map-editor-ground-edge-size: 18%;
+  --map-editor-ground-edge-n: transparent;
+  --map-editor-ground-edge-e: transparent;
+  --map-editor-ground-edge-s: transparent;
+  --map-editor-ground-edge-w: transparent;
+  --map-editor-ground-boundary-n: transparent;
+  --map-editor-ground-boundary-e: transparent;
+  --map-editor-ground-boundary-s: transparent;
+  --map-editor-ground-boundary-w: transparent;
+  --map-editor-ground-corner-inner-nw: transparent;
+  --map-editor-ground-corner-inner-ne: transparent;
+  --map-editor-ground-corner-inner-se: transparent;
+  --map-editor-ground-corner-inner-sw: transparent;
+  --map-editor-ground-corner-outer-nw: transparent;
+  --map-editor-ground-corner-outer-ne: transparent;
+  --map-editor-ground-corner-outer-se: transparent;
+  --map-editor-ground-corner-outer-sw: transparent;
+  background-color: #4b4942;
+  background-image: url("./assets/map-editor-dungeon-floor-v2.png");
+}
+
+.map-editor-tile-ground::before,
+.map-editor-tile-ground::after {
+  content: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-editor-tile-ground:not(.map-editor-autotile-interior)::before,
+.map-editor-tile-ground:not(.map-editor-autotile-interior)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-editor-tile-ground::before {
+  background:
+    linear-gradient(180deg, rgba(255, 246, 216, 0.08), transparent 34%, rgba(0, 0, 0, 0.12)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 28%, rgba(0, 0, 0, 0.1));
+  opacity: 0.34;
+}
+
+.map-editor-tile-ground::after {
+  background-image:
+    linear-gradient(var(--map-editor-ground-corner-inner-nw), var(--map-editor-ground-corner-inner-nw)),
+    linear-gradient(var(--map-editor-ground-corner-inner-ne), var(--map-editor-ground-corner-inner-ne)),
+    linear-gradient(var(--map-editor-ground-corner-inner-se), var(--map-editor-ground-corner-inner-se)),
+    linear-gradient(var(--map-editor-ground-corner-inner-sw), var(--map-editor-ground-corner-inner-sw)),
+    radial-gradient(circle at left top, var(--map-editor-ground-corner-outer-nw) 0 44%, transparent 46%),
+    radial-gradient(circle at right top, var(--map-editor-ground-corner-outer-ne) 0 44%, transparent 46%),
+    radial-gradient(circle at right bottom, var(--map-editor-ground-corner-outer-se) 0 44%, transparent 46%),
+    radial-gradient(circle at left bottom, var(--map-editor-ground-corner-outer-sw) 0 44%, transparent 46%),
+    linear-gradient(180deg, var(--map-editor-ground-edge-n) 0 var(--map-editor-ground-edge-size), transparent var(--map-editor-ground-edge-size)),
+    linear-gradient(90deg, transparent calc(100% - var(--map-editor-ground-edge-size)), var(--map-editor-ground-edge-e) calc(100% - var(--map-editor-ground-edge-size)) 100%),
+    linear-gradient(0deg, var(--map-editor-ground-edge-s) 0 var(--map-editor-ground-edge-size), transparent var(--map-editor-ground-edge-size)),
+    linear-gradient(90deg, var(--map-editor-ground-edge-w) 0 var(--map-editor-ground-edge-size), transparent var(--map-editor-ground-edge-size)),
+    linear-gradient(180deg, var(--map-editor-ground-boundary-n) 0 var(--map-editor-ground-edge-size), transparent var(--map-editor-ground-edge-size)),
+    linear-gradient(90deg, transparent calc(100% - var(--map-editor-ground-edge-size)), var(--map-editor-ground-boundary-e) calc(100% - var(--map-editor-ground-edge-size)) 100%),
+    linear-gradient(0deg, var(--map-editor-ground-boundary-s) 0 var(--map-editor-ground-edge-size), transparent var(--map-editor-ground-edge-size)),
+    linear-gradient(90deg, var(--map-editor-ground-boundary-w) 0 var(--map-editor-ground-edge-size), transparent var(--map-editor-ground-edge-size));
+  background-position:
+    left top,
+    right top,
+    right bottom,
+    left bottom,
+    left top,
+    right top,
+    right bottom,
+    left bottom,
+    left top,
+    left top,
+    left top,
+    left top,
+    left top,
+    left top,
+    left top,
+    left top;
+  background-repeat: no-repeat;
+  background-size:
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    var(--map-editor-ground-edge-size) var(--map-editor-ground-edge-size),
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+}
+
+.map-editor-tile-wall {
+  --map-editor-wall-edge-size: 20%;
+  --map-editor-wall-edge-n: transparent;
+  --map-editor-wall-edge-e: transparent;
+  --map-editor-wall-edge-s: transparent;
+  --map-editor-wall-edge-w: transparent;
+  --map-editor-wall-corner-nw: transparent;
+  --map-editor-wall-corner-ne: transparent;
+  --map-editor-wall-corner-se: transparent;
+  --map-editor-wall-corner-sw: transparent;
+  background-color: #2b2a27;
+  background-image: url("./assets/map-editor-dungeon-wall-v2.png");
+  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.42);
+}
+
+.map-editor-tile-wall::before,
+.map-editor-tile-wall::after {
+  content: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-editor-tile-wall:not(.map-editor-autotile-interior)::before,
+.map-editor-tile-wall:not(.map-editor-autotile-interior)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-editor-tile-wall::before {
+  background:
+    linear-gradient(180deg, rgba(255, 244, 210, 0.08), transparent 32%, rgba(0, 0, 0, 0.28)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent 22%, rgba(0, 0, 0, 0.2));
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+
+.map-editor-tile-wall::after {
+  background-image:
+    linear-gradient(var(--map-editor-wall-corner-nw), var(--map-editor-wall-corner-nw)),
+    linear-gradient(var(--map-editor-wall-corner-ne), var(--map-editor-wall-corner-ne)),
+    linear-gradient(var(--map-editor-wall-corner-se), var(--map-editor-wall-corner-se)),
+    linear-gradient(var(--map-editor-wall-corner-sw), var(--map-editor-wall-corner-sw)),
+    linear-gradient(180deg, var(--map-editor-wall-edge-n) 0 var(--map-editor-wall-edge-size), transparent var(--map-editor-wall-edge-size)),
+    linear-gradient(90deg, transparent calc(100% - var(--map-editor-wall-edge-size)), var(--map-editor-wall-edge-e) calc(100% - var(--map-editor-wall-edge-size)) 100%),
+    linear-gradient(0deg, var(--map-editor-wall-edge-s) 0 var(--map-editor-wall-edge-size), transparent var(--map-editor-wall-edge-size)),
+    linear-gradient(90deg, var(--map-editor-wall-edge-w) 0 var(--map-editor-wall-edge-size), transparent var(--map-editor-wall-edge-size));
+  background-position:
+    left top,
+    right top,
+    right bottom,
+    left bottom,
+    left top,
+    left top,
+    left top,
+    left top;
+  background-repeat: no-repeat;
+  background-size:
+    var(--map-editor-wall-edge-size) var(--map-editor-wall-edge-size),
+    var(--map-editor-wall-edge-size) var(--map-editor-wall-edge-size),
+    var(--map-editor-wall-edge-size) var(--map-editor-wall-edge-size),
+    var(--map-editor-wall-edge-size) var(--map-editor-wall-edge-size),
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  box-shadow: inset 0 0 0 1px rgba(13, 12, 11, 0.2);
+}
+
+.map-editor-wall-open-n {
+  --map-editor-wall-edge-n: rgba(168, 165, 150, 0.86);
+}
+
+.map-editor-wall-open-e {
+  --map-editor-wall-edge-e: rgba(35, 34, 31, 0.9);
+}
+
+.map-editor-wall-open-s {
+  --map-editor-wall-edge-s: rgba(18, 17, 15, 0.94);
+}
+
+.map-editor-wall-open-w {
+  --map-editor-wall-edge-w: rgba(143, 139, 124, 0.76);
+}
+
+.map-editor-wall-corner-nw {
+  --map-editor-wall-corner-nw: rgba(166, 162, 145, 0.92);
+}
+
+.map-editor-wall-corner-ne {
+  --map-editor-wall-corner-ne: rgba(119, 115, 101, 0.86);
+}
+
+.map-editor-wall-corner-se {
+  --map-editor-wall-corner-se: rgba(20, 19, 17, 0.9);
+}
+
+.map-editor-wall-corner-sw {
+  --map-editor-wall-corner-sw: rgba(105, 101, 89, 0.86);
+}
+
+.map-editor-autotile-connected,
+.map-editor-autotile-interior,
+.map-editor-autotile-isolated {
+  --map-editor-autotile-debug-state: connected;
+}
+
+.map-editor-autotile-interior {
+  --map-editor-autotile-debug-state: interior;
+}
+
+.map-editor-autotile-isolated {
+  --map-editor-autotile-debug-state: isolated;
+}
+
+.map-editor-tile-ground.map-editor-edge-n {
+  --map-editor-ground-edge-n: rgba(5, 6, 5, 0.72);
+}
+
+.map-editor-tile-ground.map-editor-edge-e {
+  --map-editor-ground-edge-e: rgba(5, 6, 5, 0.68);
+}
+
+.map-editor-tile-ground.map-editor-edge-s {
+  --map-editor-ground-edge-s: rgba(3, 4, 4, 0.78);
+}
+
+.map-editor-tile-ground.map-editor-edge-w {
+  --map-editor-ground-edge-w: rgba(5, 6, 5, 0.66);
+}
+
+.map-editor-tile-ground.map-editor-boundary-n {
+  --map-editor-ground-boundary-n: rgba(176, 164, 132, 0.58);
+}
+
+.map-editor-tile-ground.map-editor-boundary-e {
+  --map-editor-ground-boundary-e: rgba(70, 66, 54, 0.72);
+}
+
+.map-editor-tile-ground.map-editor-boundary-s {
+  --map-editor-ground-boundary-s: rgba(23, 21, 17, 0.78);
+}
+
+.map-editor-tile-ground.map-editor-boundary-w {
+  --map-editor-ground-boundary-w: rgba(136, 126, 102, 0.5);
+}
+
+.map-editor-tile-ground.map-editor-corner-inner-nw {
+  --map-editor-ground-corner-inner-nw: rgba(10, 10, 8, 0.46);
+}
+
+.map-editor-tile-ground.map-editor-corner-inner-ne {
+  --map-editor-ground-corner-inner-ne: rgba(10, 10, 8, 0.42);
+}
+
+.map-editor-tile-ground.map-editor-corner-inner-se {
+  --map-editor-ground-corner-inner-se: rgba(4, 4, 3, 0.54);
+}
+
+.map-editor-tile-ground.map-editor-corner-inner-sw {
+  --map-editor-ground-corner-inner-sw: rgba(8, 8, 6, 0.46);
+}
+
+.map-editor-tile-ground.map-editor-corner-outer-nw {
+  --map-editor-ground-corner-outer-nw: rgba(207, 192, 147, 0.46);
+}
+
+.map-editor-tile-ground.map-editor-corner-outer-ne {
+  --map-editor-ground-corner-outer-ne: rgba(173, 158, 119, 0.42);
+}
+
+.map-editor-tile-ground.map-editor-corner-outer-se {
+  --map-editor-ground-corner-outer-se: rgba(26, 24, 19, 0.62);
+}
+
+.map-editor-tile-ground.map-editor-corner-outer-sw {
+  --map-editor-ground-corner-outer-sw: rgba(139, 128, 98, 0.42);
+}
+
+.map-editor-cell-selected {
+  z-index: 18;
+  outline: 3px solid rgba(245, 215, 146, 0.92);
+  outline-offset: -3px;
+}
+
+.map-editor-grid-line-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  background-image:
+    linear-gradient(90deg, rgba(230, 224, 204, 0.18) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(230, 224, 204, 0.18) 1px, transparent 1px);
+}
+
+.map-editor-collision-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.map-editor-collider-box {
+  position: absolute;
+  border: 2px solid rgba(255, 75, 75, 0.88);
+  background: rgba(255, 75, 75, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.48), 0 0 8px rgba(255, 75, 75, 0.2);
+}
+
+.map-editor-collider-ground {
+  border-color: rgba(255, 176, 69, 0.92);
+  background: rgba(255, 176, 69, 0.1);
+}
+
+.map-editor-collider-empty {
+  border-color: rgba(170, 70, 70, 0.5);
+  background: rgba(170, 70, 70, 0.05);
+}
+
+.map-editor-collider-player {
+  z-index: 18;
+  border-color: rgba(78, 197, 151, 0.96);
+  background: rgba(78, 197, 151, 0.16);
+}
+
+.map-editor-minimap {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 40;
+  width: 280px;
+  padding: 10px;
+  border: 1px solid rgba(212, 218, 205, 0.36);
+  border-radius: 6px;
+  background: rgba(12, 14, 14, 0.88);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
+  color: #efe8d6;
+}
+
+.map-editor-minimap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.map-editor-minimap-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-editor-minimap-header button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(182, 188, 179, 0.34);
+  border-radius: 5px;
+  background: rgba(40, 45, 44, 0.94);
+  color: #efe8d6;
+  cursor: pointer;
+}
+
+.map-editor-minimap-header button:hover,
+.map-editor-minimap-header button.active {
+  border-color: rgba(245, 215, 146, 0.86);
+  background: rgba(86, 74, 48, 0.95);
+}
+
+.map-editor-minimap-body {
+  position: relative;
+  width: 256px;
+  height: 144px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 230, 224, 0.28);
+  background: #050606;
+}
+
+.map-editor-minimap-body canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.map-editor-minimap-viewport,
+.map-editor-minimap-player,
+.map-editor-minimap-spawn {
+  position: absolute;
+  pointer-events: none;
+}
+
+.map-editor-minimap-viewport {
+  border: 1px solid rgba(245, 215, 146, 0.96);
+  background: rgba(245, 215, 146, 0.08);
+  box-shadow: 0 0 8px rgba(245, 215, 146, 0.36);
+}
+
+.map-editor-minimap-player,
+.map-editor-minimap-spawn {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.84);
+}
+
+.map-editor-minimap-player {
+  background: #f4dfaa;
+}
+
+.map-editor-minimap-spawn {
+  background: #4ec597;
+}
+
+.map-editor-spawn-marker {
+  position: absolute;
+  z-index: 12;
+  border: 2px solid rgba(78, 197, 151, 0.96);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px rgba(10, 15, 14, 0.64), 0 0 18px rgba(78, 197, 151, 0.58);
+  pointer-events: none;
+}
+
+.map-editor-spawn-marker::before,
+.map-editor-spawn-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(78, 197, 151, 0.92);
+  transform: translate(-50%, -50%);
+}
+
+.map-editor-spawn-marker::before {
+  width: 2px;
+  height: 140%;
+}
+
+.map-editor-spawn-marker::after {
+  width: 140%;
+  height: 2px;
+}
+
+.map-editor-spawnPlan-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+}
+
+.map-editor-spawnPlan-circle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 210, 99, 0.88);
+  border-radius: 50%;
+  background: rgba(255, 210, 99, 0.08);
+  color: #fff2bf;
+  font-size: 12px;
+  font-weight: 700;
+  transform: translateZ(0);
+  box-shadow: 0 0 0 2px rgba(8, 10, 10, 0.46), inset 0 0 18px rgba(255, 210, 99, 0.08);
+  pointer-events: auto;
+}
+
+.map-editor-spawnPlan-aggro {
+  position: absolute;
+  border: 2px dashed rgba(109, 209, 255, 0.74);
+  border-radius: 50%;
+  background: rgba(109, 209, 255, 0.035);
+  box-shadow: 0 0 0 1px rgba(8, 10, 10, 0.28);
+  transform: translateZ(0);
+  pointer-events: none;
+}
+
+.map-editor-spawnPlan-circle.selected {
+  border-color: rgba(255, 246, 187, 0.98);
+  box-shadow: 0 0 0 3px rgba(245, 215, 146, 0.3), 0 0 18px rgba(245, 215, 146, 0.46);
+}
+
+.map-editor-spawnPlan-aggro.selected {
+  border-color: rgba(142, 224, 255, 0.98);
+  box-shadow: 0 0 0 2px rgba(91, 189, 227, 0.24), 0 0 18px rgba(91, 189, 227, 0.34);
+}
+
+.map-editor-boss-group {
+  border-color: rgba(248, 90, 120, 0.95);
+  background: rgba(248, 90, 120, 0.1);
+  color: #ffd5df;
+}
+
+.map-editor-boss-aggro {
+  border-color: rgba(255, 125, 164, 0.76);
+  background: rgba(248, 90, 120, 0.035);
+}
+
+.map-editor-spawnPlan-center,
+.map-editor-spawnPlan-radius,
+.map-editor-spawnPlan-aggro-radius {
+  position: absolute;
+  border: 1px solid rgba(12, 14, 14, 0.72);
+  border-radius: 50%;
+  background: #f6d36d;
+  cursor: grab;
+}
+
+.map-editor-boss-group .map-editor-spawnPlan-center,
+.map-editor-boss-group .map-editor-spawnPlan-radius,
+.map-editor-boss-aggro .map-editor-spawnPlan-aggro-radius {
+  background: #f85a78;
+}
+
+.map-editor-spawnPlan-center {
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+}
+
+.map-editor-spawnPlan-radius {
+  right: -7px;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  transform: translateY(-50%);
+}
+
+.map-editor-spawnPlan-aggro-radius {
+  right: -8px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  background: #6dd1ff;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+.map-editor-spawnPlan-center:disabled,
+.map-editor-spawnPlan-radius:disabled,
+.map-editor-spawnPlan-aggro-radius:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.map-editor-context-menu {
+  position: absolute;
+  z-index: 42;
+  min-width: 116px;
+  padding: 5px;
+  border: 1px solid rgba(224, 219, 194, 0.38);
+  border-radius: 6px;
+  background: rgba(16, 18, 18, 0.96);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.38);
+}
+
+.map-editor-context-menu button {
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #f3ead8;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-editor-context-menu button:hover {
+  background: rgba(245, 215, 146, 0.16);
+}
+
+.map-editor-player {
+  z-index: 20;
 }
 
 .sprite-test-screen {
@@ -894,6 +1827,20 @@ button {
 }
 
 @media (max-width: 1100px) {
+  .map-editor-screen {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .map-editor-toolbar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(211, 213, 204, 0.18);
+  }
+
+  .map-editor-stage {
+    min-height: 68vh;
+  }
+
   .sprite-test-screen {
     overflow: auto;
   }
@@ -1232,9 +2179,10 @@ button {
   position: absolute;
   inset: -12px -14px;
   border-radius: inherit;
-  background-image: url("../assets/skill-vfx-atlas.png");
-  background-size: 420% 420%;
-  background-position: 0 0;
+  background:
+    radial-gradient(circle at 32% 42%, rgba(255, 246, 184, 0.82), transparent 18%),
+    radial-gradient(circle at 66% 58%, rgba(255, 125, 40, 0.54), transparent 30%),
+    conic-gradient(from 18deg, transparent, rgba(255, 222, 126, 0.42), transparent 46%, rgba(255, 86, 42, 0.35), transparent);
   opacity: 0.44;
   filter: saturate(1.35) contrast(1.18);
 }
@@ -1514,6 +2462,101 @@ button {
 
 .hud-button:hover {
   background: rgba(55, 41, 23, 0.94);
+}
+
+.map-debug-toggle {
+  position: absolute;
+  right: 24px;
+  top: 110px;
+  z-index: 22;
+  display: none;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid rgba(128, 210, 176, 0.76);
+  border-radius: 5px;
+  background: rgba(14, 22, 19, 0.86);
+  color: #dfffe8;
+  font-size: 13px;
+  text-shadow: 0 2px 2px #000;
+}
+
+.map-debug-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: #3ee078;
+}
+
+.spawnPlan-warning-panel {
+  position: absolute;
+  right: 24px;
+  top: 154px;
+  z-index: 22;
+  display: grid;
+  gap: 5px;
+  width: min(360px, calc(100vw - 48px));
+  padding: 10px;
+  border: 1px solid rgba(245, 194, 92, 0.74);
+  border-radius: 5px;
+  background: rgba(34, 25, 12, 0.9);
+  color: #ffe7aa;
+  font-size: 12px;
+  text-shadow: 0 2px 2px #000;
+}
+
+.map-selection-panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 24;
+  display: grid;
+  width: min(440px, calc(100vw - 48px));
+  gap: 14px;
+  padding: 18px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(230, 196, 126, 0.78);
+  border-radius: 6px;
+  background: rgba(18, 16, 13, 0.92);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
+  color: #ffe9b0;
+}
+
+.map-selection-panel h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.map-selection-list {
+  display: grid;
+  gap: 8px;
+}
+
+.map-selection-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(230, 196, 126, 0.42);
+  border-radius: 5px;
+  background: rgba(35, 31, 24, 0.88);
+  color: #f8e3ad;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-selection-card:hover,
+.map-selection-card.selected {
+  border-color: rgba(91, 224, 146, 0.9);
+  background: rgba(33, 52, 39, 0.92);
+}
+
+.map-selection-card strong {
+  font-size: 16px;
+}
+
+.map-selection-card span {
+  color: #d5c49d;
+  font-size: 13px;
 }
 
 .help-text {
@@ -3430,6 +4473,15 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .map-editor-toolbar {
+    padding: 14px;
+  }
+
+  .map-editor-segment,
+  .map-editor-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .skill-editor-shell {
     width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);

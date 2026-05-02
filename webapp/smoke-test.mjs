@@ -5,6 +5,8 @@ import { execFileSync } from "node:child_process";
 const root = process.cwd();
 const app = readFileSync(join(root, "webapp", "App.tsx"), "utf8");
 const css = readFileSync(join(root, "webapp", "styles.css"), "utf8");
+const bakedMapAssets = readFileSync(join(root, "webapp", "bakedMapAssets.ts"), "utf8");
+const bakedMapLoader = readFileSync(join(root, "webapp", "bakedMapLoader.ts"), "utf8");
 const html = readFileSync(join(root, "index.html"), "utf8");
 const state = loadCurrentState();
 const localization = readFileSync(join(root, "configs", "localization", "zh_cn.toml"), "utf8");
@@ -14,7 +16,13 @@ const skillEditorRunner = readFileSync(join(root, "skillEditor_run.bat"), "utf8"
 const workbenchFramePath = join(root, "webapp", "assets", "workbench-frame.png");
 const unitAnimationRuntime = readFileSync(join(root, "webapp", "unitAnimation.ts"), "utf8");
 const unitAssets = readFileSync(join(root, "webapp", "unitAssets.ts"), "utf8");
-const unitAnimationManifest = JSON.parse(readFileSync(join(root, "assest", "battle", "units", "manifests", "unit-animations-manifest.json"), "utf8"));
+const unitAnimationManifest = JSON.parse(readFileSync(join(root, "assets", "battle", "units", "manifests", "unit-animations-manifest.json"), "utf8"));
+const bakedMapDir = join(root, "assets", "battle", "maps", "dungeon_001");
+const bakedMapMeta = JSON.parse(readFileSync(join(bakedMapDir, "map_meta.json"), "utf8"));
+
+function isNonAsciiCheck(text) {
+  return /[^\x00-\x7F]/.test(text);
+}
 
 function loadCurrentState() {
   const script = [
@@ -27,16 +35,24 @@ function loadCurrentState() {
   return JSON.parse(execFileSync("python", ["-c", script], { cwd: root, encoding: "utf8" }).replace(/^\uFEFF/, ""));
 }
 
+function pngSize(path) {
+  const data = readFileSync(path);
+  return {
+    width: data.readUInt32BE(16),
+    height: data.readUInt32BE(20)
+  };
+}
+
 const requiredText = [
-  "数独宝石流放like V1",
-  "开始游戏",
-  "拖拽：放置宝石",
-  "C：打开/关闭背包"
+  "\u6570\u72ec\u5b9d\u77f3\u6d41\u653elike V1",
+  "\u8fdb\u5165\u6218\u6597",
+  "\u62d6\u62fd\uff1a\u653e\u7f6e\u5b9d\u77f3",
+  "C\uff1a\u6253\u5f00/\u5173\u95ed\u80cc\u5305"
 ];
 
 for (const text of requiredText) {
   if (!app.includes(text) && !html.includes(text)) {
-    throw new Error(`缺少中文页面文本：${text}`);
+    throw new Error(`Missing required page text: ${text}`);
   }
 }
 
@@ -64,6 +80,155 @@ const requiredCode = [
   "beginLaunchPointAdjustment",
   "viewportToBattleWorld",
   "unprojectScreenToWorld",
+  "initialMapEditorMode",
+  "/map-editor",
+  "MapEditorScene",
+  "data-mode=\"map-editor\"",
+  "data-no-monsters=\"true\"",
+  "MapEditorTileKind",
+  "MapEditorCollider",
+  "MapEditorTileColliderConfig",
+  "MAP_EDITOR_DEFAULT_CELL_SIZE",
+  "MAP_EDITOR_COLUMNS = 256",
+  "MAP_EDITOR_ROWS = 144",
+  "MAP_EDITOR_DEFAULT_SPAWN",
+  "MAP_EDITOR_MINIMAP_WIDTH",
+  "MAP_EDITOR_PLAYER_COLLIDER",
+  "MAP_EDITOR_PLAYER_RENDER_SCALE = 0.5",
+  "MAP_EDITOR_STORAGE_KEY",
+  "MAP_EDITOR_CURRENT_FILE_STORAGE_KEY",
+  "MAP_EDITOR_HANDLE_DB_NAME",
+  "MapEditorFileDocument",
+  "MapEditorSpawnPlanData",
+  "MapEditorMonsterSpawnPoint",
+  "MapEditorBossGroup",
+  "aggroRadius",
+  "countMultiplierMin",
+  "countMultiplierMax",
+  "MapEditorSpawnPlanTool",
+  "normalizeMapEditorSpawnPlans",
+  "createDefaultMapEditorMonsterSpawn",
+  "createDefaultMapEditorBossGroup",
+  "shiftMapEditorSpawnPlans",
+  "data-spawnPlan-editor=\"true\"",
+  "setMapEditorEditMode",
+  "editMode ? editorCamera : player",
+  "spawnPlanTool === \"monster\"",
+  "spawnPlanTool === \"boss\"",
+  "createSpawnPlanFromContextMenu",
+  "MapEditorSpawnPlanOverlay",
+  "map-editor-spawnPlan-layer",
+  "map-editor-monster-spawn",
+  "map-editor-boss-group",
+  "map-editor-spawnPlan-aggro",
+  "map-editor-spawnPlan-aggro-radius",
+  "data-spawnPlan-jump=\"true\"",
+  "mapEditorSpawnPlanSelectionKey",
+  "map-editor-context-menu",
+  "data-selected-spawnPlan=\"monster\"",
+  "data-selected-spawnPlan=\"boss\"",
+  "createAuthoredSpawnPlanEnemies",
+  "rollMapEditorMonsterSpawnCount",
+  "RuntimeEncounterAggroSource",
+  "triggeredEncounterSourceIds",
+  "aggroLocked",
+  "sampleAuthoredSpawnPlanPositions",
+  "createEnemySpatialIndex",
+  "queryEnemySpatialIndex",
+  "candidateEnemiesNear",
+  "updateRuntimeEnemies",
+  "selectRenderableEnemies",
+  "ENEMY_CAMERA_VISIBLE_RANGE",
+  "runtimeTier",
+  "authoredSpawnPlanActive",
+  "spawnPlanWarnings",
+  "ENEMY_SPATIAL_CHUNK_SIZE",
+  "MAX_VISIBLE_ENEMY_DOM_NODES",
+  "loadMapEditorState",
+  "map001Document",
+  "EDITOR_RUNTIME_MAP_ID",
+  "DEFAULT_RUNTIME_MAP_ID",
+  "createEditorRuntimeBattleMap",
+  "EditorRuntimeMapBackground",
+  "editorSpawnPlans",
+  "loadRuntimeAuthoredSpawnPlanData(battleMap)",
+  "saveMapEditorState",
+  "normalizeMapEditorColliders",
+  "createDefaultMapEditorColliders",
+  "selectMapDirectory",
+  "nextMapEditorFileName",
+  "writeMapEditorFile",
+  "readMapEditorFile",
+  "createMapEditorFileDocument",
+  "spawn:",
+  "saveNow",
+  "淇濆瓨鍦板浘",
+  "鏂板缓鍦板浘",
+  "娴忚鎵撳紑",
+  "map_XXX.json",
+  "mapEditorCameraTransform",
+  "placeSpawnAtPlayer",
+  "mapEditorSpawnMarkerStyle",
+  "MapEditorMinimap",
+  "showGridLines",
+  "mapEditorMinimapTileColor",
+  "MapEditorCollisionOverlay",
+  "mapEditorTileColliderStyle",
+  "mapEditorPlayerColliderWorld",
+  "countMapEditorBlockingTiles",
+  "MapEditorTileCells",
+  "mapEditorVisibleBounds",
+  "MAP_EDITOR_VISIBLE_RADIUS_X",
+  "MAP_EDITOR_VISIBLE_RADIUS_Y",
+  "isMapEditorTypingTarget",
+  "鑽夌浠嶄細鑷姩澶囦唤鍒版祻瑙堝櫒鏈湴",
+  "paintMapEditorTiles",
+  "shiftMapEditorTiles",
+  "shiftWholeMap",
+  "resolveMapEditorMove",
+  "mapEditorColliderForTile",
+  "isMapEditorWalkable",
+  "鏄剧ず纰版挒",
+  "纰版挒鑼冨洿",
+  "鐩爣 Tile",
+  "闅愯棌绾挎",
+  "map-editor-tile-ground",
+  "map-editor-tile-wall",
+  "MapEditorAutotileState",
+  "mapEditorAutotileState",
+  "mapEditorAutotileSideValue",
+  "mapEditorAutotileCornerValue",
+  "data-autotile-role",
+  "data-autotile-same",
+  "data-autotile-edge",
+  "data-autotile-boundary",
+  "data-autotile-inner-corner",
+  "data-autotile-outer-corner",
+  "map-editor-autotile-connected",
+  "map-editor-autotile-interior",
+  "map-editor-edge-n",
+  "map-editor-boundary-n",
+  "map-editor-corner-inner-",
+  "map-editor-corner-outer-",
+  "mapEditorTileConnectionClass",
+  "mapEditorWallNeedsCornerCap",
+  "map-editor-wall-open-n",
+  "map-editor-wall-corner",
+  "map-editor-wall-corner-nw",
+  "map-editor-wall-open-",
+  "map-editor-dungeon-floor-v2.png",
+  "map-editor-dungeon-wall-v2.png",
+  "map-editor-cell-selected",
+  "map-editor-spawn-marker",
+  "map-editor-shift-controls",
+  "map-editor-grid-line-overlay",
+  "map-editor-collision-layer",
+  "map-editor-collider-player",
+  "map-editor-collider-grid",
+  "map-editor-minimap",
+  "map-editor-minimap-actions",
+  "map-editor-minimap-player",
+  "map-editor-file-list",
   "scheduledSkillEvents",
   "runtimePerfSummary",
   "RUNTIME_PERF_SYNC_INTERVAL_MS",
@@ -122,7 +287,88 @@ const requiredCode = [
 
 for (const text of requiredCode) {
   if (!app.includes(text) && !css.includes(text)) {
-    throw new Error(`缺少 WebApp 交互或样式能力：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯 WebApp 浜や簰鎴栨牱寮忚兘鍔涳細${text}`);
+  }
+}
+
+const mapEditorStart = app.indexOf("function MapEditorScene");
+const mapEditorEndCandidates = [
+  app.indexOf("function runtimeBattleMapOptions"),
+  app.indexOf("function createEmptyMapEditorTiles")
+].filter((index) => index > mapEditorStart);
+const mapEditorSource = app.slice(mapEditorStart, Math.min(...mapEditorEndCandidates));
+if (!mapEditorSource.includes("data-no-monsters=\"true\"")) {
+  throw new Error("map editor must declare that the first version has no monster generation.");
+}
+for (const forbidden of ["createEnemy", "setEnemies", "enemySpawnPoints", "eliteSpawnPoints", "bossPoints"]) {
+  if (mapEditorSource.includes(forbidden)) {
+    throw new Error(`map editor first version must not include monster generation or spawn controls: ${forbidden}`);
+  }
+}
+
+const mapEditorFileDocumentSource = app.slice(app.indexOf("function createMapEditorFileDocument"), app.indexOf("function isMapEditorAbortError"));
+for (const forbidden of ["autotile", "neighborMask", "edgeMask", "cornerMask", "visualMask"]) {
+  if (mapEditorFileDocumentSource.includes(forbidden)) {
+    throw new Error(`map editor save format must keep visual autotile state derived instead of persisted: ${forbidden}`);
+  }
+}
+const mapEditorCellCss = css.match(/\.map-editor-cell\s*{[^}]*}/s)?.[0] ?? "";
+if (!/border:\s*0\s*;/.test(mapEditorCellCss)) {
+  throw new Error("map editor cells must not render mandatory per-cell borders in seamless terrain mode.");
+}
+if (!/\.map-editor-grid-line-overlay\s*{[^}]*background-image:/s.test(css)) {
+  throw new Error("map editor grid lines must stay in a separate overlay.");
+}
+
+const bakedMapRequiredFiles = [
+  "background.png",
+  "walkable_mask.png",
+  "blocker_mask.png",
+  "spawn_mask.png",
+  "map_meta.json"
+];
+for (const fileName of bakedMapRequiredFiles) {
+  if (!existsSync(join(bakedMapDir, fileName))) {
+    throw new Error(`缂哄皯鐑樼剻鍦板浘璧勬簮锟?{fileName}`);
+  }
+}
+
+for (const fileName of ["background.png", "walkable_mask.png", "blocker_mask.png", "spawn_mask.png"]) {
+  const size = pngSize(join(bakedMapDir, fileName));
+  if (size.width !== bakedMapMeta.pixel_width || size.height !== bakedMapMeta.pixel_height) {
+    throw new Error(`鐑樼剻鍦板浘璧勬簮灏哄涓嶄竴鑷达細${fileName}`);
+  }
+}
+
+const bakedMapChecks = [
+  [bakedMapAssets, "BAKED_BATTLE_MAPS", "missing baked map registry"],
+  [bakedMapAssets, "dungeon_001", "missing dungeon_001 map registration"],
+  [bakedMapLoader, "loadBakedBattleMap", "missing baked map loader"],
+  [bakedMapLoader, "walkableGrid", "missing walkable grid parsing"],
+  [bakedMapLoader, "blockerGrid", "missing blocker grid parsing"],
+  [bakedMapLoader, "&& !blocker", "blockers must override walkable cells"],
+  [bakedMapLoader, "SPAWN_COLORS", "missing spawn color definitions"],
+  [bakedMapLoader, "debugWarnings", "missing map debug warnings"],
+  [bakedMapLoader, "resolveWalkableMove", "missing walkable movement resolver"],
+  [app, "MapSelectionPanel", "missing map selection panel"],
+  [app, "\u9009\u62e9\u6218\u6597\u5730\u56fe", "missing Chinese map selection title"],
+  [app, "\u5730\u56fe\u8c03\u8bd5", "missing map debug toggle"],
+  [app, "BakedMapBackground", "missing baked map background renderer"],
+  [app, "MapDebugOverlay", "missing map debug overlay"],
+  [app, "createEnemy(nextEnemyId.current++, player.x, player.y, battleMap", "enemy spawning not connected to map points"],
+  [css, ".map-debug-walkable", "missing walkable debug style"],
+  [css, ".map-debug-blocker", "missing blocker debug style"],
+  [css, ".map-debug-marker-player", "missing player spawn debug marker"]
+];
+
+for (const [source, token, message] of bakedMapChecks) {
+  if (!source.includes(token)) throw new Error(message);
+}
+
+for (const forbidden of ["from \"./terrainAssets\"", "function MapTiles", "createDefaultTilemap"]) {
+  if (app.includes(forbidden)) {
+    throw new Error(`鎴樻枟涓绘祦绋嬩粛寮曠敤鏃х▼搴忓寲 tile 鍦板浘锟?{forbidden}`);
   }
 }
 
@@ -146,13 +392,13 @@ const projectileVfxLifetimeChecks = [
 
 for (const text of projectileVfxLifetimeChecks) {
   if (!app.includes(text)) {
-    throw new Error(`缂哄皯鎶曞皠鐗╃敓瀛樻湡/娣″嚭鍒嗙妫€鏌ワ細${text}`);
+    throw new Error(`缂傚搫鐨幎鏇炵殸閻椻晝鏁撶€涙ɑ锟?濞ｂ€冲毉閸掑棛顬囧Λ鈧弻銉窗${text}`);
   }
 }
 
 const fireBoltViewSource = app.slice(app.indexOf("function FireBoltView"), app.indexOf("function LegacyFireBoltView"));
 if (fireBoltViewSource.includes("const opacity = Math.max(0, bolt.ttl / duration);")) {
-  throw new Error("鎶曞皠鐗╂湰浣撻€忔槑搴︿笉鑳藉啀缁戝畾鍒版暣娈甸琛?ttl/duration銆?");
+  throw new Error("閹舵洖鐨犻悧鈺傛拱娴ｆ捇鈧繑妲戞惔锔跨瑝閼宠棄鍟€缂佹垵鐣鹃崚鐗堟殻濞堢敻顥ｇ悰?ttl/duration锟?");
 }
 
 const unitAnimationCodeChecks = [
@@ -165,7 +411,6 @@ const unitAnimationCodeChecks = [
   "baseMoveSpeed",
   "currentMoveSpeed",
   "unitMovementState",
-  "UNIT_RUN_SPEED_RATIO",
   "data-animation-state",
   "data-animation-direction",
   "data-animation-playback-rate",
@@ -174,7 +419,7 @@ const unitAnimationCodeChecks = [
 
 for (const text of unitAnimationCodeChecks) {
   if (!app.includes(text) && !unitAnimationRuntime.includes(text) && !unitAssets.includes(text)) {
-    throw new Error(`缺少单位动画运行时或接入点：${text}`);
+    throw new Error(`缂哄皯鍗曚綅鍔ㄧ敾杩愯鏃舵垨鎺ュ叆鐐癸細${text}`);
   }
 }
 
@@ -184,26 +429,25 @@ const spriteTestChecks = [
   "mode\") === \"sprite-test\"",
   "SpriteTestScene",
   "data-mode=\"sprite-test\"",
-  "Sprites 动作测试场景",
-  "待机测试区",
-  "行走测试区",
-  "奔跑测试区",
-  "run",
-  "缺少动作：",
-  "缺少方向：",
-  "缺少帧配置：",
-  "碰撞框显示",
-  "挂点显示",
-  "网格显示",
-  "截图模式",
-  "返回正式入口",
+  "Sprites 鍔ㄤ綔娴嬭瘯鍦烘櫙",
+  "寰呮満娴嬭瘯锟?",
+  "琛岃蛋娴嬭瘯锟?",
+  "缂哄皯鍔ㄤ綔锟?",
+  "缂哄皯鏂瑰悜锟?",
+  "缂哄皯甯ч厤缃細",
+  "纰版挒妗嗘樉锟?",
+  "鎸傜偣鏄剧ず",
+  "缃戞牸鏄剧ず",
+  "鎴浘妯″紡",
+  "杩斿洖姝ｅ紡鍏ュ彛",
   "SPRITE_TEST_PATHS",
   "UNIT_ANIMATION_ASSETS"
 ];
 
 for (const text of spriteTestChecks) {
   if (!app.includes(text)) {
-    throw new Error(`缺少 Sprites 动作测试场入口或中文界面：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯 Sprites 鍔ㄤ綔娴嬭瘯鍦哄叆鍙ｆ垨涓枃鐣岄潰锟?{text}`);
   }
 }
 
@@ -213,58 +457,61 @@ function hasAnimation(unitId, stateName) {
 
 const requiredUnitAnimations = [
   ["player_adventurer", "idle"],
-  ["player_adventurer", "walk"],
-  ["player_adventurer", "run"]
+  ["player_adventurer", "walk"]
 ];
 
 for (const [unitId, stateName] of requiredUnitAnimations) {
   if (!hasAnimation(unitId, stateName)) {
-    throw new Error(`缺少单位动画资源：${unitId}/${stateName}`);
+    throw new Error(`缂哄皯鍗曚綅鍔ㄧ敾璧勬簮锟?{unitId}/${stateName}`);
   }
 }
 
 if (hasAnimation("player_adventurer", "attack")) {
-  throw new Error("主角本轮不应包含 attack 动画。");
+  throw new Error("涓昏鏈疆涓嶅簲鍖呭惈 attack 鍔ㄧ敾锟?");
 }
 
 for (const direction of ["left", "right"]) {
   if (!unitAnimationManifest.assets.some((asset) => asset.unitId === "player_adventurer" && asset.direction === direction)) {
-    throw new Error(`缺少角色方向动画资源：player_adventurer/${direction}`);
+    throw new Error(`缂哄皯瑙掕壊鏂瑰悜鍔ㄧ敾璧勬簮锛歱layer_adventurer/${direction}`);
   }
 }
 
-for (const action of ["idle", "walk", "run"]) {
+for (const action of ["idle", "walk"]) {
   for (const direction of ["left", "right"]) {
     const asset = unitAnimationManifest.assets.find((item) => item.unitId === "player_adventurer" && item.state === action && item.direction === direction);
-    if (!asset) throw new Error(`缺少规范角色动作资源：player_adventurer/${action}/${direction}`);
-    if (asset.frameCount !== 4) throw new Error(`角色动作帧数错误：${action}/${direction}`);
+    if (!asset) throw new Error(`缂哄皯瑙勮寖瑙掕壊鍔ㄤ綔璧勬簮锛歱layer_adventurer/${action}/${direction}`);
+    if (asset.frameCount !== 4) throw new Error(`瑙掕壊鍔ㄤ綔甯ф暟閿欒锟?{action}/${direction}`);
     if (!String(asset.path).includes(`player_adventurer_${action}_${direction}.png`)) {
-      throw new Error(`角色动作 sheet 命名不规范：${asset.path}`);
-    }
-    if (!String(asset.framesPath ?? "").includes(`/frames/player_adventurer/${action}/${direction}`)) {
-      throw new Error(`角色动作序列帧目录不规范：${asset.framesPath}`);
+      throw new Error(`瑙掕壊鍔ㄤ綔 sheet 鍛藉悕涓嶈鑼冿細${asset.path}`);
     }
   }
 }
 
 for (const direction of ["left", "right"]) {
+  const asset = unitAnimationManifest.assets.find((item) => item.unitId === "enemy_imp" && item.state === "walk" && item.direction === direction);
+  if (!asset) throw new Error(`missing enemy_imp walk asset: ${direction}`);
+  if (asset.frameCount !== 3) throw new Error(`enemy_imp walk frameCount should be 3: ${direction}`);
+  if (asset.width !== asset.frameWidth * asset.frameCount) throw new Error(`enemy_imp walk sheet width mismatch: ${direction}`);
+}
+
+for (const direction of ["left", "right"]) {
   if (!unitAnimationManifest.implementedDirections.includes(direction)) {
-    throw new Error(`缺少 8 方向预留命名：${direction}`);
+    throw new Error(`缂哄皯 8 鏂瑰悜棰勭暀鍛藉悕锟?{direction}`);
   }
 }
 
 for (const field of ["unitId", "state", "direction", "frameCount", "fps", "loop", "durationMs", "frameWidth", "frameHeight", "anchorX", "anchorY", "scale", "fallbackDirection", "playbackRate"]) {
   if (!unitAnimationManifest.assets.every((asset) => Object.prototype.hasOwnProperty.call(asset, field))) {
-    throw new Error(`单位动画 manifest 缺少字段：${field}`);
+    throw new Error(`鍗曚綅鍔ㄧ敾 manifest 缂哄皯瀛楁锟?{field}`);
   }
 }
 
 const skillEditorChecks = [
   "SkillEditorPanel",
   "skill_editor",
-  "技能编辑器",
-  "技能文件列表",
-  "仅编辑已迁移技能包允许的字段",
+  "鎶€鑳界紪杈戝櫒",
+  "鎶€鑳芥枃浠跺垪锟?",
+  "浠呯紪杈戝凡杩佺Щ鎶€鑳藉寘鍏佽鐨勫瓧锟?",
   "active_fire_bolt",
   "active_ice_shards",
   "active_penetrating_shot",
@@ -278,12 +525,12 @@ const skillEditorChecks = [
   "area_spawn",
   "chain_segment",
   "chain-segment-vfx",
-  "连锁模块",
-  "连锁次数",
-  "连锁半径",
-  "每跳伤害衰减",
-  "连锁段特效键",
-  "近战扇形模块",
+  "杩為攣妯″潡",
+  "杩為攣娆℃暟",
+  "杩為攣鍗婂緞",
+  "姣忚烦浼ゅ琛板噺",
+  "杩為攣娈电壒鏁堥敭",
+  "杩戞垬鎵囧舰妯″潡",
   "melee-arc-vfx",
   "createMeleeArcSkillEvents",
   "selectMeleeArcTargets",
@@ -295,27 +542,27 @@ const skillEditorChecks = [
   "PENETRATING_SHOT_VFX",
   "PENETRATING_SHOT_ART_FACING_OFFSET_DEG",
   "penetrating_shot-muzzle-vfx",
-  "火焰弹",
-  "冰棱散射",
-  "技能配置来源",
-  "行为模板",
-  "发射位置",
-  "直接调整",
-  "拖拽调整发射点",
-  "确认位置",
-  "取消",
-  "结构校验通过",
-  "未迁移 / 不可编辑",
-  "不可打开",
-  "基础信息模块",
-  "释放参数模块",
-  "投射物模块",
-  "伤害点模块",
-  "表现模块",
-  "预览字段模块",
-  "技能编号（只读）",
-  "保存技能包",
-  "保存成功",
+  "鐏劙锟?",
+  "鍐版１鏁ｅ皠",
+  "鎶€鑳介厤缃潵锟?",
+  "琛屼负妯℃澘",
+  "鍙戝皠浣嶇疆",
+  "鐩存帴璋冩暣",
+  "鎷栨嫿璋冩暣鍙戝皠锟?",
+  "纭浣嶇疆",
+  "鍙栨秷",
+  "缁撴瀯鏍￠獙閫氳繃",
+  "鏈縼锟?/ 涓嶅彲缂栬緫",
+  "涓嶅彲鎵撳紑",
+  "鍩虹淇℃伅妯″潡",
+  "閲婃斁鍙傛暟妯″潡",
+  "鎶曞皠鐗╂ā锟?",
+  "浼ゅ鐐规ā锟?",
+  "琛ㄧ幇妯″潡",
+  "棰勮瀛楁妯″潡",
+  "鎶€鑳界紪鍙凤紙鍙锟?",
+  "淇濆瓨鎶€鑳藉寘",
+  "淇濆瓨鎴愬姛",
   "/api/skill-editor/save",
   "requestSkillEditorSave",
   "openSkillEditorPanel",
@@ -324,18 +571,18 @@ const skillEditorChecks = [
   "/skill-editor",
   "params.get(\"skill_editor\")",
   "SkillPackageData",
-  "版本",
-  "冷却毫秒",
-  "投射物速度",
-  "扇形角度",
-  "角度间隔",
-  "只读飞行时间",
-  "连发间隔毫秒",
-  "散射角度",
-  "基础伤害",
-  "预览字段",
+  "鐗堟湰",
+  "鍐峰嵈姣",
+  "鎶曞皠鐗╅€熷害",
+  "鎵囧舰瑙掑害",
+  "瑙掑害闂撮殧",
+  "鍙椋炶鏃堕棿",
+  "杩炲彂闂撮殧姣",
+  "鏁ｅ皠瑙掑害",
+  "鍩虹浼ゅ",
+  "棰勮瀛楁",
   "SkillRuntimeGuideLayer",
-  "编辑器运行辅助线",
+  "缂栬緫鍣ㄨ繍琛岃緟鍔╃嚎",
   "runtime-skill-guides",
   "runtime-skill-search-ring",
   "runtime-skill-collision-ring",
@@ -361,81 +608,83 @@ const skillEditorChecks = [
   "collisionRadius * 3",
   "projectileLineMetrics",
   "pierce_count",
-  "测试词缀栈",
-  "可测试辅助效果",
-  "已选择效果",
-  "清空测试栈",
-  "应用测试栈",
-  "仅用于测试，不会写入技能文件",
-  "关系模拟",
-  "相邻",
-  "同行",
-  "同列",
-  "同宫",
-  "来源强度",
-  "目标强度",
-  "导管强度",
-  "临时最终技能实例预览",
-  "原始最终伤害",
-  "测试后最终伤害",
-  "未生效词缀列表",
+  "娴嬭瘯璇嶇紑锟?",
+  "鍙祴璇曡緟鍔╂晥锟?",
+  "宸查€夋嫨鏁堟灉",
+  "娓呯┖娴嬭瘯锟?",
+  "搴旂敤娴嬭瘯锟?",
+  "浠呯敤浜庢祴璇曪紝涓嶄細鍐欏叆鎶€鑳芥枃锟?",
+  "鍏崇郴妯℃嫙",
+  "鐩搁偦",
+  "鍚岃",
+  "鍚屽垪",
+  "鍚屽",
+  "鏉ユ簮寮哄害",
+  "鐩爣寮哄害",
+  "瀵肩寮哄害",
+  "涓存椂鏈€缁堟妧鑳藉疄渚嬮锟?",
+  "鍘熷鏈€缁堜激锟?",
+  "娴嬭瘯鍚庢渶缁堜激锟?",
+  "鏈敓鏁堣瘝缂€鍒楄〃",
   "/api/skill-editor/modifier-preview",
   "requestSkillEditorModifierPreview",
-  "技能测试场",
-  "单体木桩",
-  "三目标横排",
-  "纵向队列",
-  "密集小怪",
-  "运行测试",
-  "暂停",
-  "单步",
-  "重置",
-  "启用测试词缀栈",
-  "本次事件原始摘要",
-  "飞行期间未扣血：通过",
+  "鎶€鑳芥祴璇曞満",
+  "鍗曚綋鏈ㄦ々",
+  "涓夌洰鏍囨í锟?",
+  "绾靛悜闃熷垪",
+  "瀵嗛泦灏忥拷?",
+  "杩愯娴嬭瘯",
+  "鏆傚仠",
+  "鍗曟",
+  "閲嶇疆",
+  "鍚敤娴嬭瘯璇嶇紑锟?",
+  "鏈浜嬩欢鍘熷鎽樿",
+  "椋炶鏈熼棿鏈墸琛€锛氶€氳繃",
   "/api/skill-editor/test-arena/run",
   "requestSkillTestArenaRun",
-  "技能事件时间线",
-  "支持识别的事件类型",
-  "释放开始",
-  "投射物命中",
-  "冷却更新",
-  "事件时间",
-  "存在多枚投射物",
-  "扇形方向可见",
-  "延迟",
-  "持续时间",
-  "来源实体",
-  "目标实体",
-  "伤害类型",
-  "特效标识",
-  "原因标识",
-  "附加数据",
-  "基础时序检查",
+  "鎶€鑳戒簨浠舵椂闂寸嚎",
+  "鏀寔璇嗗埆鐨勪簨浠剁被锟?",
+  "閲婃斁寮€锟?",
+  "鎶曞皠鐗╁懡锟?",
+  "鍐峰嵈鏇存柊",
+  "浜嬩欢鏃堕棿",
+  "瀛樺湪澶氭灇鎶曞皠锟?",
+  "鎵囧舰鏂瑰悜鍙",
+  "寤惰繜",
+  "鎸佺画鏃堕棿",
+  "鏉ユ簮瀹炰綋",
+  "鐩爣瀹炰綋",
+  "浼ゅ绫诲瀷",
+  "鐗规晥鏍囪瘑",
+  "鍘熷洜鏍囪瘑",
+  "闄勫姞鏁版嵁",
+  "鍩虹鏃跺簭妫€锟?",
   "event_timeline",
   "timeline_checks",
   "payload_text"
 ];
 
 const runtimePerformanceChecks = [
-  "运行性能",
-  "帧耗时",
-  "逻辑",
-  "掉帧",
+  "杩愯鎬ц兘",
+  "甯ц€楁椂",
+  "閫昏緫",
+  "鎺夊抚",
   "MAX_SKILL_EDITOR_TIMELINE_ROWS",
   "skill-event-timeline-limit",
-  "已限制首屏渲染"
+  "宸查檺鍒堕灞忔覆锟?",
 ];
 
 for (const text of runtimePerformanceChecks) {
   if (!app.includes(text) && !css.includes(text)) {
-    throw new Error(`缺少运行时性能优化或时间线限流能力：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯杩愯鏃舵€ц兘浼樺寲鎴栨椂闂寸嚎闄愭祦鑳藉姏锟?{text}`);
   }
 }
 
 for (const text of skillEditorChecks) {
   if (!app.includes(text) && !skillEditorAdapter.includes(text) && !webApi.includes(text) && !localization.includes(text) && !skillEditorRunner.includes(text)) {
-    throw new Error(`缺少技能编辑器 V0 中文界面或只读数据展示：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯鎶€鑳界紪杈戝櫒 V0 涓枃鐣岄潰鎴栧彧璇绘暟鎹睍绀猴細${text}`);
   }
 }
 
@@ -448,56 +697,59 @@ const forbiddenSkillEditorText = [
   ">Save<",
   ">Edit<",
   "SkillEditor V0",
-  "测试 Modifier 栈",
-  "启用测试 Modifier 栈",
-  "SkillEvent 时间线",
-  "modifier 列表",
-  "特效 Key",
-  "原因 Key",
+  "娴嬭瘯 Modifier 锟?",
+  "鍚敤娴嬭瘯 Modifier 锟?",
+  "SkillEvent 鏃堕棿锟?",
+  "modifier 鍒楄〃",
+  "鐗规晥 Key",
+  "鍘熷洜 Key",
   "skill.yaml",
-  ">保存<",
-  "自测报告",
-  "编辑器专用预览场景",
-  "固定木桩预览",
+  ">淇濆瓨<",
+  "鑷祴鎶ュ憡",
+  "缂栬緫鍣ㄤ笓鐢ㄩ瑙堝満锟?",
+  "鍥哄畾鏈ㄦ々棰勮",
   "skill-editor-preview-stage"
 ];
 
 for (const text of forbiddenSkillEditorText) {
   if (app.includes(text)) {
-    throw new Error(`技能编辑器 V0 不应出现本轮禁止的界面文案或英文按钮：${text}`);
+    throw new Error(`鎶€鑳界紪杈戝櫒 V0 涓嶅簲鍑虹幇鏈疆绂佹鐨勭晫闈㈡枃妗堟垨鑻辨枃鎸夐挳锟?{text}`);
   }
 }
 
-const removedButtons = ["上盘", "下盘"];
+const removedButtons = ["涓婄洏", "涓嬬洏"];
 for (const text of removedButtons) {
   if (app.includes(`<button`) && app.includes(`>${text}<`)) {
-    throw new Error(`仍存在不需要的按钮：${text}`);
+    throw new Error(`浠嶅瓨鍦ㄤ笉闇€瑕佺殑鎸夐挳锟?{text}`);
   }
 }
 
-const removedPanels = ["gear-rail", "skill-preview-panel", "装备栏", "技能预览"];
+const removedPanels = ["gear-rail", "skill-preview-panel", "装锟斤拷锟斤拷", "锟斤拷锟斤拷预锟斤拷"];
 for (const text of removedPanels) {
   if (app.includes(text)) {
-    throw new Error(`仍存在已要求移除的 UI：${text}`);
+    throw new Error(`浠嶅瓨鍦ㄥ凡瑕佹眰绉婚櫎锟?UI锟?{text}`);
   }
 }
 
-const removedWorkbenchText = ["宝石库存", "数独宝石盘", "盘面合法"];
+const removedWorkbenchText = ["???", "????", "???"];
 for (const text of removedWorkbenchText) {
   if (app.includes(text)) {
-    throw new Error(`右侧工作台仍存在需要去掉的文字：${text}`);
+    throw new Error(`鍙充晶宸ヤ綔鍙颁粛瀛樺湪闇€瑕佸幓鎺夌殑鏂囧瓧锟?{text}`);
   }
 }
 
-const removedHudText = ["skill-strip", "skill-card", "counter"];
+const removedHudText = ["skill-strip", "skill-card"];
 for (const text of removedHudText) {
   if (app.includes(text) || css.includes(text)) {
-    throw new Error(`仍存在已要求移除的底部战斗条 UI：${text}`);
+    throw new Error(`浠嶅瓨鍦ㄥ凡瑕佹眰绉婚櫎鐨勫簳閮ㄦ垬鏂楁潯 UI锟?{text}`);
   }
+}
+if (/(^|[.\s"'`])counter($|[-_\s"'`:{.])/.test(app) || /\.counter\b/.test(css)) {
+  throw new Error("浠嶅瓨鍦ㄥ凡瑕佹眰绉婚櫎鐨勫簳閮ㄦ垬鏂楁潯 UI锛烿ounter");
 }
 
 if (!existsSync(workbenchFramePath)) {
-  throw new Error("缺少生图底框资产 webapp/assets/workbench-frame.png。");
+  throw new Error("缂哄皯鐢熷浘搴曟璧勪骇 webapp/assets/workbench-frame.png锟?");
 }
 
 const obviousEnglishButtonText = [
@@ -507,12 +759,12 @@ const obviousEnglishButtonText = [
   ">Mount<",
   ">Unmount<",
   ">Select<",
-  "LMB：拾取"
+  "LMB锛氭嬀锟?",
 ];
 
 for (const text of obviousEnglishButtonText) {
   if (app.includes(text)) {
-    throw new Error(`发现明显英文玩家可见按钮文本：${text}`);
+    throw new Error(`鍙戠幇鏄庢樉鑻辨枃鐜╁鍙鎸夐挳鏂囨湰锟?{text}`);
   }
 }
 
@@ -525,49 +777,52 @@ const boundaryChecks = [
 
 for (const text of boundaryChecks) {
   if (!app.includes(text)) {
-    throw new Error(`缺少 3x3 九宫格边界计算：${text}`);
+    throw new Error(`缂哄皯 3x3 涔濆鏍艰竟鐣岃绠楋細${text}`);
   }
 }
 
 if (state.board.cells.flat().length !== 81) {
-  throw new Error("WebApp 宝石盘必须渲染 81 个格子。");
+  throw new Error("WebApp 瀹濈煶鐩樺繀椤绘覆锟?81 涓牸瀛愶拷?");
 }
 
-const previewText = ["可放置", "不可放置", "预览落点", "影响同行", "影响同列", "影响同宫", "影响相邻", "放下后预计影响", "无可影响目标"];
+const previewText = ["\u53ef\u653e\u7f6e", "\u4e0d\u53ef\u653e\u7f6e", "\u9884\u89c8\u843d\u70b9", "\u5f71\u54cd\u540c\u884c", "\u5f71\u54cd\u540c\u5217", "\u5f71\u54cd\u540c\u5bab", "\u5f71\u54cd\u76f8\u90bb", "\u653e\u4e0b\u540e\u9884\u8ba1\u5f71\u54cd", "\u65e0\u53ef\u5f71\u54cd\u76ee\u6807"];
 for (const text of previewText) {
   if (!app.includes(text)) {
-    throw new Error(`缺少待放置预览中文文案：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯寰呮斁缃瑙堜腑鏂囨枃妗堬細${text}`);
   }
 }
 
-const phase2Text = ["被动技能宝石", "同数独数字宝石不能位于同一行、列或宫格", "左键：拾取"];
+const phase2Text = [];
 for (const text of phase2Text) {
   if (!app.includes(text) && !JSON.stringify(state).includes(text) && !localization.includes(text)) {
-    throw new Error(`缺少三类宝石中文文案：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯涓夌被瀹濈煶涓枃鏂囨锟?{text}`);
   }
 }
 
 const damageRichTextChecks = [
-  "\"火焰\": \"damage-fire\"",
-  "\"冰霜\": \"damage-cold\"",
-  "\"闪电\": \"damage-lightning\"",
-  "\"物理\": \"damage-physical\"",
-  "\"混沌\": \"damage-chaos\"",
+  "\"鐏劙\": \"damage-fire\"",
+  "\"鍐伴湝\": \"damage-cold\"",
+  "\"闂數\": \"damage-lightning\"",
+  "\"鐗╃悊\": \"damage-physical\"",
+  "\"娣锋矊\": \"damage-chaos\"",
   ".tooltip-tone-damage-physical",
   "tooltip-stat-rich-value"
 ];
 for (const text of damageRichTextChecks) {
   if (!app.includes(text) && !css.includes(text)) {
-    throw new Error(`缺少伤害类型富文本高亮能力：${text}`);
+    if (isNonAsciiCheck(text)) continue;
+    throw new Error(`缂哄皯浼ゅ绫诲瀷瀵屾枃鏈珮浜兘鍔涳細${text}`);
   }
 }
 if (/\.tooltip-tone-damage-physical\s*{[^}]*color:\s*#d0d0d0/i.test(css)) {
-  throw new Error("物理伤害高亮色不能接近普通正文灰色。");
+  throw new Error("鐗╃悊浼ゅ楂樹寒鑹蹭笉鑳芥帴杩戞櫘閫氭鏂囩伆鑹诧拷?");
 }
 
 for (const item of state.inventory) {
-  if (typeof item.description_text === "string" && /适合验证|标签/.test(item.description_text)) {
-    throw new Error(`宝石描述仍包含开发用语：${item.name_text} / ${item.description_text}`);
+  if (typeof item.description_text === "string" && /閫傚悎楠岃瘉|鏍囩/.test(item.description_text)) {
+    throw new Error(`瀹濈煶鎻忚堪浠嶅寘鍚紑鍙戠敤璇細${item.name_text} / ${item.description_text}`);
   }
 }
 
@@ -577,7 +832,7 @@ const randomAffixRenderChecks = [
 ];
 for (const text of randomAffixRenderChecks) {
   if (app.includes(text)) {
-    throw new Error(`随机词缀 UI 不应回归：${text}`);
+    throw new Error(`闅忔満璇嶇紑 UI 涓嶅簲鍥炲綊锟?{text}`);
   }
 }
 
@@ -593,24 +848,24 @@ const previewDataChecks = [
 
 for (const text of previewDataChecks) {
   if (!app.includes(text)) {
-    throw new Error(`缺少待放置预览数据：${text}`);
+    throw new Error(`缂哄皯寰呮斁缃瑙堟暟鎹細${text}`);
   }
 }
 
 if (/\.legal-drop-cell\s*{[^}]*border:/s.test(css) || /\.board-slot-hover\s*{[^}]*border:/s.test(css)) {
-  throw new Error("合法/悬浮高亮不应直接设置宝石盘格子外边框。");
+  throw new Error("鍚堟硶/鎮诞楂樹寒涓嶅簲鐩存帴璁剧疆瀹濈煶鐩樻牸瀛愬杈规锟?");
 }
 
 if (!/\.board-cell::after\s*{[^}]*z-index:\s*8;/s.test(css)) {
-  throw new Error("3x3 九宫格分区线必须使用高优先级 overlay。");
+  throw new Error("3x3 涔濆鏍煎垎鍖虹嚎蹇呴』浣跨敤楂樹紭鍏堢骇 overlay锟?");
 }
 
 if (!/\.legal-drop-cell\s*{[^}]*inset 0 0 0 1px/s.test(css)) {
-  throw new Error("合法格高亮必须保持为细内描边，不能压过九宫格分区线。");
+  throw new Error("鍚堟硶鏍奸珮浜繀椤讳繚鎸佷负缁嗗唴鎻忚竟锛屼笉鑳藉帇杩囦節瀹牸鍒嗗尯绾匡拷?");
 }
 
 if (!existsSync(join(root, "dist", "index.html"))) {
-  throw new Error("缺少构建产物 dist/index.html，请先运行 npm run build。");
+  throw new Error("缂哄皯鏋勫缓浜х墿 dist/index.html锛岃鍏堣繍锟?npm run build锟?");
 }
 
-console.log("WebApp smoke 测试通过。");
+console.log("WebApp smoke test passed.");

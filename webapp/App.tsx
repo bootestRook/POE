@@ -1,11 +1,10 @@
-﻿import { CSSProperties, DragEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+﻿import { CSSProperties, DragEvent, MouseEvent, ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { compareDimetricDepth, dimetricDepth } from "./isoDepth";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { addProjectionOffset, createIsoProjectionBounds, ISO_TILE_H, ISO_TILE_W, projectWorldToScreen, unprojectScreenToWorld } from "./isoProjection";
-import { edgeAssetsForTile } from "./mapDecorators";
-import { createProceduralSceneProps } from "./propPlacement";
-import { BATTLE_PROP_ASSETS, SceneProp } from "./sceneProps";
-import { BattleTerrainTileKind, TerrainTileAssetId, terrainAssetForTile, tileHash } from "./terrainAssets";
+import { ISO_TILE_H, ISO_TILE_W, unprojectScreenToWorld } from "./isoProjection";
+import { BAKED_BATTLE_MAPS, bakedMapAssetById, DEFAULT_BAKED_BATTLE_MAP_ID } from "./bakedMapAssets";
+import { BakedBattleMapData, isMapPointWalkable, loadBakedBattleMap, MapPoint, resolveWalkableMove } from "./bakedMapLoader";
+import map001Document from "../map/map_001.json";
 import { getAnimationFrame, resolveDirection, resolveUnitAnimation, UnitAnimationContext, UnitAnimationFrame } from "./unitAnimation";
 import {
   selectEnemyUnitType,
@@ -567,6 +566,13 @@ function initialSpriteTestMode() {
   return path === "/sprite-test" || params.get("mode") === "sprite-test";
 }
 
+function initialMapEditorMode() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const path = window.location.pathname.replace(/\/+$/, "");
+  return path === "/map-editor" || params.get("mode") === "map-editor";
+}
+
 function clampNumber(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
@@ -662,6 +668,24 @@ type Enemy = {
   y: number;
   hp: number;
   maxHp: number;
+  lastDamagedAt?: number;
+  monsterId?: UnitVisualType;
+  authored?: boolean;
+  boss?: boolean;
+  spawnPlanSourceId?: string;
+  aggroLocked?: boolean;
+  runtimeTier?: EnemyRuntimeTier;
+  nextThinkAt?: number;
+};
+
+type EnemyRuntimeTier = "dormant" | "aware" | "active" | "visible" | "dead";
+
+type RuntimeEncounterAggroSource = {
+  id: string;
+  kind: "monster" | "boss";
+  x: number;
+  y: number;
+  aggroRadius: number;
 };
 
 type FloatingText = {
@@ -874,23 +898,6 @@ type PlacementPreview = {
   previewSkillSummary: string;
 };
 
-type TileType = BattleTerrainTileKind;
-
-type TilemapData = {
-  mapId: string;
-  width: number;
-  height: number;
-  tileSize: number;
-  tiles: TileType[][];
-  terrainAssets: TerrainTileAssetId[][];
-  spawnPoint: {
-    tileX: number;
-    tileY: number;
-    x: number;
-    y: number;
-  };
-};
-
 type Camera2D = {
   screenX: number;
   screenY: number;
@@ -911,9 +918,8 @@ type EnemyVisualRuntime = UnitVisualRuntime & {
 };
 
 type BattleRenderEntity =
-  | { kind: "enemy"; id: number; x: number; y: number; hp: number; maxHp: number; playerDistance: number }
-  | { kind: "player"; id: "player"; x: number; y: number; hp: number; maxHp: number }
-  | { kind: "prop"; id: string; x: number; y: number; prop: SceneProp };
+  | { kind: "enemy"; id: number; x: number; y: number; hp: number; maxHp: number; lastDamagedAt?: number; monsterId?: UnitVisualType; runtimeTier?: EnemyRuntimeTier; playerDistance: number; renderScale: number }
+  | { kind: "player"; id: "player"; x: number; y: number; hp: number; maxHp: number; renderScale: number };
 
 type BattleRenderItem =
   | BattleRenderEntity
@@ -925,18 +931,11 @@ type BattleAnimationContexts = {
   enemies: Map<number, UnitAnimationContext>;
 };
 
-const TILE_RENDER_BY_TYPE: Record<TileType, { className: string }> = {
-  ground: { className: "tile-ground" },
-  blocked: { className: "tile-blocked" },
-  object: { className: "tile-object-slot" }
-};
-
-const DEFAULT_TILEMAP = createDefaultTilemap(15, 11, 64);
-const MAP_WIDTH = DEFAULT_TILEMAP.width * DEFAULT_TILEMAP.tileSize;
-const MAP_HEIGHT = DEFAULT_TILEMAP.height * DEFAULT_TILEMAP.tileSize;
-const BATTLE_PROJECTION_BOUNDS = createIsoProjectionBounds(DEFAULT_TILEMAP.width, DEFAULT_TILEMAP.height, DEFAULT_TILEMAP.tileSize);
-const MAP_VISUAL_WIDTH = BATTLE_PROJECTION_BOUNDS.width;
-const MAP_VISUAL_HEIGHT = BATTLE_PROJECTION_BOUNDS.height;
+const DEFAULT_BAKED_BATTLE_MAP = BAKED_BATTLE_MAPS[0];
+const MAP_WIDTH = DEFAULT_BAKED_BATTLE_MAP.meta.world_width;
+const MAP_HEIGHT = DEFAULT_BAKED_BATTLE_MAP.meta.world_height;
+const MAP_VISUAL_WIDTH = MAP_WIDTH;
+const MAP_VISUAL_HEIGHT = MAP_HEIGHT;
 const PLAYER_SPEED = 250;
 const FLOATING_TEXT_VISUAL_RISE_SPEED = 22;
 const DIMETRIC_GROUND_EFFECT_Y_SCALE = ISO_TILE_H / ISO_TILE_W;
@@ -974,11 +973,22 @@ const MAX_RUNTIME_HIT_VFX = 80;
 const MAX_RUNTIME_FLOATING_TEXT = 60;
 const MAX_RUNTIME_AREA_VFX = 80;
 const MAX_SKILL_EDITOR_TIMELINE_ROWS = 40;
+const ENEMY_SPATIAL_CHUNK_SIZE = 256;
+const ENEMY_AWARE_RANGE = 900;
+const ENEMY_ACTIVE_RANGE = 560;
+const ENEMY_VISIBLE_RANGE = 760;
+const ENEMY_CAMERA_VISIBLE_RANGE = 1180;
+const ENEMY_LOW_FREQUENCY_THINK_INTERVAL = 0.18;
+const MAX_VISIBLE_ENEMY_DOM_NODES = 180;
 const ENEMY_ATTACK_VISUAL_RANGE = 76;
 const ENEMY_ATTACK_VISUAL_SCREEN_RANGE = 64;
 const ENEMY_ATTACK_VISUAL_DURATION_MS = 640;
 const ENEMY_ATTACK_VISUAL_COOLDOWN_MS = 520;
 const ENEMY_WALK_VISUAL_DEADZONE = 0.35;
+const ENEMY_HEALTH_VISIBLE_SECONDS = 5;
+const ENEMY_COLLISION_RADIUS = 28;
+const ENEMY_BOSS_COLLISION_RADIUS = 42;
+const ENEMY_COLLISION_MAX_PUSH = 24;
 const SKILL_TEST_DUMMY_MAX_HP = 9999999;
 const SKILL_TEST_DUMMY_OFFSETS = [
   { x: 300, y: 0 },
@@ -988,7 +998,6 @@ const SKILL_TEST_DUMMY_OFFSETS = [
   { x: 560, y: 220 }
 ];
 const UNIT_RENDER_SCALE = 1;
-const UNIT_RUN_SPEED_RATIO = 0.72;
 const FLOATING_GEM_OFFSET = { x: 18, y: 18 };
 const INVENTORY_SLOT_COUNT = 60;
 const INVENTORY_COLUMNS = 12;
@@ -1058,11 +1067,2346 @@ async function requestSkillTestArenaRun(payload: {
 
 export function App() {
   const [spriteTestMode] = useState(() => initialSpriteTestMode());
+  const [mapEditorMode] = useState(() => initialMapEditorMode());
+  if (mapEditorMode) return <MapEditorScene />;
   return spriteTestMode ? <SpriteTestScene /> : <GameApp />;
 }
 
+type MapEditorTileKind = "empty" | "ground" | "wall";
+type MapEditorBrush = Exclude<MapEditorTileKind, "empty">;
+type MapEditorPaintMode = "single" | "rectangle";
+type MapEditorPaintAction = "fill" | "clear";
+type MapEditorCellPoint = { x: number; y: number };
+type MapEditorWorldPoint = { x: number; y: number };
+type MapEditorSpawnPlanTool = "tiles" | "monster" | "boss";
+type MapEditorSpawnPlanSelection =
+  | { kind: "monster"; id: string }
+  | { kind: "boss"; id: string };
+type MapEditorSpawnPlanDrag =
+  | { mode: "move"; selection: MapEditorSpawnPlanSelection }
+  | { mode: "resize"; selection: MapEditorSpawnPlanSelection }
+  | { mode: "aggro"; selection: MapEditorSpawnPlanSelection };
+type MapEditorSpawnPlanContextMenu = {
+  tool: Exclude<MapEditorSpawnPlanTool, "tiles">;
+  x: number;
+  y: number;
+};
+type MapEditorMonsterOption = {
+  id: UnitVisualType;
+  label: string;
+};
+type MapEditorMonsterSpawnPoint = {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  aggroRadius: number;
+  monsterId: UnitVisualType;
+  count: number;
+  density: number;
+  countMultiplierMin: number;
+  countMultiplierMax: number;
+};
+type MapEditorBossGroup = {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  aggroRadius: number;
+  bossCount: number;
+  bossIds: UnitVisualType[];
+};
+type MapEditorSpawnPlanData = {
+  monsterSpawns: MapEditorMonsterSpawnPoint[];
+  bossGroups: MapEditorBossGroup[];
+};
+type MapEditorCollider = {
+  enabled: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+type MapEditorColliderNumericField = "x" | "y" | "width" | "height";
+type MapEditorTileColliderConfig = Record<MapEditorTileKind, MapEditorCollider>;
+type MapEditorDragState = {
+  start: MapEditorCellPoint;
+  current: MapEditorCellPoint;
+};
+type MapEditorSavedState = {
+  tiles: MapEditorTileKind[][];
+  cellSize: number;
+  spawn: MapEditorCellPoint;
+  colliders: MapEditorTileColliderConfig;
+  spawnPlans: MapEditorSpawnPlanData;
+  width: number;
+  height: number;
+};
+type MapEditorFileDocument = MapEditorSavedState & {
+  format: "poe.tilemap.editor";
+  version: 1;
+  name: string;
+  savedAt: string;
+};
+type EditorRuntimeBattleMapData = BakedBattleMapData & {
+  editorTiles: MapEditorTileKind[][];
+  editorSpawnPlans: MapEditorSpawnPlanData;
+};
+type RuntimeBattleMapOption = {
+  id: string;
+  displayName: string;
+  biome: string;
+  worldWidth: number;
+  worldHeight: number;
+};
+type MapEditorVisibleBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+const MAP_EDITOR_WALL_SIDES = ["n", "e", "s", "w"] as const;
+type MapEditorWallSide = typeof MAP_EDITOR_WALL_SIDES[number];
+const MAP_EDITOR_WALL_CORNERS = ["nw", "ne", "se", "sw"] as const;
+type MapEditorWallCorner = typeof MAP_EDITOR_WALL_CORNERS[number];
+type MapEditorAutotileRole = "empty" | "isolated" | "connected" | "interior";
+type MapEditorAutotileState = {
+  role: MapEditorAutotileRole;
+  sameSides: MapEditorWallSide[];
+  edgeSides: MapEditorWallSide[];
+  boundarySides: MapEditorWallSide[];
+  innerCorners: MapEditorWallCorner[];
+  outerCorners: MapEditorWallCorner[];
+};
+type MapEditorFileHandle = {
+  kind: "file";
+  name: string;
+  getFile: () => Promise<File>;
+  createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }>;
+};
+type MapEditorDirectoryHandle = {
+  kind: "directory";
+  name: string;
+  values: () => AsyncIterable<MapEditorFileHandle | MapEditorDirectoryHandle>;
+  getFileHandle: (name: string, options?: { create?: boolean }) => Promise<MapEditorFileHandle>;
+  queryPermission?: (descriptor?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: { mode?: "read" | "readwrite" }) => Promise<PermissionState>;
+};
+type MapEditorWindowWithFilePickers = Window & {
+  showDirectoryPicker?: (options?: { id?: string; mode?: "read" | "readwrite" }) => Promise<MapEditorDirectoryHandle>;
+  showOpenFilePicker?: (options?: {
+    id?: string;
+    multiple?: boolean;
+    startIn?: "desktop" | "documents" | "downloads" | MapEditorDirectoryHandle;
+    types?: Array<{ description: string; accept: Record<string, string[]> }>;
+  }) => Promise<MapEditorFileHandle[]>;
+};
+
+const MAP_EDITOR_COLUMNS = 256;
+const MAP_EDITOR_ROWS = 144;
+const MAP_EDITOR_MIN_CELL_SIZE = 32;
+const MAP_EDITOR_MAX_CELL_SIZE = 96;
+const MAP_EDITOR_DEFAULT_CELL_SIZE = 64;
+const MAP_EDITOR_PLAYER_SPEED = 260 * 5;
+const MAP_EDITOR_PLAYER_RENDER_SCALE = 0.5;
+const MAP_EDITOR_STORAGE_KEY = "poe.mapEditor.tilemap.v1";
+const MAP_EDITOR_CURRENT_FILE_STORAGE_KEY = "poe.mapEditor.currentFile.v1";
+const MAP_EDITOR_HANDLE_DB_NAME = "poe-map-editor-handles";
+const MAP_EDITOR_HANDLE_STORE_NAME = "handles";
+const MAP_EDITOR_DIRECTORY_HANDLE_KEY = "mapDirectory";
+const MAP_EDITOR_VISIBLE_RADIUS_X = 18;
+const MAP_EDITOR_VISIBLE_RADIUS_Y = 12;
+const MAP_EDITOR_DEFAULT_SPAWN: MapEditorCellPoint = { x: 55, y: 35 };
+const MAP_EDITOR_SAMPLE_OFFSET: MapEditorCellPoint = { x: 48, y: 28 };
+const MAP_EDITOR_MINIMAP_WIDTH = 256;
+const MAP_EDITOR_MINIMAP_HEIGHT = 144;
+const MAP_EDITOR_PLAYER_COLLIDER: MapEditorCollider = { enabled: true, x: 0.29, y: 0.42, width: 0.42, height: 0.36 };
+const MAP_EDITOR_CAMERA_PAN_SPEED = 900;
+const MAP_EDITOR_DEFAULT_MONSTER_RADIUS = 5;
+const MAP_EDITOR_DEFAULT_MONSTER_AGGRO_RADIUS = 15;
+const MAP_EDITOR_DEFAULT_MONSTER_COUNT = 24;
+const MAP_EDITOR_DEFAULT_MONSTER_DENSITY = 0.6;
+const MAP_EDITOR_DEFAULT_MONSTER_COUNT_MULTIPLIER_MIN = 1;
+const MAP_EDITOR_DEFAULT_MONSTER_COUNT_MULTIPLIER_MAX = 1;
+const MAP_EDITOR_DEFAULT_BOSS_RADIUS = 6;
+const MAP_EDITOR_DEFAULT_BOSS_AGGRO_RADIUS = 24;
+const MAP_EDITOR_DEFAULT_BOSS_COUNT = 1;
+const EDITOR_RUNTIME_MAP_ID = "map_001";
+const DEFAULT_RUNTIME_MAP_ID = EDITOR_RUNTIME_MAP_ID;
+const MAP_EDITOR_TILE_OPTIONS: Array<{ id: MapEditorBrush; label: string }> = [
+  { id: "ground", label: "地面" },
+  { id: "wall", label: "墙壁" }
+];
+const MAP_EDITOR_MONSTER_OPTIONS: MapEditorMonsterOption[] = [
+  { id: "enemy_imp", label: "enemy_imp 普通怪" },
+  { id: "enemy_brute", label: "enemy_brute 精英/占位 BOSS" }
+];
+
+function MapEditorScene() {
+  const initialEditorState = useMemo(() => loadMapEditorState(), []);
+  const [tiles, setTiles] = useState<MapEditorTileKind[][]>(() => initialEditorState.tiles);
+  const [brush, setBrush] = useState<MapEditorBrush>("ground");
+  const [paintMode, setPaintMode] = useState<MapEditorPaintMode>("single");
+  const [paintAction, setPaintAction] = useState<MapEditorPaintAction>("fill");
+  const [cellSize, setCellSize] = useState(initialEditorState.cellSize);
+  const [spawn, setSpawn] = useState<MapEditorCellPoint>(() => initialEditorState.spawn);
+  const [colliders, setColliders] = useState<MapEditorTileColliderConfig>(() => initialEditorState.colliders);
+  const [spawnPlans, setSpawnPlans] = useState<MapEditorSpawnPlanData>(() => initialEditorState.spawnPlans);
+  const [editMode, setEditMode] = useState(false);
+  const [spawnPlanTool, setSpawnPlanTool] = useState<MapEditorSpawnPlanTool>("tiles");
+  const [selectedSpawnPlan, setSelectedSpawnPlan] = useState<MapEditorSpawnPlanSelection | null>(null);
+  const [spawnPlanContextMenu, setSpawnPlanContextMenu] = useState<MapEditorSpawnPlanContextMenu | null>(null);
+  const [spawnPlanDrag, setSpawnPlanDrag] = useState<MapEditorSpawnPlanDrag | null>(null);
+  const [editorCamera, setEditorCamera] = useState<MapEditorWorldPoint>(() => mapEditorCellCenter(initialEditorState.spawn.x, initialEditorState.spawn.y, initialEditorState.cellSize));
+  const [showMinimap, setShowMinimap] = useState(true);
+  const [showGridLines, setShowGridLines] = useState(true);
+  const [showCollisionOverlay, setShowCollisionOverlay] = useState(false);
+  const [mapDirectory, setMapDirectory] = useState<MapEditorDirectoryHandle | null>(null);
+  const [mapFiles, setMapFiles] = useState<string[]>([]);
+  const [currentMapFileName, setCurrentMapFileName] = useState(() => loadMapEditorCurrentFileName());
+  const [currentMapFileHandle, setCurrentMapFileHandle] = useState<MapEditorFileHandle | null>(null);
+  const [dragState, setDragState] = useState<MapEditorDragState | null>(null);
+  const [player, setPlayer] = useState(() => mapEditorCellCenter(initialEditorState.spawn.x, initialEditorState.spawn.y, initialEditorState.cellSize));
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [saveNotice, setSaveNotice] = useState("自动保存已开启");
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const keys = useRef(new Set<string>());
+  const lastFrame = useRef<number | null>(null);
+  const playerVisual = useRef<UnitVisualRuntime>({ direction: "down", movementVector: { x: 0, y: 0 } });
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (isMapEditorTypingTarget(target)) return;
+      const key = event.key.toLowerCase();
+      if (!["w", "a", "s", "d"].includes(key)) return;
+      event.preventDefault();
+      keys.current.add(key);
+    }
+    function onKeyUp(event: KeyboardEvent) {
+      keys.current.delete(event.key.toLowerCase());
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    saveMapEditorState({ tiles, cellSize, spawn, colliders, spawnPlans, width: MAP_EDITOR_COLUMNS, height: MAP_EDITOR_ROWS });
+  }, [tiles, cellSize, spawn, colliders, spawnPlans]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadMapEditorDirectoryHandle().then(async (handle) => {
+      if (!handle || cancelled) return;
+      setMapDirectory(handle);
+      const files = await listMapEditorFiles(handle).catch(() => []);
+      if (!cancelled) setMapFiles(files);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const currentEditorState = useCallback((): MapEditorSavedState => ({
+    tiles,
+    cellSize,
+    spawn,
+    colliders,
+    spawnPlans,
+    width: MAP_EDITOR_COLUMNS,
+    height: MAP_EDITOR_ROWS
+  }), [cellSize, colliders, spawnPlans, spawn, tiles]);
+
+  async function selectMapDirectory() {
+    const pickerWindow = window as MapEditorWindowWithFilePickers;
+    if (!pickerWindow.showDirectoryPicker) {
+      setSaveNotice("当前浏览器不支持直接保存本地文件，请使用 Chromium/Edge/Chrome。");
+      return null;
+    }
+    try {
+      const handle = await pickerWindow.showDirectoryPicker({ id: "poe-map-editor-maps", mode: "readwrite" });
+      await storeMapEditorDirectoryHandle(handle);
+      setMapDirectory(handle);
+      const files = await refreshMapFileList(handle);
+      if (currentMapFileName && !files.includes(currentMapFileName)) {
+        setCurrentMapFileName(null);
+        setCurrentMapFileHandle(null);
+        clearMapEditorCurrentFileName();
+      }
+      setSaveNotice(`地图目录已设为 ${handle.name}，发现 ${files.length} 个地图文件。`);
+      return handle;
+    } catch (error) {
+      if (!isMapEditorAbortError(error)) setSaveNotice("设置地图目录失败。");
+      return null;
+    }
+  }
+
+  async function ensureMapDirectory() {
+    const handle = mapDirectory ?? await selectMapDirectory();
+    if (!handle) return null;
+    const granted = await requestMapEditorDirectoryWritePermission(handle);
+    if (!granted) {
+      setSaveNotice("没有地图目录写入权限，保存已取消。");
+      return null;
+    }
+    return handle;
+  }
+
+  async function refreshMapFileList(handle = mapDirectory) {
+    if (!handle) return [];
+    const files = await listMapEditorFiles(handle);
+    setMapFiles(files);
+    return files;
+  }
+
+  async function saveCurrentMapFile() {
+    saveMapEditorState(currentEditorState());
+    const handle = currentMapFileHandle ? mapDirectory : await ensureMapDirectory();
+    if (!handle && !currentMapFileHandle) return null;
+    const fileName = currentMapFileName ?? await nextMapEditorFileName(handle as MapEditorDirectoryHandle);
+    const fileHandle = currentMapFileHandle ?? await (handle as MapEditorDirectoryHandle).getFileHandle(fileName, { create: true });
+    await writeMapEditorFileHandle(fileHandle, fileName, currentEditorState());
+    setCurrentMapFileName(fileName);
+    setCurrentMapFileHandle(fileHandle);
+    saveMapEditorCurrentFileName(fileName);
+    if (handle) await refreshMapFileList(handle);
+    setSaveNotice(`已保存到 ${fileName} ${new Date().toLocaleTimeString()}`);
+    return { directory: handle, fileName };
+  }
+
+  async function saveNow() {
+    await saveCurrentMapFile();
+  }
+
+  async function createNewMap() {
+    const saved = await saveCurrentMapFile();
+    if (!saved) return;
+    const directory = saved.directory ?? await ensureMapDirectory();
+    if (!directory) return;
+    const nextFileName = await nextMapEditorFileName(directory);
+    const nextSpawn = { x: 0, y: 0 };
+    setTiles(createEmptyMapEditorTiles());
+    setSpawn(nextSpawn);
+    setColliders(createDefaultMapEditorColliders());
+    setSpawnPlans(createEmptyMapEditorSpawnPlans());
+    setCellSize(MAP_EDITOR_DEFAULT_CELL_SIZE);
+    setPlayer(mapEditorCellCenter(nextSpawn.x, nextSpawn.y, MAP_EDITOR_DEFAULT_CELL_SIZE));
+    setEditorCamera(mapEditorCellCenter(nextSpawn.x, nextSpawn.y, MAP_EDITOR_DEFAULT_CELL_SIZE));
+    setSelectedSpawnPlan(null);
+    setSpawnPlanContextMenu(null);
+    setCurrentMapFileName(nextFileName);
+    setCurrentMapFileHandle(null);
+    saveMapEditorCurrentFileName(nextFileName);
+    setSaveNotice(`已新建地图 ${nextFileName}，点击保存会写入该文件。`);
+  }
+
+  async function openMapFile(fileName: string) {
+    const saved = await saveCurrentMapFile();
+    if (!saved || !saved.directory) return;
+    try {
+      const fileHandle = await saved.directory.getFileHandle(fileName);
+      const state = await readMapEditorFile(fileHandle);
+      applyLoadedMapEditorState(state, fileName, fileHandle);
+      setSaveNotice(`已打开 ${fileName}，之前的地图已自动保存。`);
+    } catch {
+      setSaveNotice(`打开 ${fileName} 失败。`);
+    }
+  }
+
+  async function browseMapFile() {
+    const saved = await saveCurrentMapFile();
+    if (!saved) return;
+    const pickerWindow = window as MapEditorWindowWithFilePickers;
+    if (!pickerWindow.showOpenFilePicker) {
+      setSaveNotice("当前浏览器不支持选择本地地图文件。");
+      return;
+    }
+    try {
+      const [fileHandle] = await pickerWindow.showOpenFilePicker({
+        id: "poe-map-editor-maps",
+        multiple: false,
+        startIn: saved.directory,
+        types: [{ description: "POE tilemap JSON", accept: { "application/json": [".json"] } }]
+      });
+      if (!fileHandle) return;
+      const state = await readMapEditorFile(fileHandle);
+      applyLoadedMapEditorState(state, fileHandle.name, fileHandle);
+      setSaveNotice(`已打开 ${fileHandle.name}，之前的地图已自动保存。`);
+    } catch (error) {
+      if (!isMapEditorAbortError(error)) setSaveNotice("浏览打开地图失败。");
+    }
+  }
+
+  function applyLoadedMapEditorState(state: MapEditorSavedState, fileName: string, fileHandle: MapEditorFileHandle | null = null) {
+    setTiles(state.tiles);
+    setCellSize(state.cellSize);
+    setSpawn(state.spawn);
+    setColliders(state.colliders);
+    setSpawnPlans(state.spawnPlans);
+    setPlayer(mapEditorCellCenter(state.spawn.x, state.spawn.y, state.cellSize));
+    setEditorCamera(mapEditorCellCenter(state.spawn.x, state.spawn.y, state.cellSize));
+    setSelectedSpawnPlan(null);
+    setSpawnPlanContextMenu(null);
+    setCurrentMapFileName(fileName);
+    setCurrentMapFileHandle(fileHandle);
+    saveMapEditorCurrentFileName(fileName);
+    saveMapEditorState(state);
+  }
+
+  useEffect(() => {
+    let frame = 0;
+    function tick(now: number) {
+      if (lastFrame.current === null) lastFrame.current = now;
+      const dt = Math.min(0.05, (now - lastFrame.current) / 1000);
+      lastFrame.current = now;
+      const moveVector = playerInputVector(keys.current);
+      const hasMoveInput = Math.hypot(moveVector.x, moveVector.y) > 0.001;
+      const projectedMoveVector = projectMovementVectorForAnimation(moveVector);
+      playerVisual.current = {
+        direction: resolveAnimationDirection(projectedMoveVector, playerVisual.current.direction),
+        movementVector: projectedMoveVector
+      };
+      if (editMode) {
+        playerVisual.current = {
+          direction: playerVisual.current.direction,
+          movementVector: { x: 0, y: 0 }
+        };
+        if (hasMoveInput) {
+          setEditorCamera((current) => clampMapEditorWorldPoint({
+            x: current.x + moveVector.x * MAP_EDITOR_CAMERA_PAN_SPEED * dt,
+            y: current.y + moveVector.y * MAP_EDITOR_CAMERA_PAN_SPEED * dt
+          }, cellSize));
+        }
+      } else if (hasMoveInput) {
+        setPlayer((current) => resolveMapEditorMove(tiles, cellSize, current, moveVector, MAP_EDITOR_PLAYER_SPEED * dt, colliders));
+      }
+      if (hasMoveInput) setElapsedMs(now);
+      frame = requestAnimationFrame(tick);
+    }
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [tiles, cellSize, colliders, editMode]);
+
+  const tileCounts = useMemo(() => ({
+    ground: countMapEditorTiles(tiles, "ground"),
+    wall: countMapEditorTiles(tiles, "wall")
+  }), [tiles]);
+  const blockedCount = useMemo(() => countMapEditorBlockingTiles(tiles, colliders), [colliders, tiles]);
+  const playerGrid = mapEditorWorldToGrid(player, cellSize);
+  const cameraGrid = mapEditorWorldToGrid(editMode ? editorCamera : player, cellSize);
+  const visibleBounds = useMemo(
+    () => mapEditorVisibleBounds(cameraGrid),
+    [cameraGrid.x, cameraGrid.y]
+  );
+  const moving = Math.hypot(playerVisual.current.movementVector.x, playerVisual.current.movementVector.y) > 0.001;
+  const playerFrame = resolveUnitAnimation({
+    unitId: "player_adventurer",
+    requestedState: unitMovementState(moving, MAP_EDITOR_PLAYER_SPEED, moving ? MAP_EDITOR_PLAYER_SPEED : 0),
+    movementVector: playerVisual.current.movementVector,
+    fallbackDirection: playerVisual.current.direction,
+    elapsedMs,
+    baseMoveSpeed: MAP_EDITOR_PLAYER_SPEED,
+    currentMoveSpeed: moving ? MAP_EDITOR_PLAYER_SPEED : 0
+  });
+
+  function changeCellSize(value: number) {
+    const nextCellSize = Math.round(clampNumber(value, MAP_EDITOR_MIN_CELL_SIZE, MAP_EDITOR_MAX_CELL_SIZE));
+    setPlayer((current) => ({
+      x: (current.x / cellSize) * nextCellSize,
+      y: (current.y / cellSize) * nextCellSize
+    }));
+    setEditorCamera((current) => ({
+      x: (current.x / cellSize) * nextCellSize,
+      y: (current.y / cellSize) * nextCellSize
+    }));
+    setCellSize(nextCellSize);
+  }
+
+  function updateSelectedTileCollider(field: "enabled", value: boolean): void;
+  function updateSelectedTileCollider(field: MapEditorColliderNumericField, value: number): void;
+  function updateSelectedTileCollider(field: keyof MapEditorCollider, value: number | boolean) {
+    setColliders((current) => ({
+      ...current,
+      [brush]: normalizeMapEditorCollider({
+        ...current[brush],
+        [field]: typeof value === "boolean" ? value : value / 100
+      })
+    }));
+  }
+
+  const applyCells = useCallback((start: MapEditorCellPoint, end: MapEditorCellPoint) => {
+    setTiles((current) => paintMapEditorTiles(current, start, end, paintAction === "clear" ? "empty" : brush));
+  }, [brush, paintAction]);
+
+  const placeSpawnAtPlayer = useCallback(() => {
+    const point = mapEditorWorldToGrid(player, cellSize);
+    setSpawn(point);
+    setDragState(null);
+    setSaveNotice(`出生点已设为角色当前位置 ${point.x}, ${point.y}`);
+  }, [cellSize, player]);
+
+  const beginPaint = useCallback((event: ReactPointerEvent<HTMLButtonElement>, x: number, y: number) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (editMode && spawnPlanTool !== "tiles") {
+      setSpawnPlanContextMenu({ tool: spawnPlanTool, x: x + 0.5, y: y + 0.5 });
+      setDragState(null);
+      return;
+    }
+    const point = { x, y };
+    setDragState({ start: point, current: point });
+    if (paintMode === "single") applyCells(point, point);
+  }, [applyCells, editMode, spawnPlanTool, paintMode]);
+
+  const updatePaint = useCallback((x: number, y: number) => {
+    setDragState((current) => current ? { ...current, current: { x, y } } : current);
+  }, []);
+
+  const finishPaint = useCallback(() => {
+    if (dragState && paintMode === "rectangle") applyCells(dragState.start, dragState.current);
+    setDragState(null);
+  }, [applyCells, dragState, paintMode]);
+
+  function setMapEditorEditMode(enabled: boolean) {
+    setEditMode(enabled);
+    setSpawnPlanContextMenu(null);
+    setSpawnPlanDrag(null);
+    setDragState(null);
+    if (enabled) {
+      setEditorCamera(player);
+    } else {
+      setSpawnPlanTool("tiles");
+      setSelectedSpawnPlan(null);
+    }
+  }
+
+  function createSpawnPlanFromContextMenu() {
+    if (!spawnPlanContextMenu) return;
+    if (spawnPlanContextMenu.tool === "monster") {
+      const spawnPoint = createDefaultMapEditorMonsterSpawn(spawnPlanContextMenu.x, spawnPlanContextMenu.y);
+      setSpawnPlans((current) => ({
+        ...current,
+        monsterSpawns: [...current.monsterSpawns, spawnPoint]
+      }));
+      setSelectedSpawnPlan({ kind: "monster", id: spawnPoint.id });
+      setSaveNotice(`已新增怪点 ${formatMapEditorSpawnPlanPoint(spawnPoint)}。`);
+    } else {
+      const bossGroup = createDefaultMapEditorBossGroup(spawnPlanContextMenu.x, spawnPlanContextMenu.y);
+      setSpawnPlans((current) => ({
+        ...current,
+        bossGroups: [...current.bossGroups, bossGroup]
+      }));
+      setSelectedSpawnPlan({ kind: "boss", id: bossGroup.id });
+      setSaveNotice(`已新增 BOSS 点 ${formatMapEditorSpawnPlanPoint(bossGroup)}。`);
+    }
+    setSpawnPlanContextMenu(null);
+  }
+
+  function updateSelectedMonsterSpawn<K extends keyof MapEditorMonsterSpawnPoint>(field: K, value: MapEditorMonsterSpawnPoint[K]) {
+    if (!selectedSpawnPlan || selectedSpawnPlan.kind !== "monster") return;
+    setSpawnPlans((current) => ({
+      ...current,
+      monsterSpawns: current.monsterSpawns.map((spawnPoint) => (
+        spawnPoint.id === selectedSpawnPlan.id ? normalizeMapEditorMonsterSpawn({ ...spawnPoint, [field]: value }) : spawnPoint
+      ))
+    }));
+  }
+
+  function updateSelectedBossGroup<K extends keyof MapEditorBossGroup>(field: K, value: MapEditorBossGroup[K]) {
+    if (!selectedSpawnPlan || selectedSpawnPlan.kind !== "boss") return;
+    setSpawnPlans((current) => ({
+      ...current,
+      bossGroups: current.bossGroups.map((bossGroup) => (
+        bossGroup.id === selectedSpawnPlan.id ? normalizeMapEditorBossGroup({ ...bossGroup, [field]: value }) : bossGroup
+      ))
+    }));
+  }
+
+  function updateSelectedBossId(index: number, bossId: UnitVisualType) {
+    if (!selectedSpawnPlan || selectedSpawnPlan.kind !== "boss") return;
+    setSpawnPlans((current) => ({
+      ...current,
+      bossGroups: current.bossGroups.map((bossGroup) => {
+        if (bossGroup.id !== selectedSpawnPlan.id) return bossGroup;
+        const bossIds = [...bossGroup.bossIds];
+        bossIds[index] = bossId;
+        return normalizeMapEditorBossGroup({ ...bossGroup, bossIds });
+      })
+    }));
+  }
+
+  function beginSpawnPlanDrag(event: ReactPointerEvent<HTMLElement>, selection: MapEditorSpawnPlanSelection, mode: MapEditorSpawnPlanDrag["mode"]) {
+    if (!editMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedSpawnPlan(selection);
+    setSpawnPlanContextMenu(null);
+    setSpawnPlanDrag({ selection, mode });
+  }
+
+  function updateSpawnPlanDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!spawnPlanDrag) return;
+    const point = mapEditorPointerToCell(event.clientX, event.clientY, gridRef.current, cellSize);
+    if (!point) return;
+    if (spawnPlanDrag.selection.kind === "monster") {
+      setSpawnPlans((current) => ({
+        ...current,
+        monsterSpawns: current.monsterSpawns.map((spawnPoint) => {
+          if (spawnPoint.id !== spawnPlanDrag.selection.id) return spawnPoint;
+          if (spawnPlanDrag.mode === "move") return normalizeMapEditorMonsterSpawn({ ...spawnPoint, x: point.x, y: point.y });
+          if (spawnPlanDrag.mode === "aggro") return normalizeMapEditorMonsterSpawn({ ...spawnPoint, aggroRadius: distance(spawnPoint, point) });
+          return normalizeMapEditorMonsterSpawn({ ...spawnPoint, radius: distance(spawnPoint, point) });
+        })
+      }));
+    } else {
+      setSpawnPlans((current) => ({
+        ...current,
+        bossGroups: current.bossGroups.map((bossGroup) => {
+          if (bossGroup.id !== spawnPlanDrag.selection.id) return bossGroup;
+          if (spawnPlanDrag.mode === "move") return normalizeMapEditorBossGroup({ ...bossGroup, x: point.x, y: point.y });
+          if (spawnPlanDrag.mode === "aggro") return normalizeMapEditorBossGroup({ ...bossGroup, aggroRadius: distance(bossGroup, point) });
+          return normalizeMapEditorBossGroup({ ...bossGroup, radius: distance(bossGroup, point) });
+        })
+      }));
+    }
+  }
+
+  function finishSpawnPlanDrag() {
+    setSpawnPlanDrag(null);
+  }
+
+  function clearAll() {
+    const nextSpawn = { x: 0, y: 0 };
+    setTiles(createEmptyMapEditorTiles());
+    setSpawn(nextSpawn);
+    setColliders(createDefaultMapEditorColliders());
+    setSpawnPlans(createEmptyMapEditorSpawnPlans());
+    setSelectedSpawnPlan(null);
+    setSpawnPlanContextMenu(null);
+    setPlayer(mapEditorCellCenter(nextSpawn.x, nextSpawn.y, cellSize));
+    setEditorCamera(mapEditorCellCenter(nextSpawn.x, nextSpawn.y, cellSize));
+  }
+
+  function resetSample() {
+    const nextSpawn = { ...MAP_EDITOR_DEFAULT_SPAWN };
+    setTiles(createDefaultMapEditorTiles());
+    setSpawn(nextSpawn);
+    setColliders(createDefaultMapEditorColliders());
+    setSpawnPlans(createEmptyMapEditorSpawnPlans());
+    setSelectedSpawnPlan(null);
+    setSpawnPlanContextMenu(null);
+    setPlayer(mapEditorCellCenter(nextSpawn.x, nextSpawn.y, cellSize));
+    setEditorCamera(mapEditorCellCenter(nextSpawn.x, nextSpawn.y, cellSize));
+  }
+
+  function movePlayerToSpawn() {
+    setPlayer(mapEditorCellCenter(spawn.x, spawn.y, cellSize));
+  }
+
+  function shiftWholeMap(dx: number, dy: number) {
+    setTiles((current) => shiftMapEditorTiles(current, dx, dy));
+    setSpawn((current) => shiftMapEditorPoint(current, dx, dy));
+    setSpawnPlans((current) => shiftMapEditorSpawnPlans(current, dx, dy));
+    setPlayer((current) => clampMapEditorWorldPoint({
+      x: current.x + dx * cellSize,
+      y: current.y + dy * cellSize
+    }, cellSize));
+    setEditorCamera((current) => clampMapEditorWorldPoint({
+      x: current.x + dx * cellSize,
+      y: current.y + dy * cellSize
+    }, cellSize));
+  }
+
+  const selectedTileCollider = colliders[brush];
+  const selectedMonsterSpawn = selectedSpawnPlan?.kind === "monster"
+    ? spawnPlans.monsterSpawns.find((spawnPoint) => spawnPoint.id === selectedSpawnPlan.id) ?? null
+    : null;
+  const selectedBossGroup = selectedSpawnPlan?.kind === "boss"
+    ? spawnPlans.bossGroups.find((bossGroup) => bossGroup.id === selectedSpawnPlan.id) ?? null
+    : null;
+  const selectedSpawnPlanKey = selectedSpawnPlan ? mapEditorSpawnPlanSelectionKey(selectedSpawnPlan) : "";
+  const spawnPlanJumpOptions = [
+    ...spawnPlans.monsterSpawns.map((spawnPoint, index) => ({
+      value: mapEditorSpawnPlanSelectionKey({ kind: "monster", id: spawnPoint.id }),
+      label: `怪点 ${index + 1} (${formatMapEditorSpawnPlanPoint(spawnPoint)})`
+    })),
+    ...spawnPlans.bossGroups.map((bossGroup, index) => ({
+      value: mapEditorSpawnPlanSelectionKey({ kind: "boss", id: bossGroup.id }),
+      label: `BOSS点 ${index + 1} (${formatMapEditorSpawnPlanPoint(bossGroup)})`
+    }))
+  ];
+
+  function selectAndJumpToSpawnPlan(value: string) {
+    const selection = mapEditorSpawnPlanSelectionFromKey(value);
+    if (!selection) {
+      setSelectedSpawnPlan(null);
+      return;
+    }
+    const point = selection.kind === "monster"
+      ? spawnPlans.monsterSpawns.find((spawnPoint) => spawnPoint.id === selection.id)
+      : spawnPlans.bossGroups.find((bossGroup) => bossGroup.id === selection.id);
+    if (!point) return;
+    setSelectedSpawnPlan(selection);
+    setEditMode(true);
+    setSpawnPlanContextMenu(null);
+    setSpawnPlanDrag(null);
+    setEditorCamera(mapEditorCellCenter(point.x, point.y, cellSize));
+  }
+
+  return (
+    <main className="map-editor-screen" data-mode="map-editor" data-no-monsters="true" data-spawnPlan-editor="true">
+      <aside className="map-editor-toolbar" aria-label="地图编辑器工具栏">
+        <header>
+          <h1>Tilemap 地图编辑器</h1>
+          <p>独立入口：编辑地形、碰撞、出生点和预设遭遇点。</p>
+        </header>
+
+        <section>
+          <h2>编辑模式</h2>
+          <label className="map-editor-checkbox">
+            <input
+              type="checkbox"
+              checked={editMode}
+              onChange={(event) => setMapEditorEditMode(event.currentTarget.checked)}
+            />
+            <span>{editMode ? "编辑模式：WASD 控制视图" : "预览模式：WASD 控制角色"}</span>
+          </label>
+          <div className="map-editor-segment">
+            <button type="button" className={spawnPlanTool === "tiles" ? "active" : ""} onClick={() => setSpawnPlanTool("tiles")}>
+              地形
+            </button>
+            <button type="button" className={spawnPlanTool === "monster" ? "active" : ""} disabled={!editMode} onClick={() => setSpawnPlanTool("monster")}>
+              放置怪点
+            </button>
+            <button type="button" className={spawnPlanTool === "boss" ? "active" : ""} disabled={!editMode} onClick={() => setSpawnPlanTool("boss")}>
+              BOSS点
+            </button>
+          </div>
+        </section>
+
+        <section>
+          <h2>文件</h2>
+          <p>地图目录：{mapDirectory?.name ?? "未设置"}</p>
+          <p>当前地图：{currentMapFileName ?? "未命名"}</p>
+          <div className="map-editor-actions">
+            <button type="button" onClick={() => void selectMapDirectory()}>设置目录</button>
+            <button type="button" onClick={() => void saveNow()}>保存地图</button>
+            <button type="button" onClick={() => void createNewMap()}>新建地图</button>
+            <button type="button" onClick={() => void browseMapFile()}>浏览打开</button>
+          </div>
+          <div className="map-editor-file-list" aria-label="本地地图文件">
+            {mapFiles.length > 0 ? mapFiles.map((fileName) => (
+              <button
+                key={fileName}
+                type="button"
+                className={fileName === currentMapFileName ? "active" : ""}
+                onClick={() => void openMapFile(fileName)}
+              >
+                {fileName}
+              </button>
+            )) : <span>设置目录后显示 map_XXX.json</span>}
+          </div>
+        </section>
+
+        <section>
+          <h2>Tiles</h2>
+          <label className="map-editor-select-field">
+            <span>目标 Tile</span>
+            <select value={brush} onChange={(event) => setBrush(event.currentTarget.value as MapEditorBrush)}>
+              {MAP_EDITOR_TILE_OPTIONS.map((tile) => (
+                <option key={tile.id} value={tile.id}>{tile.label}</option>
+              ))}
+            </select>
+          </label>
+        </section>
+
+        <section>
+          <h2>遭遇点</h2>
+          <dl className="map-editor-stats">
+            <div><dt>怪点</dt><dd>{spawnPlans.monsterSpawns.length}</dd></div>
+            <div><dt>BOSS组</dt><dd>{spawnPlans.bossGroups.length}</dd></div>
+            <div><dt>预设怪物</dt><dd>{countMapEditorSpawnPlanMonsters(spawnPlans)}</dd></div>
+            <div><dt>当前工具</dt><dd>{mapEditorSpawnPlanToolLabel(spawnPlanTool)}</dd></div>
+          </dl>
+          <label className="map-editor-select-field" data-spawnPlan-jump="true">
+            <span>跳转到</span>
+            <select value={selectedSpawnPlanKey} onChange={(event) => selectAndJumpToSpawnPlan(event.currentTarget.value)}>
+              <option value="">选择遭遇点</option>
+              {spawnPlanJumpOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          {selectedMonsterSpawn ? (
+            <div className="map-editor-spawnPlan-controls" data-selected-spawnPlan="monster">
+              <strong>怪点 {selectedMonsterSpawn.id}</strong>
+              <label>
+                <span>怪物</span>
+                <select value={selectedMonsterSpawn.monsterId} onChange={(event) => updateSelectedMonsterSpawn("monsterId", event.currentTarget.value as UnitVisualType)}>
+                  {MAP_EDITOR_MONSTER_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>数量</span>
+                <input type="number" min="0" step="1" value={selectedMonsterSpawn.count} onChange={(event) => updateSelectedMonsterSpawn("count", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>密度</span>
+                <input type="number" min="0" step="0.05" value={selectedMonsterSpawn.density} onChange={(event) => updateSelectedMonsterSpawn("density", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>半径</span>
+                <input type="number" min="1" step="1" value={selectedMonsterSpawn.radius} onChange={(event) => updateSelectedMonsterSpawn("radius", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>索敌范围</span>
+                <input type="number" min="1" step="0.5" value={selectedMonsterSpawn.aggroRadius} onChange={(event) => updateSelectedMonsterSpawn("aggroRadius", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>倍率最小</span>
+                <input type="number" min="0" step="0.05" value={selectedMonsterSpawn.countMultiplierMin} onChange={(event) => updateSelectedMonsterSpawn("countMultiplierMin", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>倍率最大</span>
+                <input type="number" min="0" step="0.05" value={selectedMonsterSpawn.countMultiplierMax} onChange={(event) => updateSelectedMonsterSpawn("countMultiplierMax", Number(event.currentTarget.value))} />
+              </label>
+            </div>
+          ) : selectedBossGroup ? (
+            <div className="map-editor-spawnPlan-controls" data-selected-spawnPlan="boss">
+              <strong>BOSS组 {selectedBossGroup.id}</strong>
+              <label>
+                <span>BOSS数量</span>
+                <input type="number" min="1" step="1" value={selectedBossGroup.bossCount} onChange={(event) => updateSelectedBossGroup("bossCount", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>半径</span>
+                <input type="number" min="1" step="1" value={selectedBossGroup.radius} onChange={(event) => updateSelectedBossGroup("radius", Number(event.currentTarget.value))} />
+              </label>
+              <label>
+                <span>索敌范围</span>
+                <input type="number" min="1" step="0.5" value={selectedBossGroup.aggroRadius} onChange={(event) => updateSelectedBossGroup("aggroRadius", Number(event.currentTarget.value))} />
+              </label>
+              {selectedBossGroup.bossIds.map((bossId, index) => (
+                <label key={`${selectedBossGroup.id}-${index}`}>
+                  <span>BOSS {index + 1}</span>
+                  <select value={bossId} onChange={(event) => updateSelectedBossId(index, event.currentTarget.value as UnitVisualType)}>
+                    {MAP_EDITOR_MONSTER_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p>进入编辑模式后选择放置怪点或 BOSS 点，再点击地图区域。</p>
+          )}
+        </section>
+
+        <section>
+          <h2>碰撞范围</h2>
+          <label className="map-editor-checkbox">
+            <input
+              type="checkbox"
+              checked={selectedTileCollider.enabled}
+              onChange={(event) => updateSelectedTileCollider("enabled", event.currentTarget.checked)}
+            />
+            <span>{mapEditorTileLabel(brush)} 阻挡</span>
+          </label>
+          <div className="map-editor-collider-grid">
+            {(["x", "y", "width", "height"] as MapEditorColliderNumericField[]).map((field) => (
+              <label key={field}>
+                <span>{mapEditorColliderFieldLabel(field)}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={mapEditorColliderPercent(selectedTileCollider[field])}
+                  onChange={(event) => updateSelectedTileCollider(field, Number(event.currentTarget.value))}
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h2>绘制</h2>
+          <div className="map-editor-segment">
+            <button type="button" className={paintAction === "fill" ? "active" : ""} onClick={() => setPaintAction("fill")}>
+              填充
+            </button>
+            <button type="button" className={paintAction === "clear" ? "active" : ""} onClick={() => setPaintAction("clear")}>
+              清除
+            </button>
+          </div>
+          <div className="map-editor-segment">
+            <button type="button" className={paintMode === "single" ? "active" : ""} onClick={() => setPaintMode("single")}>
+              单格
+            </button>
+            <button type="button" className={paintMode === "rectangle" ? "active" : ""} onClick={() => setPaintMode("rectangle")}>
+              框选
+            </button>
+          </div>
+        </section>
+
+        <section>
+          <h2>单位大小</h2>
+          <label className="map-editor-cell-size">
+            <input
+              type="range"
+              min={MAP_EDITOR_MIN_CELL_SIZE}
+              max={MAP_EDITOR_MAX_CELL_SIZE}
+              step="4"
+              value={cellSize}
+              onChange={(event) => changeCellSize(Number(event.currentTarget.value))}
+            />
+            <span>{cellSize}px / cell</span>
+          </label>
+        </section>
+
+        <section>
+          <h2>视图</h2>
+          <div className="map-editor-segment">
+            <button type="button" className={showMinimap ? "active" : ""} onClick={() => setShowMinimap((current) => !current)}>
+              {showMinimap ? "隐藏小地图" : "显示小地图"}
+            </button>
+            <button type="button" className={showCollisionOverlay ? "active" : ""} onClick={() => setShowCollisionOverlay((current) => !current)}>
+              {showCollisionOverlay ? "隐藏碰撞" : "显示碰撞"}
+            </button>
+          </div>
+        </section>
+
+        <section>
+          <h2>玩家出生点</h2>
+          <div className="map-editor-segment">
+            <button type="button" onClick={placeSpawnAtPlayer}>
+              放置出生点
+            </button>
+            <button type="button" onClick={movePlayerToSpawn}>
+              回到出生点
+            </button>
+          </div>
+        </section>
+
+        <section>
+          <h2>整体移动</h2>
+          <div className="map-editor-shift-controls" aria-label="地图整体移动">
+            <span />
+            <button type="button" onClick={() => shiftWholeMap(0, -1)} aria-label="整体上移一格">上移</button>
+            <span />
+            <button type="button" onClick={() => shiftWholeMap(-1, 0)} aria-label="整体左移一格">左移</button>
+            <button type="button" onClick={() => shiftWholeMap(0, 1)} aria-label="整体下移一格">下移</button>
+            <button type="button" onClick={() => shiftWholeMap(1, 0)} aria-label="整体右移一格">右移</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>派生层</h2>
+          <dl className="map-editor-stats">
+            <div><dt>地图范围</dt><dd>{MAP_EDITOR_COLUMNS} x {MAP_EDITOR_ROWS}</dd></div>
+            <div><dt>可行走</dt><dd>{tileCounts.ground}</dd></div>
+            <div><dt>阻挡/虚空</dt><dd>{blockedCount}</dd></div>
+            <div><dt>墙壁</dt><dd>{tileCounts.wall}</dd></div>
+            <div><dt>角色格</dt><dd>{playerGrid.x}, {playerGrid.y}</dd></div>
+            <div><dt>视图格</dt><dd>{cameraGrid.x}, {cameraGrid.y}</dd></div>
+            <div><dt>出生点</dt><dd>{spawn.x}, {spawn.y}</dd></div>
+          </dl>
+        </section>
+
+        <section>
+          <h2>场景</h2>
+          <p>草稿仍会自动备份到浏览器本地；正式保存会写入地图 JSON 文件。</p>
+          <div className="map-editor-actions">
+            <button type="button" onClick={resetSample}>重置样例</button>
+            <button type="button" onClick={clearAll}>清空</button>
+          </div>
+          <p>{saveNotice}</p>
+        </section>
+      </aside>
+
+      <section
+        className="map-editor-stage"
+        aria-label="tilemap 编辑场景"
+      >
+        <div
+          ref={gridRef}
+          className="map-editor-grid"
+          style={{
+            width: MAP_EDITOR_COLUMNS * cellSize,
+            height: MAP_EDITOR_ROWS * cellSize,
+            gridTemplateColumns: `repeat(${MAP_EDITOR_COLUMNS}, ${cellSize}px)`,
+            transform: mapEditorCameraTransform(editMode ? editorCamera : player),
+            ["--map-editor-cell-size" as string]: `${cellSize}px`
+          } as CSSProperties}
+          onPointerMove={updateSpawnPlanDrag}
+          onPointerUp={finishSpawnPlanDrag}
+          onPointerLeave={finishSpawnPlanDrag}
+        >
+          <MapEditorTileCells
+            tiles={tiles}
+            cellSize={cellSize}
+            dragState={dragState}
+            visibleBounds={visibleBounds}
+            onBeginPaint={beginPaint}
+            onUpdatePaint={updatePaint}
+            onFinishPaint={finishPaint}
+          />
+          <span
+            className="map-editor-spawn-marker"
+            style={mapEditorSpawnMarkerStyle(spawn, cellSize)}
+            title={`玩家出生点 x:${spawn.x} y:${spawn.y}`}
+          />
+          <MapEditorSpawnPlanOverlay
+            spawnPlans={spawnPlans}
+            cellSize={cellSize}
+            selected={selectedSpawnPlan}
+            editMode={editMode}
+            onSelect={setSelectedSpawnPlan}
+            onBeginDrag={beginSpawnPlanDrag}
+          />
+          {spawnPlanContextMenu ? (
+            <div
+              className="map-editor-context-menu"
+              style={mapEditorSpawnPlanContextMenuStyle(spawnPlanContextMenu, cellSize)}
+              data-context-tool={spawnPlanContextMenu.tool}
+            >
+              <button type="button" onClick={createSpawnPlanFromContextMenu}>
+                {spawnPlanContextMenu.tool === "monster" ? "新增怪点" : "新增BOSS点"}
+              </button>
+            </div>
+          ) : null}
+          {showGridLines ? (
+            <div
+              className="map-editor-grid-line-overlay"
+              style={{ backgroundSize: `${cellSize}px ${cellSize}px` }}
+              aria-hidden="true"
+            />
+          ) : null}
+          {showCollisionOverlay ? (
+            <MapEditorCollisionOverlay
+              tiles={tiles}
+              cellSize={cellSize}
+              colliders={colliders}
+              player={player}
+              visibleBounds={visibleBounds}
+            />
+          ) : null}
+          <div
+            className="map-editor-player player unit-visual unit-visual-player"
+            style={mapEditorPlayerStyle(player, playerFrame)}
+            data-animation-state={playerFrame.animation.state}
+            data-animation-direction={playerFrame.animation.direction}
+            aria-label="可移动角色大小参照物"
+          >
+            <UnitAnimationSprite frame={playerFrame} />
+          </div>
+        </div>
+        {showMinimap ? (
+          <MapEditorMinimap
+            tiles={tiles}
+            playerGrid={playerGrid}
+            spawn={spawn}
+            visibleBounds={visibleBounds}
+            showGridLines={showGridLines}
+            onToggleGridLines={() => setShowGridLines((current) => !current)}
+            onClose={() => setShowMinimap(false)}
+          />
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+function MapEditorMinimap({
+  tiles,
+  playerGrid,
+  spawn,
+  visibleBounds,
+  showGridLines,
+  onToggleGridLines,
+  onClose
+}: {
+  tiles: MapEditorTileKind[][];
+  playerGrid: MapEditorCellPoint;
+  spawn: MapEditorCellPoint;
+  visibleBounds: MapEditorVisibleBounds;
+  showGridLines: boolean;
+  onToggleGridLines: () => void;
+  onClose: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    const image = context.createImageData(MAP_EDITOR_COLUMNS, MAP_EDITOR_ROWS);
+    for (let y = 0; y < MAP_EDITOR_ROWS; y += 1) {
+      for (let x = 0; x < MAP_EDITOR_COLUMNS; x += 1) {
+        const offset = (y * MAP_EDITOR_COLUMNS + x) * 4;
+        const tile = tiles[y]?.[x] ?? "empty";
+        const color = mapEditorMinimapTileColor(tile);
+        image.data[offset] = color.r;
+        image.data[offset + 1] = color.g;
+        image.data[offset + 2] = color.b;
+        image.data[offset + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+  }, [tiles]);
+
+  return (
+    <aside className="map-editor-minimap" aria-label="小地图">
+      <div className="map-editor-minimap-header">
+        <strong>小地图</strong>
+        <div className="map-editor-minimap-actions">
+          <button
+            type="button"
+            className={showGridLines ? "active" : ""}
+            onClick={onToggleGridLines}
+            aria-pressed={showGridLines}
+            aria-label="切换地图格子线框"
+          >
+            {showGridLines ? "隐藏线框" : "显示线框"}
+          </button>
+          <button type="button" onClick={onClose} aria-label="关闭小地图">关闭</button>
+        </div>
+      </div>
+      <div className="map-editor-minimap-body">
+        <canvas
+          ref={canvasRef}
+          width={MAP_EDITOR_COLUMNS}
+          height={MAP_EDITOR_ROWS}
+          style={{ width: MAP_EDITOR_MINIMAP_WIDTH, height: MAP_EDITOR_MINIMAP_HEIGHT }}
+        />
+        <span className="map-editor-minimap-viewport" style={mapEditorMinimapBoundsStyle(visibleBounds)} />
+        <span className="map-editor-minimap-spawn" style={mapEditorMinimapPointStyle(spawn)} />
+        <span className="map-editor-minimap-player" style={mapEditorMinimapPointStyle(playerGrid)} />
+      </div>
+    </aside>
+  );
+}
+
+const MapEditorCollisionOverlay = memo(function MapEditorCollisionOverlay({
+  tiles,
+  cellSize,
+  colliders,
+  player,
+  visibleBounds
+}: {
+  tiles: MapEditorTileKind[][];
+  cellSize: number;
+  colliders: MapEditorTileColliderConfig;
+  player: { x: number; y: number };
+  visibleBounds: MapEditorVisibleBounds;
+}) {
+  const nodes: ReactNode[] = [];
+  for (let y = visibleBounds.minY; y <= visibleBounds.maxY; y += 1) {
+    for (let x = visibleBounds.minX; x <= visibleBounds.maxX; x += 1) {
+      const tile = tiles[y]?.[x] ?? "empty";
+      const collider = mapEditorColliderForTile(tile, colliders);
+      if (!collider.enabled || collider.width <= 0 || collider.height <= 0) continue;
+      nodes.push(
+        <span
+          key={`${x}-${y}`}
+          className={`map-editor-collider-box map-editor-collider-${tile}`}
+          style={mapEditorTileColliderStyle(x, y, collider, cellSize)}
+        />
+      );
+    }
+  }
+  nodes.push(
+    <span
+      key="player"
+      className="map-editor-collider-box map-editor-collider-player"
+      style={mapEditorWorldColliderStyle(mapEditorPlayerColliderWorld(player, cellSize))}
+    />
+  );
+  return <div className="map-editor-collision-layer" aria-label="碰撞体范围">{nodes}</div>;
+});
+
+const MapEditorSpawnPlanOverlay = memo(function MapEditorSpawnPlanOverlay({
+  spawnPlans,
+  cellSize,
+  selected,
+  editMode,
+  onSelect,
+  onBeginDrag
+}: {
+  spawnPlans: MapEditorSpawnPlanData;
+  cellSize: number;
+  selected: MapEditorSpawnPlanSelection | null;
+  editMode: boolean;
+  onSelect: (selection: MapEditorSpawnPlanSelection) => void;
+  onBeginDrag: (event: ReactPointerEvent<HTMLElement>, selection: MapEditorSpawnPlanSelection, mode: MapEditorSpawnPlanDrag["mode"]) => void;
+}) {
+  return (
+    <div className="map-editor-spawnPlan-layer" aria-label="遭遇点">
+      {spawnPlans.monsterSpawns.map((spawnPoint) => {
+        const selection: MapEditorSpawnPlanSelection = { kind: "monster", id: spawnPoint.id };
+        const selectedClass = selected?.kind === "monster" && selected.id === spawnPoint.id ? "selected" : "";
+        return (
+          <div key={spawnPoint.id}>
+            <div
+              className={`map-editor-spawnPlan-aggro map-editor-monster-aggro ${selectedClass}`}
+              style={mapEditorSpawnPlanAggroCircleStyle(spawnPoint, cellSize)}
+              data-aggro-radius={spawnPoint.aggroRadius}
+              title={`索敌范围 ${spawnPoint.aggroRadius.toFixed(1)}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onSelect(selection);
+              }}
+            >
+              <button
+                type="button"
+                className="map-editor-spawnPlan-aggro-radius"
+                disabled={!editMode}
+                onPointerDown={(event) => onBeginDrag(event, selection, "aggro")}
+                aria-label="调整怪点索敌范围"
+              />
+            </div>
+            <div
+              className={`map-editor-spawnPlan-circle map-editor-monster-spawn ${selectedClass}`}
+              style={mapEditorSpawnPlanCircleStyle(spawnPoint, cellSize)}
+              data-monster-id={spawnPoint.monsterId}
+              data-monster-count={spawnPoint.count}
+              data-monster-density={spawnPoint.density}
+              data-count-multiplier-min={spawnPoint.countMultiplierMin}
+              data-count-multiplier-max={spawnPoint.countMultiplierMax}
+              title={`${spawnPoint.monsterId} x${spawnPoint.count}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onSelect(selection);
+              }}
+            >
+              <button
+                type="button"
+                className="map-editor-spawnPlan-center"
+                disabled={!editMode}
+                onPointerDown={(event) => onBeginDrag(event, selection, "move")}
+                aria-label="移动怪点"
+              />
+              <button
+                type="button"
+                className="map-editor-spawnPlan-radius"
+                disabled={!editMode}
+                onPointerDown={(event) => onBeginDrag(event, selection, "resize")}
+                aria-label="调整怪点范围"
+              />
+              <span>{spawnPoint.count}</span>
+            </div>
+          </div>
+        );
+      })}
+      {spawnPlans.bossGroups.map((bossGroup) => {
+        const selection: MapEditorSpawnPlanSelection = { kind: "boss", id: bossGroup.id };
+        const selectedClass = selected?.kind === "boss" && selected.id === bossGroup.id ? "selected" : "";
+        return (
+          <div key={bossGroup.id}>
+            <div
+              className={`map-editor-spawnPlan-aggro map-editor-boss-aggro ${selectedClass}`}
+              style={mapEditorSpawnPlanAggroCircleStyle(bossGroup, cellSize)}
+              data-aggro-radius={bossGroup.aggroRadius}
+              title={`BOSS索敌范围 ${bossGroup.aggroRadius.toFixed(1)}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onSelect(selection);
+              }}
+            >
+              <button
+                type="button"
+                className="map-editor-spawnPlan-aggro-radius"
+                disabled={!editMode}
+                onPointerDown={(event) => onBeginDrag(event, selection, "aggro")}
+                aria-label="调整BOSS索敌范围"
+              />
+            </div>
+            <div
+              className={`map-editor-spawnPlan-circle map-editor-boss-group ${selectedClass}`}
+              style={mapEditorSpawnPlanCircleStyle(bossGroup, cellSize)}
+              data-boss-count={bossGroup.bossCount}
+              title={`BOSS组 x${bossGroup.bossCount}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onSelect(selection);
+              }}
+            >
+              <button
+                type="button"
+                className="map-editor-spawnPlan-center"
+                disabled={!editMode}
+                onPointerDown={(event) => onBeginDrag(event, selection, "move")}
+                aria-label="移动BOSS点"
+              />
+              <button
+                type="button"
+                className="map-editor-spawnPlan-radius"
+                disabled={!editMode}
+                onPointerDown={(event) => onBeginDrag(event, selection, "resize")}
+                aria-label="调整BOSS范围"
+              />
+              <span>B{bossGroup.bossCount}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+const MapEditorTileCells = memo(function MapEditorTileCells({
+  tiles,
+  cellSize,
+  dragState,
+  visibleBounds,
+  onBeginPaint,
+  onUpdatePaint,
+  onFinishPaint
+}: {
+  tiles: MapEditorTileKind[][];
+  cellSize: number;
+  dragState: MapEditorDragState | null;
+  visibleBounds: MapEditorVisibleBounds;
+  onBeginPaint: (event: ReactPointerEvent<HTMLButtonElement>, x: number, y: number) => void;
+  onUpdatePaint: (x: number, y: number) => void;
+  onFinishPaint: () => void;
+}) {
+  const selection = dragState ? mapEditorSelectionSet(dragState.start, dragState.current) : null;
+  const cells: ReactNode[] = [];
+  for (let y = visibleBounds.minY; y <= visibleBounds.maxY; y += 1) {
+    for (let x = visibleBounds.minX; x <= visibleBounds.maxX; x += 1) {
+      const tile = tiles[y]?.[x] ?? "empty";
+      const selected = selection?.has(mapEditorPointKey(x, y)) ?? false;
+      const autotile = mapEditorAutotileState(tiles, x, y, tile);
+      const connectionClass = mapEditorTileConnectionClass(tiles, x, y, tile, autotile);
+      cells.push(
+        <button
+          key={`${x}-${y}`}
+          type="button"
+          className={`map-editor-cell map-editor-tile-${tile} ${connectionClass} ${selected ? "map-editor-cell-selected" : ""}`}
+          data-autotile-role={autotile.role}
+          data-autotile-same={mapEditorAutotileSideValue(autotile.sameSides)}
+          data-autotile-edge={mapEditorAutotileSideValue(autotile.edgeSides)}
+          data-autotile-boundary={mapEditorAutotileSideValue(autotile.boundarySides)}
+          data-autotile-inner-corner={mapEditorAutotileCornerValue(autotile.innerCorners)}
+          data-autotile-outer-corner={mapEditorAutotileCornerValue(autotile.outerCorners)}
+          title={`x:${x} y:${y} ${mapEditorTileLabel(tile)}`}
+          style={{
+            left: x * cellSize,
+            top: y * cellSize,
+            backgroundPosition: `${-x * cellSize}px ${-y * cellSize}px`,
+            backgroundSize: `${cellSize * 4}px ${cellSize * 4}px`
+          }}
+          onPointerDown={(event) => onBeginPaint(event, x, y)}
+          onPointerEnter={() => onUpdatePaint(x, y)}
+          onPointerUp={onFinishPaint}
+        />
+      );
+    }
+  }
+  return <>{cells}</>;
+});
+
+function isMapEditorTypingTarget(target: HTMLElement | null) {
+  if (!target) return false;
+  if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
+  if (target instanceof HTMLInputElement) return target.type !== "range";
+  return false;
+}
+
+function loadMapEditorState(): MapEditorSavedState {
+  if (typeof window === "undefined") {
+    return createDefaultMapEditorState();
+  }
+  try {
+    const raw = window.localStorage.getItem(MAP_EDITOR_STORAGE_KEY);
+    if (!raw) return createDefaultMapEditorState();
+    const parsed = JSON.parse(raw) as Partial<MapEditorSavedState>;
+    const sourceSize = mapEditorTileSourceSize(parsed.tiles);
+    const expansionOffset = mapEditorExpansionOffset(sourceSize.width, sourceSize.height);
+    return {
+      tiles: normalizeMapEditorTiles(parsed.tiles),
+      cellSize: Math.round(clampNumber(Number(parsed.cellSize ?? MAP_EDITOR_DEFAULT_CELL_SIZE), MAP_EDITOR_MIN_CELL_SIZE, MAP_EDITOR_MAX_CELL_SIZE)),
+      spawn: normalizeMapEditorSpawn(parsed.spawn, expansionOffset),
+      colliders: normalizeMapEditorColliders(parsed.colliders),
+      spawnPlans: normalizeMapEditorSpawnPlans(parsed.spawnPlans, expansionOffset),
+      width: MAP_EDITOR_COLUMNS,
+      height: MAP_EDITOR_ROWS
+    };
+  } catch {
+    return createDefaultMapEditorState();
+  }
+}
+
+function saveMapEditorState(state: MapEditorSavedState) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(MAP_EDITOR_STORAGE_KEY, JSON.stringify({
+    tiles: normalizeMapEditorTiles(state.tiles),
+    cellSize: Math.round(clampNumber(state.cellSize, MAP_EDITOR_MIN_CELL_SIZE, MAP_EDITOR_MAX_CELL_SIZE)),
+    spawn: clampMapEditorPoint(state.spawn),
+    colliders: normalizeMapEditorColliders(state.colliders),
+    spawnPlans: normalizeMapEditorSpawnPlans(state.spawnPlans),
+    width: MAP_EDITOR_COLUMNS,
+    height: MAP_EDITOR_ROWS
+  }));
+}
+
+function loadMapEditorCurrentFileName() {
+  if (typeof window === "undefined") return null;
+  const value = window.localStorage.getItem(MAP_EDITOR_CURRENT_FILE_STORAGE_KEY);
+  return value && value.endsWith(".json") ? value : null;
+}
+
+function saveMapEditorCurrentFileName(fileName: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(MAP_EDITOR_CURRENT_FILE_STORAGE_KEY, fileName);
+}
+
+function clearMapEditorCurrentFileName() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(MAP_EDITOR_CURRENT_FILE_STORAGE_KEY);
+}
+
+async function requestMapEditorDirectoryWritePermission(handle: MapEditorDirectoryHandle) {
+  const descriptor = { mode: "readwrite" as const };
+  if (handle.queryPermission && await handle.queryPermission(descriptor) === "granted") return true;
+  if (!handle.requestPermission) return true;
+  return await handle.requestPermission(descriptor) === "granted";
+}
+
+async function listMapEditorFiles(handle: MapEditorDirectoryHandle) {
+  const files: string[] = [];
+  for await (const entry of handle.values()) {
+    if (entry.kind === "file" && entry.name.toLowerCase().endsWith(".json")) files.push(entry.name);
+  }
+  return files.sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+}
+
+async function nextMapEditorFileName(handle: MapEditorDirectoryHandle) {
+  const files = await listMapEditorFiles(handle).catch(() => []);
+  const maxIndex = files.reduce((max, fileName) => {
+    const match = /^map_(\d+)\.json$/i.exec(fileName);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `map_${String(maxIndex + 1).padStart(3, "0")}.json`;
+}
+
+async function writeMapEditorFile(handle: MapEditorDirectoryHandle, fileName: string, state: MapEditorSavedState) {
+  const fileHandle = await handle.getFileHandle(fileName, { create: true });
+  await writeMapEditorFileHandle(fileHandle, fileName, state);
+}
+
+async function writeMapEditorFileHandle(fileHandle: MapEditorFileHandle, fileName: string, state: MapEditorSavedState) {
+  const writable = await fileHandle.createWritable();
+  await writable.write(JSON.stringify(createMapEditorFileDocument(fileName, state), null, 2));
+  await writable.close();
+}
+
+async function readMapEditorFile(fileHandle: MapEditorFileHandle): Promise<MapEditorSavedState> {
+  const file = await fileHandle.getFile();
+  const parsed = JSON.parse(await file.text()) as Partial<MapEditorFileDocument>;
+  return {
+    tiles: normalizeMapEditorTiles(parsed.tiles),
+    cellSize: Math.round(clampNumber(Number(parsed.cellSize ?? MAP_EDITOR_DEFAULT_CELL_SIZE), MAP_EDITOR_MIN_CELL_SIZE, MAP_EDITOR_MAX_CELL_SIZE)),
+    spawn: normalizeMapEditorSpawn(parsed.spawn),
+    colliders: normalizeMapEditorColliders(parsed.colliders),
+    spawnPlans: normalizeMapEditorSpawnPlans(parsed.spawnPlans),
+    width: MAP_EDITOR_COLUMNS,
+    height: MAP_EDITOR_ROWS
+  };
+}
+
+function createMapEditorFileDocument(fileName: string, state: MapEditorSavedState): MapEditorFileDocument {
+  return {
+    format: "poe.tilemap.editor",
+    version: 1,
+    name: fileName.replace(/\.json$/i, ""),
+    savedAt: new Date().toISOString(),
+    tiles: normalizeMapEditorTiles(state.tiles),
+    cellSize: Math.round(clampNumber(state.cellSize, MAP_EDITOR_MIN_CELL_SIZE, MAP_EDITOR_MAX_CELL_SIZE)),
+    spawn: clampMapEditorPoint(state.spawn),
+    colliders: normalizeMapEditorColliders(state.colliders),
+    spawnPlans: normalizeMapEditorSpawnPlans(state.spawnPlans),
+    width: MAP_EDITOR_COLUMNS,
+    height: MAP_EDITOR_ROWS
+  };
+}
+
+function isMapEditorAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function loadMapEditorDirectoryHandle() {
+  if (typeof indexedDB === "undefined") return null;
+  try {
+    const db = await openMapEditorHandleDatabase();
+    const transaction = db.transaction(MAP_EDITOR_HANDLE_STORE_NAME, "readonly");
+    const request = transaction.objectStore(MAP_EDITOR_HANDLE_STORE_NAME).get(MAP_EDITOR_DIRECTORY_HANDLE_KEY);
+    const handle = await mapEditorIdbRequest<unknown>(request);
+    db.close();
+    return isMapEditorDirectoryHandle(handle) ? handle : null;
+  } catch {
+    return null;
+  }
+}
+
+async function storeMapEditorDirectoryHandle(handle: MapEditorDirectoryHandle) {
+  if (typeof indexedDB === "undefined") return;
+  try {
+    const db = await openMapEditorHandleDatabase();
+    const transaction = db.transaction(MAP_EDITOR_HANDLE_STORE_NAME, "readwrite");
+    await mapEditorIdbRequest(transaction.objectStore(MAP_EDITOR_HANDLE_STORE_NAME).put(handle, MAP_EDITOR_DIRECTORY_HANDLE_KEY));
+    db.close();
+  } catch {
+    // Directory handles are an enhancement; saving still works for the current session without persistence.
+  }
+}
+
+function openMapEditorHandleDatabase() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(MAP_EDITOR_HANDLE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(MAP_EDITOR_HANDLE_STORE_NAME)) db.createObjectStore(MAP_EDITOR_HANDLE_STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function mapEditorIdbRequest<T>(request: IDBRequest<T>) {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function isMapEditorDirectoryHandle(value: unknown): value is MapEditorDirectoryHandle {
+  return Boolean(value && typeof value === "object" && (value as Partial<MapEditorDirectoryHandle>).kind === "directory");
+}
+
+function normalizeMapEditorTiles(value: unknown): MapEditorTileKind[][] {
+  if (!Array.isArray(value)) return createDefaultMapEditorTiles();
+  const sourceSize = mapEditorTileSourceSize(value);
+  const offset = mapEditorExpansionOffset(sourceSize.width, sourceSize.height);
+  const next = createEmptyMapEditorTiles();
+  for (let sourceY = 0; sourceY < sourceSize.height; sourceY += 1) {
+    const row = (value as unknown[][])[sourceY];
+    if (!Array.isArray(row)) continue;
+    for (let sourceX = 0; sourceX < sourceSize.width; sourceX += 1) {
+      const tile = row[sourceX];
+      if (tile !== "ground" && tile !== "wall" && tile !== "empty") continue;
+      const targetX = sourceX + offset.x;
+      const targetY = sourceY + offset.y;
+      if (targetX < 0 || targetX >= MAP_EDITOR_COLUMNS || targetY < 0 || targetY >= MAP_EDITOR_ROWS) continue;
+      next[targetY][targetX] = tile;
+    }
+  }
+  return next;
+}
+
+function createDefaultMapEditorColliders(): MapEditorTileColliderConfig {
+  return {
+    empty: { enabled: true, x: 0, y: 0, width: 1, height: 1 },
+    ground: { enabled: false, x: 0, y: 0, width: 1, height: 1 },
+    wall: { enabled: true, x: 0, y: 0, width: 1, height: 1 }
+  };
+}
+
+function normalizeMapEditorColliders(value: unknown): MapEditorTileColliderConfig {
+  const defaults = createDefaultMapEditorColliders();
+  if (!value || typeof value !== "object") return defaults;
+  const source = value as Partial<Record<MapEditorTileKind, Partial<MapEditorCollider>>>;
+  return {
+    empty: normalizeMapEditorCollider({ ...defaults.empty, ...source.empty }),
+    ground: normalizeMapEditorCollider({ ...defaults.ground, ...source.ground }),
+    wall: normalizeMapEditorCollider({ ...defaults.wall, ...source.wall })
+  };
+}
+
+function createEmptyMapEditorSpawnPlans(): MapEditorSpawnPlanData {
+  return { monsterSpawns: [], bossGroups: [] };
+}
+
+function normalizeMapEditorSpawnPlans(value: unknown, offset: MapEditorCellPoint = { x: 0, y: 0 }): MapEditorSpawnPlanData {
+  if (!value || typeof value !== "object") return createEmptyMapEditorSpawnPlans();
+  const source = value as Partial<MapEditorSpawnPlanData>;
+  return {
+    monsterSpawns: Array.isArray(source.monsterSpawns)
+      ? source.monsterSpawns.map((item) => normalizeMapEditorMonsterSpawn(item, offset)).filter(Boolean)
+      : [],
+    bossGroups: Array.isArray(source.bossGroups)
+      ? source.bossGroups.map((item) => normalizeMapEditorBossGroup(item, offset)).filter(Boolean)
+      : []
+  };
+}
+
+function normalizeMapEditorMonsterSpawn(value: Partial<MapEditorMonsterSpawnPoint> | unknown, offset: MapEditorCellPoint = { x: 0, y: 0 }): MapEditorMonsterSpawnPoint {
+  const source = value && typeof value === "object" ? value as Partial<MapEditorMonsterSpawnPoint> : {};
+  const radius = clampNumber(Number(source.radius ?? MAP_EDITOR_DEFAULT_MONSTER_RADIUS), 1, Math.max(MAP_EDITOR_COLUMNS, MAP_EDITOR_ROWS));
+  const defaultAggroRadius = Math.max(radius * 3, MAP_EDITOR_DEFAULT_MONSTER_AGGRO_RADIUS);
+  const rawMultiplierMin = Math.max(0, Number.isFinite(Number(source.countMultiplierMin)) ? Number(source.countMultiplierMin) : MAP_EDITOR_DEFAULT_MONSTER_COUNT_MULTIPLIER_MIN);
+  const rawMultiplierMax = Math.max(0, Number.isFinite(Number(source.countMultiplierMax)) ? Number(source.countMultiplierMax) : MAP_EDITOR_DEFAULT_MONSTER_COUNT_MULTIPLIER_MAX);
+  const countMultiplierMin = Math.min(rawMultiplierMin, rawMultiplierMax);
+  const countMultiplierMax = Math.max(rawMultiplierMin, rawMultiplierMax);
+  return {
+    id: safeMapEditorId(source.id, "monster"),
+    x: clampNumber(Number(source.x ?? 0) + offset.x, 0, MAP_EDITOR_COLUMNS - 1),
+    y: clampNumber(Number(source.y ?? 0) + offset.y, 0, MAP_EDITOR_ROWS - 1),
+    radius,
+    aggroRadius: clampNumber(Number(source.aggroRadius ?? defaultAggroRadius), 1, Math.max(MAP_EDITOR_COLUMNS, MAP_EDITOR_ROWS)),
+    monsterId: normalizeMapEditorMonsterId(source.monsterId),
+    count: Math.max(0, Math.round(Number.isFinite(Number(source.count)) ? Number(source.count) : MAP_EDITOR_DEFAULT_MONSTER_COUNT)),
+    density: Math.max(0, Number.isFinite(Number(source.density)) ? Number(source.density) : MAP_EDITOR_DEFAULT_MONSTER_DENSITY),
+    countMultiplierMin,
+    countMultiplierMax
+  };
+}
+
+function normalizeMapEditorBossGroup(value: Partial<MapEditorBossGroup> | unknown, offset: MapEditorCellPoint = { x: 0, y: 0 }): MapEditorBossGroup {
+  const source = value && typeof value === "object" ? value as Partial<MapEditorBossGroup> : {};
+  const bossCount = Math.max(1, Math.round(Number.isFinite(Number(source.bossCount)) ? Number(source.bossCount) : MAP_EDITOR_DEFAULT_BOSS_COUNT));
+  const sourceBossIds = Array.isArray(source.bossIds) ? source.bossIds : [];
+  const bossIds = Array.from({ length: bossCount }, (_, index) => normalizeMapEditorMonsterId(sourceBossIds[index] ?? "enemy_brute"));
+  const radius = clampNumber(Number(source.radius ?? MAP_EDITOR_DEFAULT_BOSS_RADIUS), 1, Math.max(MAP_EDITOR_COLUMNS, MAP_EDITOR_ROWS));
+  const defaultAggroRadius = Math.max(radius * 4, MAP_EDITOR_DEFAULT_BOSS_AGGRO_RADIUS);
+  return {
+    id: safeMapEditorId(source.id, "boss"),
+    x: clampNumber(Number(source.x ?? 0) + offset.x, 0, MAP_EDITOR_COLUMNS - 1),
+    y: clampNumber(Number(source.y ?? 0) + offset.y, 0, MAP_EDITOR_ROWS - 1),
+    radius,
+    aggroRadius: clampNumber(Number(source.aggroRadius ?? defaultAggroRadius), 1, Math.max(MAP_EDITOR_COLUMNS, MAP_EDITOR_ROWS)),
+    bossCount,
+    bossIds
+  };
+}
+
+function normalizeMapEditorMonsterId(value: unknown): UnitVisualType {
+  return MAP_EDITOR_MONSTER_OPTIONS.some((option) => option.id === value) ? value as UnitVisualType : "enemy_imp";
+}
+
+function safeMapEditorId(value: unknown, prefix: string) {
+  return typeof value === "string" && /^[a-z0-9_-]+$/i.test(value)
+    ? value
+    : `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function runtimeBattleMapOptions(): RuntimeBattleMapOption[] {
+  const editorMap = map001Document as MapEditorFileDocument;
+  const gridSize = editorRuntimeGridSize(editorMap);
+  return [
+    {
+      id: EDITOR_RUNTIME_MAP_ID,
+      displayName: editorMap.name || "map_001",
+      biome: "map editor",
+      worldWidth: (editorMap.width || MAP_EDITOR_COLUMNS) * gridSize,
+      worldHeight: (editorMap.height || MAP_EDITOR_ROWS) * gridSize
+    },
+    ...BAKED_BATTLE_MAPS.map((map) => ({
+      id: map.id,
+      displayName: map.meta.display_name,
+      biome: map.meta.biome,
+      worldWidth: map.meta.world_width,
+      worldHeight: map.meta.world_height
+    }))
+  ];
+}
+
+function createEditorRuntimeBattleMap(source: MapEditorFileDocument): EditorRuntimeBattleMapData {
+  const tiles = normalizeMapEditorTiles(source.tiles);
+  const colliders = normalizeMapEditorColliders(source.colliders);
+  const spawnPlans = normalizeMapEditorSpawnPlans(source.spawnPlans);
+  const gridWidth = source.width || MAP_EDITOR_COLUMNS;
+  const gridHeight = source.height || MAP_EDITOR_ROWS;
+  const gridSize = editorRuntimeGridSize(source);
+  const worldWidth = gridWidth * gridSize;
+  const worldHeight = gridHeight * gridSize;
+  const walkableGrid = Array.from({ length: gridHeight }, () => Array.from({ length: gridWidth }, () => false));
+  const blockerGrid = Array.from({ length: gridHeight }, () => Array.from({ length: gridWidth }, () => true));
+  const walkablePoints: MapPoint[] = [];
+  for (let gridY = 0; gridY < gridHeight; gridY += 1) {
+    for (let gridX = 0; gridX < gridWidth; gridX += 1) {
+      const tile = tiles[gridY]?.[gridX] ?? "empty";
+      const blocked = mapEditorRuntimeTileBlocks(tile, colliders);
+      walkableGrid[gridY][gridX] = !blocked;
+      blockerGrid[gridY][gridX] = blocked;
+      if (!blocked) walkablePoints.push(editorRuntimeMapPoint(gridX, gridY, gridSize));
+    }
+  }
+
+  const meta = {
+    id: EDITOR_RUNTIME_MAP_ID,
+    biome: "map editor",
+    display_name: source.name || "map_001",
+    background: "map_001.json",
+    walkable_mask: "map_001.json tiles",
+    blocker_mask: "map_001.json colliders",
+    spawn_mask: "map_001.json spawnPlans",
+    pixel_width: worldWidth,
+    pixel_height: worldHeight,
+    world_width: worldWidth,
+    world_height: worldHeight,
+    grid_size: gridSize,
+    player_spawn_policy: "map_001.json spawn",
+    enemy_spawn_policy: "map_001.json monsterSpawns",
+    elite_spawn_policy: "map_001.json monsterSpawns",
+    boss_spawn_policy: "map_001.json bossGroups",
+    exit_policy: "none",
+    collision_source: "map_001.json colliders",
+    navigation_source: "map_001.json tiles"
+  };
+  const requestedSpawn = source.spawn ?? MAP_EDITOR_DEFAULT_SPAWN;
+  const playerSpawn = nearestEditorRuntimeWalkablePoint(
+    editorRuntimeMapPoint(Math.floor(requestedSpawn.x), Math.floor(requestedSpawn.y), gridSize),
+    walkablePoints
+  );
+  const enemySpawnPoints = spawnPlans.monsterSpawns.map((point) => editorRuntimeCoordinatePoint(point.x, point.y, gridSize));
+  const bossPoints = spawnPlans.bossGroups.map((point) => editorRuntimeCoordinatePoint(point.x, point.y, gridSize));
+
+  return {
+    id: EDITOR_RUNTIME_MAP_ID,
+    displayName: source.name || "map_001",
+    backgroundUrl: "",
+    meta,
+    gridWidth,
+    gridHeight,
+    walkableGrid,
+    blockerGrid,
+    walkablePoints,
+    playerSpawn,
+    enemySpawnPoints,
+    eliteSpawnPoints: [],
+    bossPoints,
+    exitPoints: [],
+    interactionPoints: [],
+    debugWarnings: [],
+    editorTiles: tiles,
+    editorSpawnPlans: spawnPlans
+  };
+}
+
+function editorRuntimeGridSize(source: Partial<MapEditorSavedState>) {
+  return Number.isFinite(source.cellSize) && Number(source.cellSize) > 0
+    ? Number(source.cellSize)
+    : MAP_EDITOR_DEFAULT_CELL_SIZE;
+}
+
+function mapEditorRuntimeTileBlocks(tile: MapEditorTileKind, colliders: MapEditorTileColliderConfig) {
+  const collider = mapEditorColliderForTile(tile, colliders);
+  return collider.enabled && collider.width > 0 && collider.height > 0;
+}
+
+function editorRuntimeMapPoint(gridX: number, gridY: number, gridSize: number): MapPoint {
+  return {
+    x: gridX * gridSize + gridSize / 2,
+    y: gridY * gridSize + gridSize / 2,
+    gridX,
+    gridY
+  };
+}
+
+function editorRuntimeCoordinatePoint(x: number, y: number, gridSize: number): MapPoint {
+  return {
+    x: clamp(x * gridSize, 0, MAP_EDITOR_COLUMNS * gridSize - 1),
+    y: clamp(y * gridSize, 0, MAP_EDITOR_ROWS * gridSize - 1),
+    gridX: clamp(Math.floor(x), 0, MAP_EDITOR_COLUMNS - 1),
+    gridY: clamp(Math.floor(y), 0, MAP_EDITOR_ROWS - 1)
+  };
+}
+
+function nearestEditorRuntimeWalkablePoint(point: MapPoint, walkablePoints: MapPoint[]) {
+  if (walkablePoints.length === 0) return point;
+  let nearest = walkablePoints[0];
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of walkablePoints) {
+    const candidateDistance = Math.hypot(candidate.x - point.x, candidate.y - point.y);
+    if (candidateDistance < nearestDistance) {
+      nearest = candidate;
+      nearestDistance = candidateDistance;
+    }
+  }
+  return nearest;
+}
+
+function isEditorRuntimeBattleMap(map: BakedBattleMapData): map is EditorRuntimeBattleMapData {
+  return Array.isArray((map as Partial<EditorRuntimeBattleMapData>).editorTiles);
+}
+
+function createDefaultMapEditorMonsterSpawn(x: number, y: number): MapEditorMonsterSpawnPoint {
+  return normalizeMapEditorMonsterSpawn({
+    id: safeMapEditorId(null, "monster"),
+    x,
+    y,
+    radius: MAP_EDITOR_DEFAULT_MONSTER_RADIUS,
+    monsterId: "enemy_imp",
+    count: MAP_EDITOR_DEFAULT_MONSTER_COUNT,
+    density: MAP_EDITOR_DEFAULT_MONSTER_DENSITY
+  });
+}
+
+function createDefaultMapEditorBossGroup(x: number, y: number): MapEditorBossGroup {
+  return normalizeMapEditorBossGroup({
+    id: safeMapEditorId(null, "boss"),
+    x,
+    y,
+    radius: MAP_EDITOR_DEFAULT_BOSS_RADIUS,
+    bossCount: MAP_EDITOR_DEFAULT_BOSS_COUNT,
+    bossIds: ["enemy_brute"]
+  });
+}
+
+function normalizeMapEditorCollider(value: Partial<MapEditorCollider>): MapEditorCollider {
+  const x = clampNumber(Number(value.x ?? 0), 0, 1);
+  const y = clampNumber(Number(value.y ?? 0), 0, 1);
+  return {
+    enabled: Boolean(value.enabled),
+    x,
+    y,
+    width: clampNumber(Number(value.width ?? 1), 0, 1 - x),
+    height: clampNumber(Number(value.height ?? 1), 0, 1 - y)
+  };
+}
+
+function mapEditorTileSourceSize(value: unknown) {
+  if (!Array.isArray(value)) return { width: 0, height: 0 };
+  const height = value.length;
+  const width = value.reduce((maxWidth, row) => Array.isArray(row) ? Math.max(maxWidth, row.length) : maxWidth, 0);
+  return { width, height };
+}
+
+function mapEditorExpansionOffset(width: number, height: number): MapEditorCellPoint {
+  return {
+    x: width > 0 && width < MAP_EDITOR_COLUMNS ? Math.floor((MAP_EDITOR_COLUMNS - width) / 2) : 0,
+    y: height > 0 && height < MAP_EDITOR_ROWS ? Math.floor((MAP_EDITOR_ROWS - height) / 2) : 0
+  };
+}
+
+function normalizeMapEditorSpawn(value: unknown, offset: MapEditorCellPoint = { x: 0, y: 0 }): MapEditorCellPoint {
+  if (value && typeof value === "object" && "x" in value && "y" in value) {
+    const point = value as Partial<MapEditorCellPoint>;
+    const x = Number(point.x);
+    const y = Number(point.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      return clampMapEditorPoint({ x: Math.round(x) + offset.x, y: Math.round(y) + offset.y });
+    }
+  }
+  return { ...MAP_EDITOR_DEFAULT_SPAWN };
+}
+
+function createDefaultMapEditorState(): MapEditorSavedState {
+  return {
+    tiles: createDefaultMapEditorTiles(),
+    cellSize: MAP_EDITOR_DEFAULT_CELL_SIZE,
+    spawn: { ...MAP_EDITOR_DEFAULT_SPAWN },
+    colliders: createDefaultMapEditorColliders(),
+    spawnPlans: createEmptyMapEditorSpawnPlans(),
+    width: MAP_EDITOR_COLUMNS,
+    height: MAP_EDITOR_ROWS
+  };
+}
+
+function createEmptyMapEditorTiles(): MapEditorTileKind[][] {
+  return Array.from({ length: MAP_EDITOR_ROWS }, () => Array.from({ length: MAP_EDITOR_COLUMNS }, () => "empty" as const));
+}
+
+function createDefaultMapEditorTiles(): MapEditorTileKind[][] {
+  const tiles = createEmptyMapEditorTiles();
+  const paint = (start: MapEditorCellPoint, end: MapEditorCellPoint, tile: MapEditorTileKind) => {
+    paintMapEditorTilesInPlace(
+      tiles,
+      { x: start.x + MAP_EDITOR_SAMPLE_OFFSET.x, y: start.y + MAP_EDITOR_SAMPLE_OFFSET.y },
+      { x: end.x + MAP_EDITOR_SAMPLE_OFFSET.x, y: end.y + MAP_EDITOR_SAMPLE_OFFSET.y },
+      tile
+    );
+  };
+  paint({ x: 5, y: 5 }, { x: 44, y: 28 }, "ground");
+  paint({ x: 5, y: 5 }, { x: 44, y: 5 }, "wall");
+  paint({ x: 5, y: 28 }, { x: 44, y: 28 }, "wall");
+  paint({ x: 5, y: 5 }, { x: 5, y: 28 }, "wall");
+  paint({ x: 44, y: 5 }, { x: 44, y: 28 }, "wall");
+  paint({ x: 70, y: 32 }, { x: 118, y: 62 }, "ground");
+  paint({ x: 70, y: 32 }, { x: 118, y: 32 }, "wall");
+  paint({ x: 70, y: 62 }, { x: 118, y: 62 }, "wall");
+  paint({ x: 70, y: 32 }, { x: 70, y: 62 }, "wall");
+  paint({ x: 118, y: 32 }, { x: 118, y: 62 }, "wall");
+  paint({ x: 44, y: 15 }, { x: 70, y: 15 }, "ground");
+  paint({ x: 44, y: 14 }, { x: 70, y: 14 }, "wall");
+  paint({ x: 44, y: 16 }, { x: 70, y: 16 }, "wall");
+  paint({ x: 88, y: 44 }, { x: 94, y: 50 }, "wall");
+  paint({ x: 23, y: 5 }, { x: 26, y: 5 }, "ground");
+  paint({ x: 5, y: 16 }, { x: 5, y: 19 }, "ground");
+  paint({ x: 118, y: 46 }, { x: 118, y: 49 }, "ground");
+  return tiles;
+}
+
+function paintMapEditorTiles(current: MapEditorTileKind[][], start: MapEditorCellPoint, end: MapEditorCellPoint, tile: MapEditorTileKind) {
+  const next = current.map((row) => [...row]);
+  paintMapEditorTilesInPlace(next, start, end, tile);
+  return next;
+}
+
+function shiftMapEditorTiles(current: MapEditorTileKind[][], dx: number, dy: number) {
+  const next = createEmptyMapEditorTiles();
+  for (let y = 0; y < MAP_EDITOR_ROWS; y += 1) {
+    for (let x = 0; x < MAP_EDITOR_COLUMNS; x += 1) {
+      const tile = current[y]?.[x] ?? "empty";
+      const targetX = x + dx;
+      const targetY = y + dy;
+      if (targetX < 0 || targetX >= MAP_EDITOR_COLUMNS || targetY < 0 || targetY >= MAP_EDITOR_ROWS) continue;
+      next[targetY][targetX] = tile;
+    }
+  }
+  return next;
+}
+
+function shiftMapEditorPoint(point: MapEditorCellPoint, dx: number, dy: number): MapEditorCellPoint {
+  return clampMapEditorPoint({ x: point.x + dx, y: point.y + dy });
+}
+
+function shiftMapEditorSpawnPlans(spawnPlans: MapEditorSpawnPlanData, dx: number, dy: number): MapEditorSpawnPlanData {
+  return {
+    monsterSpawns: spawnPlans.monsterSpawns.map((spawnPoint) => normalizeMapEditorMonsterSpawn({ ...spawnPoint, x: spawnPoint.x + dx, y: spawnPoint.y + dy })),
+    bossGroups: spawnPlans.bossGroups.map((bossGroup) => normalizeMapEditorBossGroup({ ...bossGroup, x: bossGroup.x + dx, y: bossGroup.y + dy }))
+  };
+}
+
+function countMapEditorSpawnPlanMonsters(spawnPlans: MapEditorSpawnPlanData) {
+  return spawnPlans.monsterSpawns.reduce((sum, spawnPoint) => sum + Math.max(0, spawnPoint.count), 0)
+    + spawnPlans.bossGroups.reduce((sum, bossGroup) => sum + Math.max(0, bossGroup.bossCount), 0);
+}
+
+function mapEditorSpawnPlanToolLabel(tool: MapEditorSpawnPlanTool) {
+  if (tool === "monster") return "放置怪点";
+  if (tool === "boss") return "BOSS点";
+  return "地形";
+}
+
+function formatMapEditorSpawnPlanPoint(point: { x: number; y: number }) {
+  return `${Math.round(point.x)}, ${Math.round(point.y)}`;
+}
+
+function mapEditorSpawnPlanSelectionKey(selection: MapEditorSpawnPlanSelection) {
+  return `${selection.kind}:${selection.id}`;
+}
+
+function mapEditorSpawnPlanSelectionFromKey(value: string): MapEditorSpawnPlanSelection | null {
+  const [kind, id] = value.split(":");
+  if (!id) return null;
+  if (kind === "monster") return { kind, id };
+  if (kind === "boss") return { kind, id };
+  return null;
+}
+
+function paintMapEditorTilesInPlace(tiles: MapEditorTileKind[][], start: MapEditorCellPoint, end: MapEditorCellPoint, tile: MapEditorTileKind) {
+  const minX = clamp(Math.min(start.x, end.x), 0, MAP_EDITOR_COLUMNS - 1);
+  const maxX = clamp(Math.max(start.x, end.x), 0, MAP_EDITOR_COLUMNS - 1);
+  const minY = clamp(Math.min(start.y, end.y), 0, MAP_EDITOR_ROWS - 1);
+  const maxY = clamp(Math.max(start.y, end.y), 0, MAP_EDITOR_ROWS - 1);
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      tiles[y][x] = tile;
+    }
+  }
+}
+
+function mapEditorSelectionSet(start: MapEditorCellPoint, end: MapEditorCellPoint) {
+  const result = new Set<string>();
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) result.add(mapEditorPointKey(x, y));
+  }
+  return result;
+}
+
+function mapEditorPointKey(x: number, y: number) {
+  return `${x}-${y}`;
+}
+
+function mapEditorWallNeighborPoint(x: number, y: number, side: MapEditorWallSide) {
+  switch (side) {
+    case "n":
+      return { x, y: y - 1 };
+    case "e":
+      return { x: x + 1, y };
+    case "s":
+      return { x, y: y + 1 };
+    case "w":
+      return { x: x - 1, y };
+  }
+}
+
+function mapEditorWallHasNeighbor(tiles: MapEditorTileKind[][], x: number, y: number, side: MapEditorWallSide) {
+  const next = mapEditorWallNeighborPoint(x, y, side);
+  return next.x >= 0 && next.x < MAP_EDITOR_COLUMNS && next.y >= 0 && next.y < MAP_EDITOR_ROWS && tiles[next.y]?.[next.x] === "wall";
+}
+
+function mapEditorTileAt(tiles: MapEditorTileKind[][], x: number, y: number): MapEditorTileKind {
+  if (x < 0 || x >= MAP_EDITOR_COLUMNS || y < 0 || y >= MAP_EDITOR_ROWS) return "empty";
+  return tiles[y]?.[x] ?? "empty";
+}
+
+function mapEditorCornerNeighborPoint(x: number, y: number, corner: MapEditorWallCorner) {
+  switch (corner) {
+    case "nw":
+      return { x: x - 1, y: y - 1 };
+    case "ne":
+      return { x: x + 1, y: y - 1 };
+    case "se":
+      return { x: x + 1, y: y + 1 };
+    case "sw":
+      return { x: x - 1, y: y + 1 };
+  }
+}
+
+function mapEditorCornerSides(corner: MapEditorWallCorner): [MapEditorWallSide, MapEditorWallSide] {
+  switch (corner) {
+    case "nw":
+      return ["n", "w"];
+    case "ne":
+      return ["n", "e"];
+    case "se":
+      return ["s", "e"];
+    case "sw":
+      return ["s", "w"];
+  }
+}
+
+function mapEditorAutotileState(tiles: MapEditorTileKind[][], x: number, y: number, tile: MapEditorTileKind): MapEditorAutotileState {
+  if (tile === "empty") {
+    return { role: "empty", sameSides: [], edgeSides: [], boundarySides: [], innerCorners: [], outerCorners: [] };
+  }
+
+  const sameSides = MAP_EDITOR_WALL_SIDES.filter((side) => mapEditorTileAt(tiles, mapEditorWallNeighborPoint(x, y, side).x, mapEditorWallNeighborPoint(x, y, side).y) === tile);
+  const edgeSides = MAP_EDITOR_WALL_SIDES.filter((side) => {
+    const point = mapEditorWallNeighborPoint(x, y, side);
+    return mapEditorTileAt(tiles, point.x, point.y) === "empty";
+  });
+  const boundarySides = MAP_EDITOR_WALL_SIDES.filter((side) => {
+    const point = mapEditorWallNeighborPoint(x, y, side);
+    const neighbor = mapEditorTileAt(tiles, point.x, point.y);
+    return neighbor !== "empty" && neighbor !== tile;
+  });
+  const innerCorners = MAP_EDITOR_WALL_CORNERS.filter((corner) => {
+    const [first, second] = mapEditorCornerSides(corner);
+    const diagonal = mapEditorCornerNeighborPoint(x, y, corner);
+    return sameSides.includes(first)
+      && sameSides.includes(second)
+      && mapEditorTileAt(tiles, diagonal.x, diagonal.y) !== tile;
+  });
+  const outerCorners = MAP_EDITOR_WALL_CORNERS.filter((corner) => {
+    const [first, second] = mapEditorCornerSides(corner);
+    return (edgeSides.includes(first) || boundarySides.includes(first))
+      && (edgeSides.includes(second) || boundarySides.includes(second));
+  });
+  const role: MapEditorAutotileRole = sameSides.length === 4 && innerCorners.length === 0
+    ? "interior"
+    : sameSides.length > 0
+      ? "connected"
+      : "isolated";
+
+  return { role, sameSides, edgeSides, boundarySides, innerCorners, outerCorners };
+}
+
+function mapEditorAutotileSideValue(sides: MapEditorWallSide[]) {
+  return sides.length > 0 ? sides.join(" ") : "none";
+}
+
+function mapEditorAutotileCornerValue(corners: MapEditorWallCorner[]) {
+  return corners.length > 0 ? corners.join(" ") : "none";
+}
+
+function mapEditorAutotileClass(autotile: MapEditorAutotileState) {
+  return [
+    `map-editor-autotile-${autotile.role}`,
+    ...autotile.edgeSides.map((side) => `map-editor-edge-${side}`),
+    ...autotile.boundarySides.map((side) => `map-editor-boundary-${side}`),
+    ...autotile.innerCorners.map((corner) => `map-editor-corner-inner-${corner}`),
+    ...autotile.outerCorners.map((corner) => `map-editor-corner-outer-${corner}`)
+  ].join(" ");
+}
+
+function mapEditorTileConnectionClass(
+  tiles: MapEditorTileKind[][],
+  x: number,
+  y: number,
+  tile: MapEditorTileKind,
+  autotile: MapEditorAutotileState = mapEditorAutotileState(tiles, x, y, tile)
+) {
+  const autotileClass = mapEditorAutotileClass(autotile);
+  if (tile !== "wall") return autotileClass;
+  return [
+    autotileClass,
+    ...MAP_EDITOR_WALL_SIDES
+      .map((side) => mapEditorWallHasNeighbor(tiles, x, y, side) ? `map-editor-wall-${side}` : `map-editor-wall-open-${side}`),
+    ...MAP_EDITOR_WALL_CORNERS
+      .map((corner) => mapEditorWallNeedsCornerCap(tiles, x, y, corner) ? `map-editor-wall-corner-${corner}` : "")
+  ].filter(Boolean).join(" ");
+}
+
+function mapEditorWallNeedsCornerCap(tiles: MapEditorTileKind[][], x: number, y: number, corner: MapEditorWallCorner) {
+  switch (corner) {
+    case "nw":
+      return !mapEditorWallHasNeighbor(tiles, x, y, "n") || !mapEditorWallHasNeighbor(tiles, x, y, "w");
+    case "ne":
+      return !mapEditorWallHasNeighbor(tiles, x, y, "n") || !mapEditorWallHasNeighbor(tiles, x, y, "e");
+    case "se":
+      return !mapEditorWallHasNeighbor(tiles, x, y, "s") || !mapEditorWallHasNeighbor(tiles, x, y, "e");
+    case "sw":
+      return !mapEditorWallHasNeighbor(tiles, x, y, "s") || !mapEditorWallHasNeighbor(tiles, x, y, "w");
+  }
+}
+
+function mapEditorCellCenter(x: number, y: number, cellSize: number) {
+  return {
+    x: x * cellSize + cellSize / 2,
+    y: y * cellSize + cellSize / 2
+  };
+}
+
+function clampMapEditorPoint(point: MapEditorCellPoint): MapEditorCellPoint {
+  return {
+    x: clamp(point.x, 0, MAP_EDITOR_COLUMNS - 1),
+    y: clamp(point.y, 0, MAP_EDITOR_ROWS - 1)
+  };
+}
+
+function clampMapEditorWorldPoint(point: { x: number; y: number }, cellSize: number) {
+  return {
+    x: clamp(point.x, 0, MAP_EDITOR_COLUMNS * cellSize - 1),
+    y: clamp(point.y, 0, MAP_EDITOR_ROWS * cellSize - 1)
+  };
+}
+
+function mapEditorWorldToGrid(point: { x: number; y: number }, cellSize: number) {
+  return {
+    x: clamp(Math.floor(point.x / cellSize), 0, MAP_EDITOR_COLUMNS - 1),
+    y: clamp(Math.floor(point.y / cellSize), 0, MAP_EDITOR_ROWS - 1)
+  };
+}
+
+function mapEditorVisibleBounds(center: MapEditorCellPoint): MapEditorVisibleBounds {
+  return {
+    minX: clamp(center.x - MAP_EDITOR_VISIBLE_RADIUS_X, 0, MAP_EDITOR_COLUMNS - 1),
+    maxX: clamp(center.x + MAP_EDITOR_VISIBLE_RADIUS_X, 0, MAP_EDITOR_COLUMNS - 1),
+    minY: clamp(center.y - MAP_EDITOR_VISIBLE_RADIUS_Y, 0, MAP_EDITOR_ROWS - 1),
+    maxY: clamp(center.y + MAP_EDITOR_VISIBLE_RADIUS_Y, 0, MAP_EDITOR_ROWS - 1)
+  };
+}
+
+function mapEditorColliderForTile(tile: MapEditorTileKind, colliders: MapEditorTileColliderConfig) {
+  return colliders[tile] ?? createDefaultMapEditorColliders()[tile];
+}
+
+function mapEditorTileColliderWorld(x: number, y: number, collider: MapEditorCollider, cellSize: number) {
+  const left = (x + collider.x) * cellSize;
+  const top = (y + collider.y) * cellSize;
+  const width = collider.width * cellSize;
+  const height = collider.height * cellSize;
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height
+  };
+}
+
+function mapEditorPlayerColliderWorld(player: { x: number; y: number }, cellSize: number) {
+  const width = MAP_EDITOR_PLAYER_COLLIDER.width * cellSize;
+  const height = MAP_EDITOR_PLAYER_COLLIDER.height * cellSize;
+  const left = player.x - width / 2;
+  const top = player.y - height / 2 + (MAP_EDITOR_PLAYER_COLLIDER.y - 0.5) * cellSize;
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height
+  };
+}
+
+function rectanglesIntersect(
+  left: { left: number; right: number; top: number; bottom: number },
+  right: { left: number; right: number; top: number; bottom: number }
+) {
+  return left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top;
+}
+
+function isMapEditorWalkable(
+  tiles: MapEditorTileKind[][],
+  cellSize: number,
+  point: { x: number; y: number },
+  colliders: MapEditorTileColliderConfig
+) {
+  const playerCollider = mapEditorPlayerColliderWorld(point, cellSize);
+  const minGridX = clamp(Math.floor(playerCollider.left / cellSize), 0, MAP_EDITOR_COLUMNS - 1);
+  const maxGridX = clamp(Math.floor(playerCollider.right / cellSize), 0, MAP_EDITOR_COLUMNS - 1);
+  const minGridY = clamp(Math.floor(playerCollider.top / cellSize), 0, MAP_EDITOR_ROWS - 1);
+  const maxGridY = clamp(Math.floor(playerCollider.bottom / cellSize), 0, MAP_EDITOR_ROWS - 1);
+  for (let y = minGridY; y <= maxGridY; y += 1) {
+    for (let x = minGridX; x <= maxGridX; x += 1) {
+      const tileCollider = mapEditorColliderForTile(tiles[y]?.[x] ?? "empty", colliders);
+      if (!tileCollider.enabled || tileCollider.width <= 0 || tileCollider.height <= 0) continue;
+      if (rectanglesIntersect(playerCollider, mapEditorTileColliderWorld(x, y, tileCollider, cellSize))) return false;
+    }
+  }
+  return true;
+}
+
+function resolveMapEditorMove(
+  tiles: MapEditorTileKind[][],
+  cellSize: number,
+  current: { x: number; y: number },
+  moveVector: { x: number; y: number },
+  distancePx: number,
+  colliders: MapEditorTileColliderConfig
+) {
+  const length = Math.hypot(moveVector.x, moveVector.y);
+  if (length <= 0) return current;
+  const next = {
+    x: clamp(current.x + (moveVector.x / length) * distancePx, 0, MAP_EDITOR_COLUMNS * cellSize - 1),
+    y: clamp(current.y + (moveVector.y / length) * distancePx, 0, MAP_EDITOR_ROWS * cellSize - 1)
+  };
+  if (isMapEditorWalkable(tiles, cellSize, next, colliders)) return next;
+  const xOnly = { x: next.x, y: current.y };
+  if (isMapEditorWalkable(tiles, cellSize, xOnly, colliders)) return xOnly;
+  const yOnly = { x: current.x, y: next.y };
+  if (isMapEditorWalkable(tiles, cellSize, yOnly, colliders)) return yOnly;
+  return current;
+}
+
+function countMapEditorTiles(tiles: MapEditorTileKind[][], tile: MapEditorTileKind) {
+  return tiles.reduce((total, row) => total + row.filter((cell) => cell === tile).length, 0);
+}
+
+function countMapEditorBlockingTiles(tiles: MapEditorTileKind[][], colliders: MapEditorTileColliderConfig) {
+  return tiles.reduce((total, row) => (
+    total + row.filter((cell) => {
+      const collider = mapEditorColliderForTile(cell, colliders);
+      return collider.enabled && collider.width > 0 && collider.height > 0;
+    }).length
+  ), 0);
+}
+
+function mapEditorTileLabel(tile: MapEditorTileKind) {
+  if (tile === "ground") return "地面 / 可行走";
+  if (tile === "wall") return "墙壁 / 阻挡";
+  return "空 / 阻挡";
+}
+
+function mapEditorColliderFieldLabel(field: MapEditorColliderNumericField) {
+  if (field === "x") return "X";
+  if (field === "y") return "Y";
+  if (field === "width") return "W";
+  return "H";
+}
+
+function mapEditorColliderPercent(value: number) {
+  return Math.round(clampNumber(value, 0, 1) * 100);
+}
+
+function mapEditorMinimapTileColor(tile: MapEditorTileKind) {
+  if (tile === "ground") return { r: 199, g: 201, b: 195 };
+  if (tile === "wall") return { r: 94, g: 99, b: 97 };
+  return { r: 7, g: 8, b: 8 };
+}
+
+function mapEditorMinimapPointStyle(point: MapEditorCellPoint): CSSProperties {
+  return {
+    left: `${((point.x + 0.5) / MAP_EDITOR_COLUMNS) * 100}%`,
+    top: `${((point.y + 0.5) / MAP_EDITOR_ROWS) * 100}%`
+  };
+}
+
+function mapEditorMinimapBoundsStyle(bounds: MapEditorVisibleBounds): CSSProperties {
+  return {
+    left: `${(bounds.minX / MAP_EDITOR_COLUMNS) * 100}%`,
+    top: `${(bounds.minY / MAP_EDITOR_ROWS) * 100}%`,
+    width: `${((bounds.maxX - bounds.minX + 1) / MAP_EDITOR_COLUMNS) * 100}%`,
+    height: `${((bounds.maxY - bounds.minY + 1) / MAP_EDITOR_ROWS) * 100}%`
+  };
+}
+
+function mapEditorPlayerStyle(player: { x: number; y: number }, frame: UnitAnimationFrame): CSSProperties {
+  return {
+    ...battleUnitStyle(player, frame, 60),
+    "--unit-render-scale": MAP_EDITOR_PLAYER_RENDER_SCALE,
+    pointerEvents: "none"
+  };
+}
+
+function mapEditorSpawnMarkerStyle(spawn: MapEditorCellPoint, cellSize: number): CSSProperties {
+  const size = clampNumber(cellSize * 0.42, 18, 34);
+  return {
+    left: spawn.x * cellSize + cellSize / 2,
+    top: spawn.y * cellSize + cellSize / 2,
+    width: size,
+    height: size
+  };
+}
+
+function mapEditorSpawnPlanCircleStyle(point: { x: number; y: number; radius: number }, cellSize: number): CSSProperties {
+  const radiusPx = point.radius * cellSize;
+  return {
+    left: point.x * cellSize - radiusPx,
+    top: point.y * cellSize - radiusPx,
+    width: radiusPx * 2,
+    height: radiusPx * 2
+  };
+}
+
+function mapEditorSpawnPlanAggroCircleStyle(point: { x: number; y: number; aggroRadius: number }, cellSize: number): CSSProperties {
+  const radiusPx = point.aggroRadius * cellSize;
+  return {
+    left: point.x * cellSize - radiusPx,
+    top: point.y * cellSize - radiusPx,
+    width: radiusPx * 2,
+    height: radiusPx * 2
+  };
+}
+
+function mapEditorSpawnPlanContextMenuStyle(menu: MapEditorSpawnPlanContextMenu, cellSize: number): CSSProperties {
+  return {
+    left: menu.x * cellSize,
+    top: menu.y * cellSize
+  };
+}
+
+function mapEditorPointerToCell(clientX: number, clientY: number, grid: HTMLDivElement | null, cellSize: number): MapEditorWorldPoint | null {
+  if (!grid) return null;
+  const bounds = grid.getBoundingClientRect();
+  return {
+    x: clampNumber((clientX - bounds.left) / cellSize, 0, MAP_EDITOR_COLUMNS - 1),
+    y: clampNumber((clientY - bounds.top) / cellSize, 0, MAP_EDITOR_ROWS - 1)
+  };
+}
+
+function mapEditorTileColliderStyle(x: number, y: number, collider: MapEditorCollider, cellSize: number): CSSProperties {
+  return mapEditorWorldColliderStyle(mapEditorTileColliderWorld(x, y, collider, cellSize));
+}
+
+function mapEditorWorldColliderStyle(rect: { left: number; top: number; width: number; height: number }): CSSProperties {
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height
+  };
+}
+
+function mapEditorCameraTransform(player: { x: number; y: number }) {
+  return `translate(${-player.x}px, ${-player.y}px)`;
+}
+
 const SPRITE_TEST_DIRECTIONS: UnitDirection[] = ["left", "right"];
-const SPRITE_TEST_ACTIONS: UnitAnimationState[] = ["idle", "walk", "run"];
+const SPRITE_TEST_ACTIONS: UnitAnimationState[] = ["idle", "walk", "attack"];
 const SPRITE_TEST_SPEEDS = [0.25, 0.5, 1, 2];
 const SPRITE_TEST_DIRECTION_TEXT: Record<UnitDirection, string> = {
   up: "上",
@@ -1077,7 +3421,6 @@ const SPRITE_TEST_DIRECTION_TEXT: Record<UnitDirection, string> = {
 const SPRITE_TEST_ACTION_TEXT: Record<UnitAnimationState, string> = {
   idle: "待机",
   walk: "行走",
-  run: "奔跑",
   attack: "攻击"
 };
 const SPRITE_TEST_RESOURCE_TEXT: Record<UnitVisualType, string> = {
@@ -1261,23 +3604,6 @@ function SpriteTestScene() {
           state="walk"
           title="行走测试区"
           actionText="行走"
-          direction={direction}
-          activePathId={pathId}
-          walkPoint={walkPoint}
-          walkDirection={walkDirection}
-          elapsedMs={elapsedMs}
-          playbackSpeed={playbackSpeed}
-          manualFrame={manualFrame}
-          showCollision={showCollision}
-          showAttachment={showAttachment}
-          showGrid={showGrid}
-          onPath={setPathId}
-        />
-        <SpriteMoveTestZone
-          unitId={unitId}
-          state="run"
-          title="奔跑测试区"
-          actionText="奔跑"
           direction={direction}
           activePathId={pathId}
           walkPoint={walkPoint}
@@ -1560,10 +3886,16 @@ function GameApp() {
   const [skillEditorGuidePackage, setSkillEditorGuidePackage] = useState<SkillPackageData | null>(null);
   const [skillEditorDebugOptions, setSkillEditorDebugOptions] = useState<SkillEditorDebugOptions>(DEFAULT_SKILL_EDITOR_DEBUG_OPTIONS);
   const [skillEditorCameraSettings, setSkillEditorCameraSettings] = useState<SkillEditorCameraSettings>(() => loadSkillEditorCameraSettings());
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(() => skillEditorMode ? DEFAULT_BAKED_BATTLE_MAP_ID : DEFAULT_RUNTIME_MAP_ID);
+  const [battleMap, setBattleMap] = useState<BakedBattleMapData | null>(null);
+  const [mapDebugEnabled, setMapDebugEnabled] = useState(false);
+  const [authoredSpawnPlanActive, setAuthoredSpawnPlanActive] = useState(false);
+  const [authoredAggroSources, setAuthoredAggroSources] = useState<RuntimeEncounterAggroSource[]>([]);
+  const [spawnPlanWarnings, setSpawnPlanWarnings] = useState<string[]>([]);
   const [notice, setNotice] = useState("正在载入。");
   const [playing, setPlaying] = useState(() => skillEditorMode);
-  const [player, setPlayer] = useState({ x: DEFAULT_TILEMAP.spawnPoint.x, y: DEFAULT_TILEMAP.spawnPoint.y, hp: 100, maxHp: 100 });
-  const [enemies, setEnemies] = useState<Enemy[]>(() => skillEditorMode ? createSkillTestDummies(1, DEFAULT_TILEMAP.spawnPoint.x, DEFAULT_TILEMAP.spawnPoint.y) : []);
+  const [player, setPlayer] = useState({ x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2, hp: 100, maxHp: 100 });
+  const [enemies, setEnemies] = useState<Enemy[]>(() => skillEditorMode ? createSkillTestDummies(1, MAP_WIDTH / 2, MAP_HEIGHT / 2) : []);
   const [texts, setTexts] = useState<FloatingText[]>([]);
   const [bolts, setBolts] = useState<FireBolt[]>([]);
   const [areaNovas, setAreaNovas] = useState<AreaNova[]>([]);
@@ -1624,6 +3956,9 @@ function GameApp() {
   const spawnTimer = useRef(0);
   const playerVisual = useRef<UnitVisualRuntime>({ direction: "down", movementVector: { x: 0, y: 0 } });
   const enemyVisuals = useRef(new Map<number, EnemyVisualRuntime>());
+  const triggeredEncounterSourceIds = useRef<Set<string>>(new Set());
+  const playerStateRef = useRef(player);
+  const enemiesStateRef = useRef(enemies);
   const elapsedRef = useRef(0);
   const elapsedLastUiSync = useRef(0);
 
@@ -1640,6 +3975,60 @@ function GameApp() {
     if (!state) return;
     setInventorySlots((current) => reconcileInventorySlots(current, state, floatingGemRef.current?.gem.instance_id ?? null));
   }, [state, floatingGem?.gem.instance_id]);
+
+  useEffect(() => {
+    if (!selectedMapId) {
+      setBattleMap(null);
+      return;
+    }
+
+    if (selectedMapId === EDITOR_RUNTIME_MAP_ID) {
+      const map = createEditorRuntimeBattleMap(map001Document as MapEditorFileDocument);
+      setBattleMap(map);
+      setAuthoredSpawnPlanActive(false);
+      setSpawnPlanWarnings([]);
+      setPlayer((current) => ({ ...current, x: map.playerSpawn.x, y: map.playerSpawn.y }));
+      setEnemies([]);
+      setNotice(`${map.displayName} 已载入，请进入战斗。`);
+      return;
+    }
+
+    const asset = bakedMapAssetById(selectedMapId);
+    if (!asset) {
+      setBattleMap(null);
+      setNotice("地图资源配置不存在。");
+      return;
+    }
+
+    let cancelled = false;
+    setNotice("正在加载地图资源。");
+    loadBakedBattleMap(asset)
+      .then((map) => {
+        if (cancelled) return;
+        setBattleMap(map);
+        setAuthoredSpawnPlanActive(false);
+        setAuthoredAggroSources([]);
+        triggeredEncounterSourceIds.current = new Set();
+        setSpawnPlanWarnings([]);
+        setPlayer((current) => ({ ...current, x: map.playerSpawn.x, y: map.playerSpawn.y }));
+        if (skillEditorMode) {
+          nextEnemyId.current = SKILL_TEST_DUMMY_OFFSETS.length + 1;
+          setEnemies(createSkillTestDummies(1, map.playerSpawn.x, map.playerSpawn.y));
+        } else {
+          setEnemies([]);
+        }
+        setNotice(skillEditorMode ? `${map.displayName} 已载入，技能测试地图已就绪。` : `${map.displayName} 已载入，请进入战斗。`);
+      })
+      .catch((error: Error) => {
+        if (cancelled) return;
+        setBattleMap(null);
+        setPlaying(false);
+        setNotice(error.message || "地图资源加载失败。");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMapId, skillEditorMode]);
 
   useEffect(() => {
     const maxLife = state?.player_stats?.max_life?.value;
@@ -1703,6 +4092,14 @@ function GameApp() {
     };
   }, []);
 
+  useEffect(() => {
+    playerStateRef.current = player;
+  }, [player]);
+
+  useEffect(() => {
+    enemiesStateRef.current = enemies;
+  }, [enemies]);
+
   const activeSkills = state?.skill_preview ?? [];
 
   useEffect(() => {
@@ -1731,7 +4128,7 @@ function GameApp() {
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, activeSkills, player.x, player.y, state?.player_stats?.move_speed?.value]);
+  }, [playing, activeSkills, state?.player_stats?.move_speed?.value, battleMap, authoredAggroSources, authoredSpawnPlanActive, skillEditorMode]);
 
   function stepGame(dt: number) {
     elapsedRef.current += dt;
@@ -1741,38 +4138,40 @@ function GameApp() {
     }
     const playerSpeed = PLAYER_SPEED * (state?.player_stats?.move_speed?.value ?? 1);
     const playerMoveVector = playerInputVector(keys.current);
+    const currentPlayer = playerStateRef.current;
     syncPlayerVisual(playerMoveVector);
-    syncEnemyVisuals(enemies, player, elapsedRef.current * 1000);
-    setPlayer((current) => {
-      const dx = playerMoveVector.x;
-      const dy = playerMoveVector.y;
-      const length = Math.hypot(dx, dy) || 1;
-      return {
-        ...current,
-        x: clamp(current.x + (dx / length) * playerSpeed * dt, 40, MAP_WIDTH - 40),
-        y: clamp(current.y + (dy / length) * playerSpeed * dt, 40, MAP_HEIGHT - 40)
-      };
+    const dx = playerMoveVector.x;
+    const dy = playerMoveVector.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const mapWidth = battleMap?.meta.world_width ?? MAP_WIDTH;
+    const mapHeight = battleMap?.meta.world_height ?? MAP_HEIGHT;
+    const nextPlayerPosition = resolveWalkableMove(battleMap, currentPlayer, {
+      x: clamp(currentPlayer.x + (dx / length) * playerSpeed * dt, 40, mapWidth - 40),
+      y: clamp(currentPlayer.y + (dy / length) * playerSpeed * dt, 40, mapHeight - 40)
     });
+    const nextPlayer = {
+      ...currentPlayer,
+      x: nextPlayerPosition.x,
+      y: nextPlayerPosition.y
+    };
+    playerStateRef.current = nextPlayer;
+    setPlayer(nextPlayer);
 
+    let currentVisualEnemies = enemiesStateRef.current;
     if (!skillEditorMode) {
       spawnTimer.current -= dt;
       let spawnEnemy = false;
-      if (spawnTimer.current <= 0) {
+      if (!authoredSpawnPlanActive && spawnTimer.current <= 0) {
         spawnTimer.current = Math.max(0.45, 1.2 - elapsedRef.current / 80);
         spawnEnemy = true;
       }
 
-      setEnemies((current) => {
-        const movingEnemies = current.map((enemy) => {
-          const dx = player.x - enemy.x;
-          const dy = player.y - enemy.y;
-          const length = Math.hypot(dx, dy) || 1;
-          const speed = 58;
-          return { ...enemy, x: enemy.x + (dx / length) * speed * dt, y: enemy.y + (dy / length) * speed * dt };
-        });
-        return spawnEnemy ? [...movingEnemies, createEnemy(nextEnemyId.current++, player.x, player.y)] : movingEnemies;
-      });
+      const movingEnemies = updateRuntimeEnemies(enemiesStateRef.current, nextPlayer, battleMap, dt, elapsedRef.current, authoredSpawnPlanActive, authoredAggroSources, triggeredEncounterSourceIds.current);
+      currentVisualEnemies = spawnEnemy ? [...movingEnemies, createEnemy(nextEnemyId.current++, nextPlayer.x, nextPlayer.y, battleMap)] : movingEnemies;
+      enemiesStateRef.current = currentVisualEnemies;
+      setEnemies(currentVisualEnemies);
     }
+    syncEnemyVisuals(selectRenderableEnemies(currentVisualEnemies, nextPlayer), nextPlayer, elapsedRef.current * 1000);
 
     if (activeSkills.length > 0) {
       const activeIds = new Set(activeSkills.map((skill) => skill.active_gem_instance_id));
@@ -1784,7 +4183,11 @@ function GameApp() {
         attackTimers.current[timerId] = (attackTimers.current[timerId] ?? 0) - dt;
         if (attackTimers.current[timerId] <= 0) {
           attackTimers.current[timerId] = Math.max(0.16, skill.final_cooldown_ms / 1000);
-          setEnemies((current) => hitEnemies(current, skill));
+          setEnemies((current) => {
+            const next = hitEnemies(current, skill);
+            enemiesStateRef.current = next;
+            return next;
+          });
         }
       }
     }
@@ -1840,12 +4243,13 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       const worldMovementVector = previous ? { x: enemy.x - previous.lastX, y: enemy.y - previous.lastY } : { x: currentPlayer.x - enemy.x, y: currentPlayer.y - enemy.y };
       const attackActive = previous?.attackUntilMs !== undefined && nowMs < previous.attackUntilMs;
       const nextAttackReadyAtMs = previous?.nextAttackReadyAtMs ?? 0;
-      const chaseVector = projectMovementVectorForAnimation({ x: currentPlayer.x - enemy.x, y: currentPlayer.y - enemy.y });
+      const chaseVector = { x: currentPlayer.x - enemy.x, y: currentPlayer.y - enemy.y };
       const enemyScreen = projectBattleWorldToScreen(enemy.x, enemy.y);
       const playerScreen = projectBattleWorldToScreen(currentPlayer.x, currentPlayer.y);
       const projectedDistance = Math.hypot(enemyScreen.x - playerScreen.x, enemyScreen.y - playerScreen.y);
       const canStartAttack = !attackActive
         && nowMs >= nextAttackReadyAtMs
+        && (!enemy.authored || enemy.aggroLocked)
         && distance(enemy, currentPlayer) <= ENEMY_ATTACK_VISUAL_RANGE
         && projectedDistance <= ENEMY_ATTACK_VISUAL_SCREEN_RANGE;
       const movementVector = Math.hypot(worldMovementVector.x, worldMovementVector.y) > ENEMY_WALK_VISUAL_DEADZONE
@@ -1867,18 +4271,19 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
   function hitEnemies(current: Enemy[], skill: SkillPreview) {
     if (usesSkillEventPipeline(skill)) return hitEnemiesWithSkillEvents(current, skill);
     if (current.length === 0) return current;
+    const caster = playerStateRef.current;
     const range = 520 * skill.area_multiplier;
     const vfxScale = skillPreviewVfxScale(skill);
     const targets = [...current]
-      .sort((a, b) => distance(a, player) - distance(b, player))
-      .filter((enemy) => distance(enemy, player) <= range)
+      .sort((a, b) => distance(a, caster) - distance(b, caster))
+      .filter((enemy) => distance(enemy, caster) <= range)
       .slice(0, Math.max(1, skill.projectile_count));
     if (targets.length === 0) return current;
 
     const targetIds = new Set(targets.map((target) => target.id));
     const nextTexts: FloatingText[] = [];
     const nextBolts: FireBolt[] = targets.map((target) => {
-      const launch = createFireBoltProjectileLaunch(skill, player, target, 0);
+      const launch = createFireBoltProjectileLaunch(skill, caster, target, 0);
       return {
         id: nextBoltId.current++,
         x: launch.spawnWorldPosition.x,
@@ -1916,7 +4321,7 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         if (!targetIds.has(enemy.id)) return enemy;
         const hp = enemy.hp - skill.final_damage;
         nextTexts.push({ id: nextTextId.current++, x: enemy.x, y: enemy.y - 28, text: Math.round(skill.final_damage).toString(), ttl: 0.8, duration: 0.8 });
-        return { ...enemy, hp };
+        return { ...enemy, hp, lastDamagedAt: elapsedRef.current };
       })
       .filter((enemy) => enemy.hp > 0);
     const killed = current.length - survivors.length;
@@ -2028,8 +4433,12 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
 
   function createModuleChainSkillEvents(skill: SkillPreview, current: Enemy[]): SkillEvent[] {
     const modules = Array.isArray(skill.runtime_params?.modules) ? skill.runtime_params.modules as { type?: string; params?: Record<string, unknown>; trigger?: Record<string, unknown> }[] : [];
+    const orbitModule = modules.find((module) => module.type === "orbit_emitter");
     const projectileModule = modules.find((module) => module.type === "projectile");
     const zoneModule = modules.find((module) => module.type === "damage_zone");
+    if (orbitModule && zoneModule) {
+      return createOrbitModuleChainSkillEvents(skill, current, orbitModule, zoneModule);
+    }
     if (!projectileModule || !zoneModule) return [];
     const projectileParams = projectileModule.params ?? {};
     const zoneParams = zoneModule.params ?? {};
@@ -2132,6 +4541,129 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         ];
       })
     ];
+  }
+
+  function createOrbitModuleChainSkillEvents(
+    skill: SkillPreview,
+    current: Enemy[],
+    orbitModule: { params?: Record<string, unknown> },
+    zoneModule: { params?: Record<string, unknown>; trigger?: Record<string, unknown> }
+  ): SkillEvent[] {
+    const orbitParams = orbitModule.params ?? {};
+    const zoneParams = zoneModule.params ?? {};
+    const triggerParams = zoneModule.trigger ?? {};
+    const origin = { x: player.x, y: player.y };
+    const timestampMs = Math.round(elapsedRef.current * 1000);
+    const durationMs = Math.max(1, Math.round(Number(orbitParams.duration_ms ?? 3600)));
+    const tickIntervalMs = Math.max(1, Math.round(Number(orbitParams.tick_interval_ms ?? 300)));
+    const orbitRadius = Math.max(1, Number(orbitParams.orbit_radius ?? 180));
+    const orbitSpeedDegPerSec = Number(orbitParams.orbit_speed_deg_per_sec ?? 180);
+    const orbCount = Math.max(1, Math.round(Number(orbitParams.orb_count ?? 1)));
+    const startAngleDeg = Number(orbitParams.start_angle_deg ?? 0);
+    const tickMarkerId = String(orbitParams.tick_marker_id ?? "");
+    const triggerMarkerId = String(triggerParams.trigger_marker_id ?? zoneParams.trigger_marker_id ?? "");
+    if (!tickMarkerId || tickMarkerId !== triggerMarkerId) return [];
+
+    const triggerDelayMs = Math.max(0, Math.round(Number(triggerParams.trigger_delay_ms ?? zoneParams.trigger_delay_ms ?? 0)));
+    const hitAtMs = Math.max(0, Math.round(Number(zoneParams.hit_at_ms ?? 0)));
+    const radius = Math.max(1, Number(zoneParams.radius ?? skill.hit?.hit_radius ?? 72));
+    const maxTargets = Math.max(1, Math.round(Number(zoneParams.max_targets ?? current.length)));
+    const spawnVfxKey = String(orbitParams.spawn_vfx_key ?? skill.presentation_keys?.cast_vfx_key ?? skill.visual_effect);
+    const tickVfxKey = String(orbitParams.tick_vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
+    const zoneVfxKey = String(zoneParams.vfx_key ?? skill.presentation_keys?.vfx ?? skill.visual_effect);
+    const hitVfxKey = skill.presentation_keys?.hit_vfx_key ?? zoneVfxKey;
+    const sfxKey = skill.presentation_keys?.sfx ?? "";
+    const reasonKey = skill.presentation_keys?.screen_feedback ?? "";
+    const floatingKey = skill.presentation_keys?.floating_text ?? "";
+    const vfxScale = skillPreviewVfxScale(skill);
+    const skillId = skill.skill_package_id ?? skill.skill_template_id;
+    const orbitId = `${skill.active_gem_instance_id}.${timestampMs}.orbit`;
+    const base = {
+      timestamp_ms: timestampMs,
+      source_entity: "player",
+      target_entity: "",
+      direction: { x: 0, y: 0 },
+      damage_type: skill.damage_type,
+      skill_instance_id: skill.active_gem_instance_id,
+      sfx_key: sfxKey
+    };
+    const events: SkillEvent[] = [
+      { ...base, event_id: `${skill.active_gem_instance_id}.cast_start.${timestampMs}`, type: "cast_start", position: origin, delay_ms: 0, duration_ms: 0, amount: null, vfx_key: spawnVfxKey, reason_key: "", payload: { skill_id: skillId, skill_name: skill.name_text } },
+      { ...base, event_id: `${skill.active_gem_instance_id}.orbit_spawn.${timestampMs}`, type: "orbit_spawn", position: origin, delay_ms: 0, duration_ms: durationMs, amount: null, vfx_key: spawnVfxKey, reason_key: "", payload: { orbit_id: orbitId, skill_id: skillId, skill_name: skill.name_text, orbit_center: origin, orbit_radius: orbitRadius, duration_ms: durationMs, orb_count: orbCount, orbit_speed_deg_per_sec: orbitSpeedDegPerSec, spawn_vfx_key: spawnVfxKey, vfx_scale: vfxScale } }
+    ];
+
+    const tickCount = Math.floor(durationMs / tickIntervalMs);
+    for (let tickIndex = 1; tickIndex <= tickCount; tickIndex += 1) {
+      const tickTimeMs = tickIndex * tickIntervalMs;
+      for (let orbIndex = 0; orbIndex < orbCount; orbIndex += 1) {
+        const angleDeg = startAngleDeg + (360 / orbCount) * orbIndex + orbitSpeedDegPerSec * (tickTimeMs / 1000);
+        const angleRad = (angleDeg * Math.PI) / 180;
+        const orbPosition = {
+          x: origin.x + Math.cos(angleRad) * orbitRadius,
+          y: origin.y + Math.sin(angleRad) * orbitRadius
+        };
+        const tickEventId = `${skill.active_gem_instance_id}.orbit_tick.${tickIndex}.${orbIndex}.${timestampMs}`;
+        const zoneId = `${skill.active_gem_instance_id}.${timestampMs}.orbit_zone.${tickIndex}.${orbIndex}`;
+        const tickPayload = {
+          orbit_id: orbitId,
+          skill_id: skillId,
+          skill_name: skill.name_text,
+          orbit_center: origin,
+          orbit_center_policy: String(orbitParams.orbit_center_policy ?? "caster"),
+          tick_index: tickIndex,
+          tick_time_ms: tickTimeMs,
+          orb_index: orbIndex,
+          orb_count: orbCount,
+          orb_position: orbPosition,
+          tick_marker_id: tickMarkerId,
+          marker_id: tickMarkerId,
+          tick_vfx_key: tickVfxKey,
+          orbit_radius: orbitRadius,
+          orbit_speed_deg_per_sec: orbitSpeedDegPerSec,
+          start_angle_deg: startAngleDeg,
+          vfx_scale: vfxScale
+        };
+        const zonePayload = {
+          zone_id: zoneId,
+          source_tick_event_id: tickEventId,
+          orbit_id: orbitId,
+          skill_id: skillId,
+          skill_name: skill.name_text,
+          shape: "circle",
+          origin: orbPosition,
+          origin_world_position: orbPosition,
+          origin_policy: "trigger_position",
+          trigger_marker_id: triggerMarkerId,
+          orbit_center: origin,
+          orbit_center_policy: String(orbitParams.orbit_center_policy ?? "caster"),
+          tick_index: tickIndex,
+          tick_time_ms: tickTimeMs,
+          orb_index: orbIndex,
+          orb_count: orbCount,
+          orb_position: orbPosition,
+          orbit_radius: orbitRadius,
+          orbit_speed_deg_per_sec: orbitSpeedDegPerSec,
+          start_angle_deg: startAngleDeg,
+          delay_ms: triggerDelayMs,
+          radius,
+          ring_width: Number(zoneParams.ring_width ?? 28),
+          hit_at_ms: hitAtMs,
+          max_targets: maxTargets,
+          damage_type: skill.damage_type,
+          damage_amount: skill.final_damage,
+          vfx_key: zoneVfxKey,
+          zone_vfx_key: zoneVfxKey,
+          hit_vfx_key: hitVfxKey,
+          reason_key: reasonKey,
+          floating_text_key: floatingKey,
+          vfx_scale: vfxScale,
+          hit_target_count: 0
+        };
+        events.push({ ...base, event_id: tickEventId, type: "orbit_tick", timestamp_ms: timestampMs + tickTimeMs, position: orbPosition, delay_ms: tickTimeMs, duration_ms: 0, amount: null, vfx_key: tickVfxKey, reason_key: "", payload: tickPayload });
+        events.push({ ...base, event_id: `${skill.active_gem_instance_id}.damage_zone.${tickIndex}.${orbIndex}.${timestampMs}`, type: "damage_zone", timestamp_ms: timestampMs + tickTimeMs + triggerDelayMs, position: orbPosition, delay_ms: tickTimeMs + triggerDelayMs, duration_ms: Math.max(180, hitAtMs), amount: null, vfx_key: zoneVfxKey, reason_key: "", payload: zonePayload });
+      }
+    }
+    return events;
   }
 
   function createDamageZoneSkillEvents(skill: SkillPreview, targets: Enemy[]): SkillEvent[] {
@@ -2806,6 +5338,33 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
     consumeSkillEventBatch([event]);
   }
 
+  function liveOrbitCenter(payload: Record<string, unknown>, fallback: { x: number; y: number }) {
+    if (payload.orbit_center_policy === "caster") {
+      return { x: player.x, y: player.y };
+    }
+    const center = (payload.orbit_center ?? fallback) as { x?: number; y?: number };
+    return {
+      x: Number(center.x ?? fallback.x),
+      y: Number(center.y ?? fallback.y)
+    };
+  }
+
+  function liveOrbitPosition(payload: Record<string, unknown>, fallback: { x: number; y: number }) {
+    const center = liveOrbitCenter(payload, fallback);
+    const tickTimeMs = Number(payload.tick_time_ms ?? 0);
+    const orbCount = Math.max(1, Math.round(Number(payload.orb_count ?? 1)));
+    const orbIndex = Math.max(0, Math.round(Number(payload.orb_index ?? 0)));
+    const radius = Math.max(1, Number(payload.orbit_radius ?? 1));
+    const speed = Number(payload.orbit_speed_deg_per_sec ?? 0);
+    const startAngle = Number(payload.start_angle_deg ?? 0);
+    const angleDeg = startAngle + (360 / orbCount) * orbIndex + speed * (tickTimeMs / 1000);
+    const angleRad = (angleDeg * Math.PI) / 180;
+    return {
+      x: center.x + Math.cos(angleRad) * radius,
+      y: center.y + Math.sin(angleRad) * radius
+    };
+  }
+
   function consumeSkillEventBatch(events: SkillEvent[]) {
     if (events.length === 0) return;
     const nextChainSegments: ChainSegmentVfx[] = [];
@@ -2843,18 +5402,32 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       }
       if (event.type === "damage_zone_prime" || event.type === "damage_zone") {
         const payload = event.payload ?? {};
-        const origin = (payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number };
+        const followedOrbitPosition = typeof payload.orbit_id === "string" ? liveOrbitPosition(payload, event.position) : null;
+        const origin = followedOrbitPosition ?? ((payload.origin_world_position ?? payload.origin ?? event.position) as { x?: number; y?: number });
         const direction = (payload.direction_world ?? payload.facing_direction ?? event.direction) as { x?: number; y?: number };
         const shape = String(payload.shape ?? "circle") === "rectangle" ? "rectangle" : "circle";
         const duration = Math.max(0.18, event.duration_ms / 1000);
         const zoneId = typeof payload.zone_id === "string" ? payload.zone_id : event.event_id;
+        const radius = Math.max(1, Number(payload.radius ?? 120));
+        const maxTargets = Math.max(1, Math.round(Number(payload.max_targets ?? (enemies.length || 1))));
+        const orbitHitTargets = followedOrbitPosition && event.type === "damage_zone"
+          ? enemies
+            .filter((enemy) => enemy.hp > 0)
+            .map((enemy) => ({ enemy, distance: distance({ x: enemy.x, y: enemy.y }, followedOrbitPosition) }))
+            .filter((item) => item.distance <= radius)
+            .sort((left, right) => left.distance - right.distance)
+            .slice(0, maxTargets)
+          : [];
+        const renderPayload = followedOrbitPosition
+          ? { ...payload, origin: followedOrbitPosition, origin_world_position: followedOrbitPosition, orb_position: followedOrbitPosition, hit_target_count: orbitHitTargets.length }
+          : payload;
         if (event.type === "damage_zone") replaceDamageZoneIds.add(zoneId);
         nextDamageZones.push({
           id: nextDamageZoneId.current++,
           x: Number(origin.x ?? event.position.x),
           y: Number(origin.y ?? event.position.y),
           shape,
-          radius: Math.max(1, Number(payload.radius ?? 120)),
+          radius,
           length: Math.max(1, Number(payload.length ?? 160)),
           width: Math.max(1, Number(payload.width ?? 80)),
           directionX: Number(direction.x ?? event.direction.x),
@@ -2866,6 +5439,81 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           zoneId,
           skillId: typeof payload.skill_id === "string" ? payload.skill_id : event.skill_instance_id,
           warning: event.type === "damage_zone_prime",
+          vfxScale: normalizedVfxScale(payload.vfx_scale)
+        });
+        if (followedOrbitPosition && orbitHitTargets.length > 0) {
+          const hitVfxKey = typeof payload.hit_vfx_key === "string" ? payload.hit_vfx_key : event.vfx_key;
+          const reasonKey = typeof payload.reason_key === "string" ? payload.reason_key : event.reason_key;
+          const floatingKey = typeof payload.floating_text_key === "string" ? payload.floating_text_key : "";
+          const damageAmount = Number(payload.damage_amount ?? 0);
+          nextHitVfxs.push({
+            id: nextHitVfxId.current++,
+            x: followedOrbitPosition.x,
+            y: followedOrbitPosition.y,
+            projectileId: typeof payload.orbit_id === "string" ? payload.orbit_id : undefined,
+            projectileIndex: Number(payload.orb_index ?? 0) + 1,
+            projectileCount: Number(payload.orb_count ?? 1),
+            impactKind: "orbit_damage_zone",
+            ttl: FIRE_BOLT_IMPACT_DURATION_MS / 1000,
+            duration: FIRE_BOLT_IMPACT_DURATION_MS / 1000,
+            damageType: event.damage_type,
+            vfxKey: hitVfxKey,
+            skillTemplateId: event.skill_instance_id,
+            vfxScale: normalizedVfxScale(payload.vfx_scale)
+          });
+          for (const [targetIndex, item] of orbitHitTargets.entries()) {
+            const targetPosition = { x: item.enemy.x, y: item.enemy.y };
+            const hitPayload = {
+              ...renderPayload,
+              target_world_position: targetPosition,
+              hit_world_position: targetPosition,
+              target_distance: item.distance
+            };
+            damageEvents.push({
+              ...event,
+              event_id: `${event.event_id}.${item.enemy.id}.damage.${targetIndex}`,
+              type: "damage",
+              target_entity: String(item.enemy.id),
+              position: targetPosition,
+              direction: guideDirection(followedOrbitPosition, targetPosition),
+              amount: damageAmount,
+              vfx_key: hitVfxKey,
+              reason_key: reasonKey,
+              payload: hitPayload
+            });
+            nextTexts.push({
+              id: nextTextId.current++,
+              x: targetPosition.x,
+              y: targetPosition.y - 28,
+              text: `${Math.round(damageAmount)}点${damageTypeText(event.damage_type)}伤害`,
+              ttl: 0.8,
+              duration: 0.8
+            });
+          }
+        }
+        continue;
+      }
+      if (event.type === "orbit_spawn" || event.type === "orbit_tick") {
+        const payload = event.payload ?? {};
+        const rawPosition = event.type === "orbit_spawn"
+          ? liveOrbitCenter(payload, event.position)
+          : liveOrbitPosition(payload, event.position);
+        const visualDuration = event.type === "orbit_spawn"
+          ? Math.max(0.3, Math.min(1.0, event.duration_ms / 1000))
+          : 0.18;
+        nextHitVfxs.push({
+          id: nextHitVfxId.current++,
+          x: Number(rawPosition.x ?? event.position.x),
+          y: Number(rawPosition.y ?? event.position.y),
+          projectileId: typeof payload.orbit_id === "string" ? payload.orbit_id : event.event_id,
+          projectileIndex: Number(payload.orb_index ?? 0) + 1,
+          projectileCount: Number(payload.orb_count ?? 1),
+          impactKind: event.type,
+          ttl: visualDuration,
+          duration: visualDuration,
+          damageType: event.damage_type,
+          vfxKey: event.vfx_key,
+          skillTemplateId: event.skill_instance_id,
           vfxScale: normalizedVfxScale(payload.vfx_scale)
         });
         continue;
@@ -3054,9 +5702,10 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
           if (damage <= 0) return enemy;
           const hp = enemy.hp - damage;
           if (hp <= 0) killed += 1;
-          return { ...enemy, hp };
+          return { ...enemy, hp, lastDamagedAt: elapsedRef.current };
         })
         .filter((enemy) => enemy.hp > 0);
+      enemiesStateRef.current = next;
       return next;
     });
     if (killed > 0) {
@@ -3244,9 +5893,10 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
             if (enemy.id !== targetId) return enemy;
             const hp = enemy.hp - Number(event.amount ?? 0);
             if (hp <= 0) killed += 1;
-            return { ...enemy, hp };
+            return { ...enemy, hp, lastDamagedAt: elapsedRef.current };
           })
           .filter((enemy) => enemy.hp > 0);
+        enemiesStateRef.current = next;
         return next;
       });
       if (killed > 0) {
@@ -3421,18 +6071,54 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
   }
 
   function startGame() {
+    if (!selectedMapId) {
+      setNotice("请先选择地图。");
+      return;
+    }
+    if (!battleMap) {
+      setNotice("地图资源仍在加载，请稍候。");
+      return;
+    }
     setPlaying(true);
     setBagOpen(false);
-    setEnemies(skillEditorMode
-      ? createSkillTestDummies(1, player.x, player.y)
-      : [
-        createEnemy(nextEnemyId.current++, player.x, player.y),
-        createEnemy(nextEnemyId.current++, player.x, player.y),
-        createEnemy(nextEnemyId.current++, player.x, player.y)
-      ]);
-    if (skillEditorMode) nextEnemyId.current = SKILL_TEST_DUMMY_OFFSETS.length + 1;
-    setCombatLogs(["战斗开始。WASD 移动，技能会自动释放。"]);
-    setNotice("战斗中。按 C 管理背包。");
+    triggeredEncounterSourceIds.current = new Set();
+    let startedAuthoredSpawnPlan = false;
+    if (skillEditorMode) {
+      setAuthoredSpawnPlanActive(false);
+      setAuthoredAggroSources([]);
+      setSpawnPlanWarnings([]);
+      const nextEnemies = createSkillTestDummies(1, player.x, player.y);
+      enemiesStateRef.current = nextEnemies;
+      setEnemies(nextEnemies);
+      nextEnemyId.current = SKILL_TEST_DUMMY_OFFSETS.length + 1;
+    } else {
+      const authoredSpawnPlan = createAuthoredSpawnPlanEnemies(loadRuntimeAuthoredSpawnPlanData(battleMap), battleMap, nextEnemyId.current);
+      if (authoredSpawnPlan.enemies.length > 0) {
+        nextEnemyId.current = authoredSpawnPlan.nextId;
+        setAuthoredSpawnPlanActive(true);
+        setAuthoredAggroSources(authoredSpawnPlan.aggroSources);
+        startedAuthoredSpawnPlan = true;
+        setSpawnPlanWarnings(authoredSpawnPlan.warnings);
+        enemiesStateRef.current = authoredSpawnPlan.enemies;
+        setEnemies(authoredSpawnPlan.enemies);
+      } else {
+        setAuthoredSpawnPlanActive(false);
+        setAuthoredAggroSources([]);
+        setSpawnPlanWarnings([]);
+        const nextEnemies = [
+          createEnemy(nextEnemyId.current++, player.x, player.y, battleMap),
+          createEnemy(nextEnemyId.current++, player.x, player.y, battleMap),
+          createEnemy(nextEnemyId.current++, player.x, player.y, battleMap, "elite")
+        ];
+        enemiesStateRef.current = nextEnemies;
+        setEnemies(nextEnemies);
+      }
+    }
+    setCombatLogs([`${battleMap.displayName} 战斗开始。WASD 移动，技能会自动释放。`]);
+    setNotice(startedAuthoredSpawnPlan
+      ? `${battleMap.displayName} 预设遭遇战斗中。按 C 管理背包。`
+      : `${battleMap.displayName} 战斗中。按 C 管理背包。`
+    );
     if (!skillEditorMode) void runServerCombat();
   }
 
@@ -3492,14 +6178,17 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
   const activeTargetLines = useActiveTargetLines(persistentSupportLines, fullGemById, hoveredGemId, floatingGem);
   const passiveVisualEffects = useMountedPassiveVisualEffects(state, fullGemById);
   const bagSlots = inventorySlots.map((instanceId) => (instanceId ? fullGemById.get(instanceId) ?? null : null));
-  const proceduralSceneProps = useMemo(() => createProceduralSceneProps(DEFAULT_TILEMAP), []);
 
   if (!state) return <main className="game-screen loading">{notice}</main>;
   const moveSpeedText = state.player_stats?.move_speed?.value ? `${Math.round(state.player_stats.move_speed.value * 100)}%` : "100%";
-  const battleCamera = createBattleCamera(player.x, player.y, skillEditorMode ? skillEditorCameraSettings.zoom : BATTLE_CAMERA_ZOOM);
-  const sortedRenderItems = createBattleRenderItems(player, enemies, proceduralSceneProps, bolts, hitVfxs);
+  const runtimeUsesEditorMap = battleMap ? isEditorRuntimeBattleMap(battleMap) : false;
+  const battleCamera = createBattleCamera(player.x, player.y, skillEditorMode ? skillEditorCameraSettings.zoom : runtimeUsesEditorMap ? 1 : BATTLE_CAMERA_ZOOM);
+  const visibleEnemies = selectRenderableEnemies(enemies, player);
+  const sortedRenderItems = createBattleRenderItems(player, visibleEnemies, bolts, hitVfxs, runtimeUsesEditorMap ? MAP_EDITOR_PLAYER_RENDER_SCALE : UNIT_RENDER_SCALE);
   const animationNowMs = elapsed * 1000;
-  const battleAnimationContexts = createBattleAnimationContexts(playerVisual.current, enemyVisuals.current, enemies, player, animationNowMs, state.player_stats?.move_speed?.value ?? 1);
+  const battleAnimationContexts = createBattleAnimationContexts(playerVisual.current, enemyVisuals.current, visibleEnemies, player, animationNowMs, state.player_stats?.move_speed?.value ?? 1);
+  const terrainWidth = battleMap?.meta.world_width ?? MAP_VISUAL_WIDTH;
+  const terrainHeight = battleMap?.meta.world_height ?? MAP_VISUAL_HEIGHT;
 
   return (
     <main className="game-screen">
@@ -3507,13 +6196,14 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         <div
           className="terrain"
           style={{
-            width: MAP_VISUAL_WIDTH,
-            height: MAP_VISUAL_HEIGHT,
+            width: terrainWidth,
+            height: terrainHeight,
             transform: battleTerrainTransform(battleCamera)
           }}
         >
           <div className="terrain-ground">
-            <MapTiles tilemap={DEFAULT_TILEMAP} />
+            {battleMap && <BakedMapBackground map={battleMap} />}
+            {battleMap && <MapDebugOverlay map={battleMap} enabled={mapDebugEnabled} />}
           </div>
           <div className="battle-ground-decal-layer">
             <PassiveAuraLayer effects={passiveVisualEffects} x={player.x} y={player.y} />
@@ -3556,6 +6246,16 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
         )}
       </header>
 
+      <label className="map-debug-toggle">
+        <input type="checkbox" checked={mapDebugEnabled} onChange={(event) => setMapDebugEnabled(event.target.checked)} />
+        <span>地图调试：{mapDebugEnabled ? "开" : "关"}</span>
+      </label>
+      {spawnPlanWarnings.length > 0 ? (
+        <aside className="spawnPlan-warning-panel" aria-label="遭遇点警告">
+          {spawnPlanWarnings.slice(0, 3).map((warning) => <span key={warning}>{warning}</span>)}
+        </aside>
+      ) : null}
+
       <div className="help-text">
         <p>C：打开/关闭背包</p>
         <p>WASD：移动</p>
@@ -3594,7 +6294,12 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       )}
 
       {!playing && !skillEditorMode && (
-        <button className="start-button" onClick={startGame}>开始游戏</button>
+        <MapSelectionPanel
+          selectedMapId={selectedMapId}
+          battleMap={battleMap}
+          onSelect={setSelectedMapId}
+          onStart={startGame}
+        />
       )}
 
       <section className="bottom-hud" aria-label="战斗状态">
@@ -3718,6 +6423,138 @@ function syncPlayerVisual(moveVector: { x: number; y: number }) {
       )}
     </main>
   );
+}
+
+function MapSelectionPanel({
+  selectedMapId,
+  battleMap,
+  onSelect,
+  onStart
+}: {
+  selectedMapId: string | null;
+  battleMap: BakedBattleMapData | null;
+  onSelect: (mapId: string) => void;
+  onStart: () => void;
+}) {
+  const mapOptions = runtimeBattleMapOptions();
+  return (
+    <section className="map-selection-panel" aria-label="地图选择">
+      <h2>选择战斗地图</h2>
+      <div className="map-selection-list">
+        {mapOptions.map((map) => {
+          const selected = selectedMapId === map.id;
+          return (
+            <button
+              key={map.id}
+              type="button"
+              className={selected ? "map-selection-card selected" : "map-selection-card"}
+              onClick={() => onSelect(map.id)}
+            >
+              <strong>{map.displayName}</strong>
+              <span>生态：{map.biome}</span>
+              <span>尺寸：{map.worldWidth} x {map.worldHeight}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button className="start-button" type="button" disabled={!battleMap} onClick={onStart}>
+        {battleMap ? "进入战斗" : selectedMapId ? "地图加载中" : "请选择地图"}
+      </button>
+    </section>
+  );
+}
+
+function BakedMapBackground({ map }: { map: BakedBattleMapData }) {
+  if (isEditorRuntimeBattleMap(map)) return <EditorRuntimeMapBackground map={map} />;
+  return (
+    <img
+      className="baked-map-background"
+      src={map.backgroundUrl}
+      alt={`${map.displayName}底图`}
+      draggable={false}
+      style={{ width: map.meta.world_width, height: map.meta.world_height }}
+    />
+  );
+}
+
+function EditorRuntimeMapBackground({ map }: { map: EditorRuntimeBattleMapData }) {
+  const cells = useMemo(() => {
+    const result: ReactNode[] = [];
+    const cellSize = map.meta.grid_size;
+    for (let y = 0; y < map.editorTiles.length; y += 1) {
+      const row = map.editorTiles[y];
+      for (let x = 0; x < row.length; x += 1) {
+        const tile = row[x];
+        if (tile === "empty") continue;
+        result.push(
+          <span
+            key={`${x}:${y}`}
+            className={`editor-runtime-map-tile map-editor-tile-${tile} ${mapEditorTileConnectionClass(map.editorTiles, x, y, tile)}`}
+            style={{
+              left: x * cellSize,
+              top: y * cellSize,
+              width: cellSize,
+              height: cellSize
+            }}
+          />
+        );
+      }
+    }
+    return result;
+  }, [map]);
+  return (
+    <div
+      className="editor-runtime-map-background"
+      aria-hidden="true"
+      style={{ width: map.meta.world_width, height: map.meta.world_height }}
+    >
+      {cells}
+    </div>
+  );
+}
+
+function MapDebugOverlay({ map, enabled }: { map: BakedBattleMapData; enabled: boolean }) {
+  if (!enabled) return null;
+  const cells: ReactNode[] = [];
+  for (let gridY = 0; gridY < map.gridHeight; gridY += 1) {
+    for (let gridX = 0; gridX < map.gridWidth; gridX += 1) {
+      if (map.walkableGrid[gridY]?.[gridX]) {
+        cells.push(<span key={`walk-${gridX}-${gridY}`} className="map-debug-cell map-debug-walkable" style={mapDebugCellStyle(map, gridX, gridY)} />);
+      }
+      if (map.blockerGrid[gridY]?.[gridX]) {
+        cells.push(<span key={`block-${gridX}-${gridY}`} className="map-debug-cell map-debug-blocker" style={mapDebugCellStyle(map, gridX, gridY)} />);
+      }
+    }
+  }
+
+  return (
+    <div className="map-debug-overlay" aria-label="地图调试覆盖层">
+      {cells}
+      <MapDebugMarker point={map.playerSpawn} className="map-debug-marker-player" label="玩家出生点" />
+      {map.enemySpawnPoints.map((point, index) => <MapDebugMarker key={`enemy-${index}`} point={point} className="map-debug-marker-enemy" label="普通怪刷新区" />)}
+      {map.eliteSpawnPoints.map((point, index) => <MapDebugMarker key={`elite-${index}`} point={point} className="map-debug-marker-elite" label="精英怪刷新区" />)}
+      {map.bossPoints.map((point, index) => <MapDebugMarker key={`boss-${index}`} point={point} className="map-debug-marker-boss" label="Boss 区域" />)}
+      {map.exitPoints.map((point, index) => <MapDebugMarker key={`exit-${index}`} point={point} className="map-debug-marker-exit" label="出口" />)}
+      {map.interactionPoints.map((point, index) => <MapDebugMarker key={`interaction-${index}`} point={point} className="map-debug-marker-interaction" label="交互点" />)}
+    </div>
+  );
+}
+
+function MapDebugMarker({ point, className, label }: { point: MapPoint; className: string; label: string }) {
+  return (
+    <span className={`map-debug-marker ${className}`} style={{ left: point.x, top: point.y }}>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function mapDebugCellStyle(map: BakedBattleMapData, gridX: number, gridY: number): CSSProperties {
+  return {
+    left: gridX * map.meta.grid_size,
+    top: gridY * map.meta.grid_size,
+    width: map.meta.grid_size,
+    height: map.meta.grid_size
+  };
 }
 
 function SkillEditorDebugToggles({
@@ -4413,7 +7250,7 @@ function SkillEditorPanel({
     if (!draft) return ["当前技能包对象不存在，无法保存。"];
     const errors: string[] = [];
     const params = draft.behavior.params ?? {};
-    const allowedTemplates = new Set(["projectile", "module_chain", "chain", "player_nova", "melee_arc", "damage_zone", "line_pierce", "orbit", "delayed_area"]);
+    const allowedTemplates = new Set(["projectile", "module_chain", "chain", "player_nova", "melee_arc", "damage_zone", "orbit_emitter", "line_pierce", "orbit", "delayed_area"]);
     const projectileAllowedParams = new Set([
       "projectile_count",
       "burst_interval_ms",
@@ -4488,6 +7325,18 @@ function SkillEditorPanel({
       "max_targets",
       "segment_vfx_key"
     ]);
+    const orbitEmitterAllowedParams = new Set([
+      "orbit_center_policy",
+      "duration_ms",
+      "tick_interval_ms",
+      "orbit_radius",
+      "orbit_speed_deg_per_sec",
+      "orb_count",
+      "start_angle_deg",
+      "tick_marker_id",
+      "spawn_vfx_key",
+      "tick_vfx_key"
+    ]);
     const allowedParams = draft.behavior.template === "player_nova"
       ? playerNovaAllowedParams
       : draft.behavior.template === "melee_arc"
@@ -4496,12 +7345,14 @@ function SkillEditorPanel({
             ? damageZoneAllowedParams
             : draft.behavior.template === "chain"
               ? chainAllowedParams
-              : projectileAllowedParams;
+              : draft.behavior.template === "orbit_emitter"
+                ? orbitEmitterAllowedParams
+                : projectileAllowedParams;
 
     if (draft.id !== selectedEntry.id) errors.push("技能 ID 必须与当前选择的技能一致。");
     if (!allowedTemplates.has(draft.behavior.template)) errors.push("行为模板不在允许范围内。");
     if (draft.presentation.vfx_scale !== undefined) requireNumberRange(draft.presentation.vfx_scale, "特效放大倍数", 0.1, 10, errors);
-    if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova" || draft.behavior.template === "melee_arc" || draft.behavior.template === "damage_zone" || draft.behavior.template === "chain") {
+    if (isProjectileSkillTemplate(draft.behavior.template) || draft.behavior.template === "player_nova" || draft.behavior.template === "melee_arc" || draft.behavior.template === "damage_zone" || draft.behavior.template === "chain" || draft.behavior.template === "orbit_emitter") {
       for (const key of Object.keys(params)) {
         if (!allowedParams.has(key)) errors.push(`行为参数 ${key} 不属于当前行为模板。`);
       }
@@ -4511,7 +7362,13 @@ function SkillEditorPanel({
       for (const module of draft.modules) {
         if (!module.id || !module.type) errors.push("模块必须包含 id 和 type。");
         const moduleParams = module.params ?? {};
-        const moduleAllowedParams = module.type === "damage_zone" ? damageZoneAllowedParams : module.type === "projectile" ? projectileAllowedParams : allowedParams;
+        const moduleAllowedParams = module.type === "damage_zone"
+          ? damageZoneAllowedParams
+          : module.type === "projectile"
+            ? projectileAllowedParams
+            : module.type === "orbit_emitter"
+              ? orbitEmitterAllowedParams
+              : allowedParams;
         for (const key of Object.keys(moduleParams)) {
           if (!moduleAllowedParams.has(key)) errors.push(`模块参数 ${module.id}.${key} 不属于 ${module.type}。`);
         }
@@ -4519,12 +7376,16 @@ function SkillEditorPanel({
           const marker = String(moduleParams.impact_marker_id ?? "");
           if (!marker) errors.push("投射物模块必须声明落地标识。");
           markers.add(marker);
+        } else if (module.type === "orbit_emitter") {
+          const marker = String(moduleParams.tick_marker_id ?? "");
+          if (!marker) errors.push("环绕模块必须声明 tick 标识。");
+          markers.add(marker);
         }
       }
       for (const module of draft.modules) {
         const trigger = module.trigger;
         if (trigger?.trigger_marker_id && !markers.has(String(trigger.trigger_marker_id))) {
-          errors.push("伤害区触发标识必须来自已有投射物落地标识。");
+          errors.push("伤害区触发标识必须来自已有模块标识。");
         }
       }
     }
@@ -4595,6 +7456,18 @@ function SkillEditorPanel({
       if (typeof params.segment_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.segment_vfx_key)) {
         errors.push("连锁段特效键必须是配置键。");
       }
+    } else if (draft.behavior.template === "orbit_emitter") {
+      if (params.orbit_center_policy !== "caster") errors.push("环绕中心第一版只支持 caster。");
+      requireIntegerAtLeast(params.duration_ms, "持续毫秒", 1, errors);
+      requireIntegerAtLeast(params.tick_interval_ms, "tick 间隔毫秒", 1, errors);
+      if (Number(params.tick_interval_ms) > Number(params.duration_ms)) errors.push("tick 间隔毫秒不能大于持续毫秒。");
+      requireNumberAtLeast(params.orbit_radius, "轨道半径", 1, errors);
+      requireNumberAtLeast(params.orbit_speed_deg_per_sec, "每秒角速度", -Number.MAX_SAFE_INTEGER, errors);
+      requireIntegerAtLeast(params.orb_count, "熔岩球数量", 1, errors);
+      requireNumberRange(params.start_angle_deg, "起始角度", -360, 360, errors);
+      if (typeof params.tick_marker_id !== "string" || !/^[a-z][a-z0-9_]*$/.test(params.tick_marker_id)) errors.push("tick 标识必须是配置标识。");
+      if (typeof params.spawn_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.spawn_vfx_key)) errors.push("生成特效键必须是配置键。");
+      if (typeof params.tick_vfx_key !== "string" || !/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(params.tick_vfx_key)) errors.push("tick 特效键必须是配置键。");
     } else {
       requirePositiveInteger(params.projectile_count, "投射物数量", errors);
       requireNumberAtLeast(params.projectile_speed, "投射物速度", 1, errors);
@@ -5716,10 +8589,8 @@ function battleWorldToViewport(worldPosition: { x: number; y: number }, camera: 
 function viewportToBattleWorld(clientX: number, clientY: number, camera: Camera2D) {
   const terrainScreenX = (clientX - battleAnchorX()) / camera.zoom + camera.screenX;
   const terrainScreenY = (clientY - battleAnchorY()) / camera.zoom + camera.screenY;
-  return unprojectScreenToWorld(
-    terrainScreenX - BATTLE_PROJECTION_BOUNDS.offsetX,
-    terrainScreenY - BATTLE_PROJECTION_BOUNDS.offsetY
-  );
+  void unprojectScreenToWorld;
+  return { x: terrainScreenX, y: terrainScreenY };
 }
 
 function SkillEditorEventList({
@@ -5800,10 +8671,13 @@ function ProjectileParameterPanel({
   updateDraft: (mutator: (next: SkillPackageData) => void) => void;
 }) {
   const params = draft.behavior.params;
+  const orbitModuleIndex = draft.modules?.findIndex((module) => module.type === "orbit_emitter") ?? -1;
   const projectileModuleIndex = draft.modules?.findIndex((module) => module.type === "projectile") ?? -1;
   const damageZoneModuleIndex = draft.modules?.findIndex((module) => module.type === "damage_zone") ?? -1;
+  const orbitModule = orbitModuleIndex >= 0 ? draft.modules?.[orbitModuleIndex] : null;
   const projectileModule = projectileModuleIndex >= 0 ? draft.modules?.[projectileModuleIndex] : null;
   const damageZoneModule = damageZoneModuleIndex >= 0 ? draft.modules?.[damageZoneModuleIndex] : null;
+  const orbitModuleParams = orbitModule?.params ?? {};
   const projectileModuleParams = projectileModule?.params ?? {};
   const damageZoneModuleParams = damageZoneModule?.params ?? {};
   const damageZoneTrigger = damageZoneModule?.trigger ?? {};
@@ -5844,6 +8718,65 @@ function ProjectileParameterPanel({
       }
     });
   };
+  if (orbitModule && damageZoneModule && orbitModuleIndex >= 0 && damageZoneModuleIndex >= 0) {
+    const tickMarkerId = String(orbitModuleParams.tick_marker_id ?? "");
+    const triggerMarkerId = String(damageZoneTrigger.trigger_marker_id ?? "");
+    const durationMs = numberValue(orbitModuleParams.duration_ms, 1);
+    const tickIntervalMs = numberValue(orbitModuleParams.tick_interval_ms, 1);
+    const estimatedTickCount = Math.max(0, Math.floor(durationMs / Math.max(1, tickIntervalMs)) * numberValue(orbitModuleParams.orb_count, 1));
+    const linkStatus = tickMarkerId && tickMarkerId === triggerMarkerId ? "已连接" : "未连接";
+    const markerOptions = tickMarkerId ? [{ value: tickMarkerId, text: tickMarkerId }] : [];
+    return (
+      <div className="skill-editor-projectile-panel">
+        <EditorSection title="技能模块链">
+          <div className="skill-editor-form-grid">
+            <ReadOnlyInput label="技能编号" value={draft.id} />
+            <ReadOnlyInput label="行为模板" value="module_chain" />
+            <ReadOnlyInput label="模块 1" value={`${orbitModule.id} / orbit_emitter`} />
+            <ReadOnlyInput label="模块 2" value={`${damageZoneModule.id} / damage_zone`} />
+            <ReadOnlyInput label="链接" value={`${tickMarkerId} → ${triggerMarkerId}`} />
+            <ReadOnlyInput label="连接状态" value={linkStatus} />
+          </div>
+        </EditorSection>
+        <EditorSection title="环绕模块">
+          <div className="skill-editor-form-grid">
+            <SelectInput label="环绕中心" value={String(orbitModuleParams.orbit_center_policy ?? "caster")} options={[{ value: "caster", text: "caster" }]} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "orbit_center_policy", value)} />
+            <NumberInput label="持续毫秒" value={durationMs} min={1} integer disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "duration_ms", value)} />
+            <NumberInput label="tick 间隔毫秒" value={tickIntervalMs} min={1} integer disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "tick_interval_ms", value)} />
+            <NumberInput label="轨道半径" value={numberValue(orbitModuleParams.orbit_radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "orbit_radius", value)} />
+            <NumberInput label="每秒角速度" value={numberValue(orbitModuleParams.orbit_speed_deg_per_sec, 0)} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "orbit_speed_deg_per_sec", value)} />
+            <NumberInput label="熔岩球数量" value={numberValue(orbitModuleParams.orb_count, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "orb_count", value)} />
+            <NumberInput label="起始角度" value={numberValue(orbitModuleParams.start_angle_deg, 0)} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "start_angle_deg", value)} />
+            <TextInput label="tick 标识" value={tickMarkerId} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "tick_marker_id", value)} />
+            <TextInput label="生成特效" value={String(orbitModuleParams.spawn_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "spawn_vfx_key", value)} />
+            <TextInput label="tick 特效" value={String(orbitModuleParams.tick_vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateModuleParam(orbitModuleIndex, "tick_vfx_key", value)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="伤害区模块">
+          <div className="skill-editor-form-grid">
+            <SelectInput label="触发标识" value={triggerMarkerId} options={markerOptions} disabled={!canEdit || markerOptions.length === 0} onChange={(value) => updateModuleTrigger(damageZoneModuleIndex, "trigger_marker_id", value)} />
+            <NumberInput label="触发延迟毫秒" value={numberValue(damageZoneTrigger.trigger_delay_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateModuleTrigger(damageZoneModuleIndex, "trigger_delay_ms", value)} />
+            <ReadOnlyInput label="形状" value={String(damageZoneModuleParams.shape ?? "circle")} />
+            <ReadOnlyInput label="原点规则" value={String(damageZoneModuleParams.origin_policy ?? "trigger_position")} />
+            <NumberInput label="每 tick 半径" value={numberValue(damageZoneModuleParams.radius, 1)} min={1} disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "radius", value)} />
+            <NumberInput label="命中时机毫秒" value={numberValue(damageZoneModuleParams.hit_at_ms, 0)} min={0} integer disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "hit_at_ms", value)} />
+            <NumberInput label="最大目标数" value={numberValue(damageZoneModuleParams.max_targets, 1)} min={1} integer disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "max_targets", value)} />
+            <SelectInput label="伤害类型" value={draft.classification.damage_type} options={editor.options.damage_types} disabled={!canEdit} onChange={(value) => updateDraft((next) => { next.classification.damage_type = value; })} />
+            <TextInput label="命中特效" value={String(damageZoneModuleParams.vfx_key ?? "")} disabled={!canEdit} onChange={(value) => updateModuleParam(damageZoneModuleIndex, "vfx_key", value)} />
+          </div>
+        </EditorSection>
+        <EditorSection title="只读摘要">
+          <div className="skill-editor-form-grid">
+            <ReadOnlyInput label="预计 tick 次数" value={estimatedTickCount} />
+            <ReadOnlyInput label="预计总持续时间" value={`${durationMs} ms`} />
+            <ReadOnlyInput label="轨道半径" value={numberValue(orbitModuleParams.orbit_radius, 1)} />
+            <ReadOnlyInput label="每 tick 命中半径" value={numberValue(damageZoneModuleParams.radius, 1)} />
+            <ReadOnlyInput label="模块链状态" value={linkStatus} />
+          </div>
+        </EditorSection>
+      </div>
+    );
+  }
   if (projectileModule && damageZoneModule && projectileModuleIndex >= 0 && damageZoneModuleIndex >= 0) {
     return (
       <div className="skill-editor-projectile-panel">
@@ -6799,6 +9732,281 @@ function projectileLaneOffsets(projectileCount: number, spacing = 18) {
   return Array.from({ length: visibleCount }, (_, index) => (index - center) * spacing);
 }
 
+type EnemySpatialIndex = {
+  chunkSize: number;
+  chunks: Map<string, Enemy[]>;
+};
+
+function loadRuntimeAuthoredSpawnPlanData(map: BakedBattleMapData | null): MapEditorSpawnPlanData {
+  if (map && isEditorRuntimeBattleMap(map)) return map.editorSpawnPlans;
+  return loadMapEditorState().spawnPlans;
+}
+
+function createAuthoredSpawnPlanEnemies(spawnPlans: MapEditorSpawnPlanData, map: BakedBattleMapData, startId: number) {
+  const enemies: Enemy[] = [];
+  const aggroSources: RuntimeEncounterAggroSource[] = [];
+  const warnings: string[] = [];
+  let nextId = startId;
+  for (const spawnPoint of spawnPlans.monsterSpawns) {
+    const center = gridCoordinateToMapWorld(map, spawnPoint.x, spawnPoint.y);
+    aggroSources.push({
+      id: spawnPoint.id,
+      kind: "monster",
+      x: center.x,
+      y: center.y,
+      aggroRadius: Math.max(map.meta.grid_size, spawnPoint.aggroRadius * map.meta.grid_size)
+    });
+    const requestedCount = rollMapEditorMonsterSpawnCount(spawnPoint);
+    const sampled = sampleAuthoredSpawnPlanPositions(spawnPoint, map, warnings, `怪点 ${spawnPoint.id}`, requestedCount);
+    for (const point of sampled) {
+      enemies.push({
+        id: nextId++,
+        x: point.x,
+        y: point.y,
+        hp: spawnPoint.monsterId === "enemy_brute" ? 72 : 32,
+        maxHp: spawnPoint.monsterId === "enemy_brute" ? 72 : 32,
+        monsterId: spawnPoint.monsterId,
+        authored: true,
+        spawnPlanSourceId: spawnPoint.id,
+        runtimeTier: "dormant",
+        nextThinkAt: 0
+      });
+    }
+  }
+
+  const chosenBossGroup = chooseAuthoredBossGroup(spawnPlans.bossGroups);
+  if (chosenBossGroup) {
+    const center = gridCoordinateToMapWorld(map, chosenBossGroup.x, chosenBossGroup.y);
+    aggroSources.push({
+      id: chosenBossGroup.id,
+      kind: "boss",
+      x: center.x,
+      y: center.y,
+      aggroRadius: Math.max(map.meta.grid_size, chosenBossGroup.aggroRadius * map.meta.grid_size)
+    });
+    const sampled = sampleAuthoredSpawnPlanPositions(chosenBossGroup, map, warnings, `BOSS组 ${chosenBossGroup.id}`, chosenBossGroup.bossCount);
+    chosenBossGroup.bossIds.forEach((bossId, index) => {
+      const point = sampled[index] ?? sampled[0] ?? gridCoordinateToMapWorld(map, chosenBossGroup.x, chosenBossGroup.y);
+      enemies.push({
+        id: nextId++,
+        x: point.x,
+        y: point.y,
+        hp: 420,
+        maxHp: 420,
+        monsterId: bossId,
+        authored: true,
+        boss: true,
+        spawnPlanSourceId: chosenBossGroup.id,
+        runtimeTier: "active",
+        nextThinkAt: 0
+      });
+    });
+  }
+
+  return { enemies, warnings, nextId, aggroSources };
+}
+
+function chooseAuthoredBossGroup(groups: MapEditorBossGroup[]) {
+  if (groups.length === 0) return null;
+  return groups[Math.floor(Math.random() * groups.length)];
+}
+
+function rollMapEditorMonsterSpawnCount(spawnPoint: MapEditorMonsterSpawnPoint) {
+  const min = Math.max(0, Math.min(spawnPoint.countMultiplierMin, spawnPoint.countMultiplierMax));
+  const max = Math.max(0, Math.max(spawnPoint.countMultiplierMin, spawnPoint.countMultiplierMax));
+  const multiplier = min === max ? min : min + Math.random() * (max - min);
+  return Math.max(0, Math.floor(spawnPoint.count * multiplier));
+}
+
+function sampleAuthoredSpawnPlanPositions(
+  spawnPoint: { x: number; y: number; radius: number; density?: number },
+  map: BakedBattleMapData,
+  warnings: string[],
+  label: string,
+  requestedCount: number
+) {
+  const count = Math.max(0, Math.round(requestedCount));
+  const points: { x: number; y: number }[] = [];
+  if (count <= 0) return points;
+  const center = gridCoordinateToMapWorld(map, spawnPoint.x, spawnPoint.y);
+  const radius = Math.max(map.meta.grid_size, spawnPoint.radius * map.meta.grid_size);
+  const density = clampNumber(Number(spawnPoint.density ?? 0.6), 0, 1);
+  const attemptsPerMonster = 8;
+  let failed = 0;
+  for (let index = 0; index < count; index += 1) {
+    let placed: { x: number; y: number } | null = null;
+    for (let attempt = 0; attempt < attemptsPerMonster; attempt += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const compactness = 1.35 + density * 2.2;
+      const radial = Math.pow(Math.random(), compactness) * radius;
+      const candidate = {
+        x: clamp(center.x + Math.cos(angle) * radial, 0, map.meta.world_width - 1),
+        y: clamp(center.y + Math.sin(angle) * radial, 0, map.meta.world_height - 1)
+      };
+      if (isMapPointWalkable(map, candidate.x, candidate.y)) {
+        placed = candidate;
+        break;
+      }
+    }
+    if (placed) {
+      points.push(placed);
+    } else {
+      failed += 1;
+    }
+  }
+  if (failed > 0) warnings.push(`${label} 有 ${failed} 个怪物未能放到可行走区域。`);
+  return points;
+}
+
+function gridCoordinateToMapWorld(map: BakedBattleMapData, x: number, y: number) {
+  return {
+    x: clamp(x * map.meta.grid_size, 0, map.meta.world_width - 1),
+    y: clamp(y * map.meta.grid_size, 0, map.meta.world_height - 1)
+  };
+}
+
+function createEnemySpatialIndex(enemies: Enemy[], chunkSize = ENEMY_SPATIAL_CHUNK_SIZE): EnemySpatialIndex {
+  const chunks = new Map<string, Enemy[]>();
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0 || enemy.runtimeTier === "dead") continue;
+    const key = enemySpatialChunkKey(enemy.x, enemy.y, chunkSize);
+    const chunk = chunks.get(key);
+    if (chunk) chunk.push(enemy);
+    else chunks.set(key, [enemy]);
+  }
+  return { chunkSize, chunks };
+}
+
+function queryEnemySpatialIndex(index: EnemySpatialIndex, center: { x: number; y: number }, radius: number) {
+  const minX = Math.floor((center.x - radius) / index.chunkSize);
+  const maxX = Math.floor((center.x + radius) / index.chunkSize);
+  const minY = Math.floor((center.y - radius) / index.chunkSize);
+  const maxY = Math.floor((center.y + radius) / index.chunkSize);
+  const result: Enemy[] = [];
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const chunk = index.chunks.get(`${x}:${y}`);
+      if (!chunk) continue;
+      for (const enemy of chunk) {
+        if (distance(enemy, center) <= radius) result.push(enemy);
+      }
+    }
+  }
+  return result;
+}
+
+function enemySpatialChunkKey(x: number, y: number, chunkSize: number) {
+  return `${Math.floor(x / chunkSize)}:${Math.floor(y / chunkSize)}`;
+}
+
+function candidateEnemiesNear(enemies: Enemy[], center: { x: number; y: number }, radius: number) {
+  return queryEnemySpatialIndex(createEnemySpatialIndex(enemies), center, radius);
+}
+
+function updateRuntimeEnemies(
+  current: Enemy[],
+  player: { x: number; y: number },
+  map: BakedBattleMapData | null,
+  dt: number,
+  elapsedSeconds: number,
+  authoredSpawnPlanActive: boolean,
+  aggroSources: RuntimeEncounterAggroSource[] = [],
+  triggeredSourceIds: Set<string> = new Set()
+) {
+  if (!authoredSpawnPlanActive) {
+    return separateOverlappingEnemies(
+      current.map((enemy) => moveEnemyTowardPlayer(enemy, player, map, dt, "active")),
+      map
+    );
+  }
+  for (const source of aggroSources) {
+    if (!triggeredSourceIds.has(source.id) && distance(source, player) <= source.aggroRadius) {
+      triggeredSourceIds.add(source.id);
+    }
+  }
+  const spatialIndex = createEnemySpatialIndex(current);
+  const visibleIds = new Set(queryEnemySpatialIndex(spatialIndex, player, ENEMY_CAMERA_VISIBLE_RANGE).map((enemy) => enemy.id));
+  const activeIds = new Set(queryEnemySpatialIndex(spatialIndex, player, ENEMY_ACTIVE_RANGE).map((enemy) => enemy.id));
+  const movedEnemies = current.map((enemy) => {
+    if (enemy.hp <= 0) return { ...enemy, runtimeTier: "dead" as const };
+    const aggroLocked = Boolean(enemy.aggroLocked || (enemy.spawnPlanSourceId && triggeredSourceIds.has(enemy.spawnPlanSourceId)));
+    if (!aggroLocked) {
+      const tier: EnemyRuntimeTier = visibleIds.has(enemy.id) ? "visible" : "dormant";
+      return { ...enemy, aggroLocked: false, runtimeTier: tier };
+    }
+    const tier: EnemyRuntimeTier = visibleIds.has(enemy.id)
+      ? "visible"
+      : activeIds.has(enemy.id)
+        ? "active"
+        : "aware";
+    if (tier === "aware" && (enemy.nextThinkAt ?? 0) > elapsedSeconds) return { ...enemy, runtimeTier: tier };
+    const moved = moveEnemyTowardPlayer(enemy, player, map, tier === "aware" ? dt * 0.35 : dt, tier);
+    return {
+      ...moved,
+      aggroLocked,
+      nextThinkAt: tier === "aware" ? elapsedSeconds + ENEMY_LOW_FREQUENCY_THINK_INTERVAL : elapsedSeconds
+    };
+  }).filter((enemy) => enemy.runtimeTier !== "dead");
+  return separateOverlappingEnemies(movedEnemies, map);
+}
+
+function moveEnemyTowardPlayer(enemy: Enemy, player: { x: number; y: number }, map: BakedBattleMapData | null, dt: number, runtimeTier: EnemyRuntimeTier): Enemy {
+  const dx = player.x - enemy.x;
+  const dy = player.y - enemy.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const speed = enemy.boss ? 44 : 58;
+  const nextPosition = resolveWalkableMove(map, enemy, {
+    x: enemy.x + (dx / length) * speed * dt,
+    y: enemy.y + (dy / length) * speed * dt
+  });
+  return { ...enemy, x: nextPosition.x, y: nextPosition.y, runtimeTier };
+}
+
+function separateOverlappingEnemies(enemies: Enemy[], map: BakedBattleMapData | null): Enemy[] {
+  if (enemies.length <= 1) return enemies;
+  const spatialIndex = createEnemySpatialIndex(enemies, ENEMY_SPATIAL_CHUNK_SIZE);
+  return enemies.map((enemy) => {
+    if (enemy.hp <= 0 || enemy.runtimeTier === "dead") return enemy;
+    const radius = enemyCollisionRadius(enemy);
+    const neighbors = queryEnemySpatialIndex(spatialIndex, enemy, radius + ENEMY_BOSS_COLLISION_RADIUS);
+    let pushX = 0;
+    let pushY = 0;
+    for (const neighbor of neighbors) {
+      if (neighbor.id === enemy.id || neighbor.hp <= 0 || neighbor.runtimeTier === "dead") continue;
+      const combinedRadius = radius + enemyCollisionRadius(neighbor);
+      const dx = enemy.x - neighbor.x;
+      const dy = enemy.y - neighbor.y;
+      const gap = Math.hypot(dx, dy);
+      if (gap >= combinedRadius) continue;
+      const fallbackAngle = ((enemy.id * 97 + neighbor.id * 53) % 360) * Math.PI / 180;
+      const normalX = gap > 0.001 ? dx / gap : Math.cos(fallbackAngle);
+      const normalY = gap > 0.001 ? dy / gap : Math.sin(fallbackAngle);
+      const overlap = combinedRadius - gap;
+      pushX += normalX * overlap * 0.5;
+      pushY += normalY * overlap * 0.5;
+    }
+    const pushLength = Math.hypot(pushX, pushY);
+    if (pushLength <= 0.001) return enemy;
+    const scale = Math.min(ENEMY_COLLISION_MAX_PUSH, pushLength) / pushLength;
+    const nextPosition = resolveWalkableMove(map, enemy, {
+      x: enemy.x + pushX * scale,
+      y: enemy.y + pushY * scale
+    });
+    return { ...enemy, x: nextPosition.x, y: nextPosition.y };
+  });
+}
+
+function enemyCollisionRadius(enemy: Enemy) {
+  return enemy.boss || enemy.monsterId === "enemy_brute" ? ENEMY_BOSS_COLLISION_RADIUS : ENEMY_COLLISION_RADIUS;
+}
+
+function selectRenderableEnemies(enemies: Enemy[], player: { x: number; y: number }) {
+  return candidateEnemiesNear(enemies, player, ENEMY_CAMERA_VISIBLE_RANGE)
+    .filter((enemy) => enemy.hp > 0)
+    .sort((left, right) => distance(left, player) - distance(right, player))
+    .slice(0, MAX_VISIBLE_ENEMY_DOM_NODES);
+}
+
 function selectProjectileTargets(enemies: Enemy[], skill: SkillPreview, player: { x: number; y: number }): ProjectileDamageTarget[] {
   const runtimeParams = skill.runtime_params ?? {};
   const source = projectileSpawnWorldPosition(player, runtimeParams);
@@ -6817,14 +10025,15 @@ function selectProjectileTargets(enemies: Enemy[], skill: SkillPreview, player: 
   const projectileCount = Math.max(1, Math.round(Number(runtimeParams.projectile_count ?? skill.projectile_count ?? 1)));
   const spreadAngleDeg = projectileSpreadAngleDeg(skill.behavior_template, runtimeParams);
   const angleStepDeg = projectileAngleStepDeg(skill.behavior_template, runtimeParams);
-  const firstTarget = [...enemies]
+  const sourceCandidates = candidateEnemiesNear(enemies, source, Math.max(searchRange, maxDistance));
+  const firstTarget = [...sourceCandidates]
     .filter((enemy) => enemy.hp > 0 && distance(enemy, source) <= searchRange)
     .sort((a, b) => distance(a, source) - distance(b, source))[0];
   if (!firstTarget) return [];
   const baseDirection = guideDirection(source, firstTarget);
   const result: ProjectileDamageTarget[] = [];
   for (const [projectileIndex, direction] of projectileSpreadDirections(baseDirection, projectileCount, spreadAngleDeg, angleStepDeg).entries()) {
-    const candidates = enemies
+    const candidates = sourceCandidates
       .filter((enemy) => enemy.hp > 0)
       .map((enemy) => ({ enemy, metrics: projectileLineMetrics(source, direction, enemy) }))
       .filter(({ metrics }) => metrics.forward >= 0 && metrics.forward <= maxDistance);
@@ -6863,7 +10072,7 @@ function nearestGuideTarget(
   searchRange: number,
   maxDistance: number
 ) {
-  const target = [...enemies]
+  const target = candidateEnemiesNear(enemies, source, Math.max(searchRange, maxDistance))
     .filter((enemy) => enemy.hp > 0 && distance(enemy, source) <= searchRange)
     .sort((a, b) => distance(a, source) - distance(b, source))[0];
   if (target) return { x: target.x, y: target.y };
@@ -6909,7 +10118,7 @@ function selectPlayerNovaTargets(enemies: Enemy[], skill: SkillPreview, player: 
   const runtimeParams = skill.runtime_params ?? {};
   const radius = Math.max(1, Number(runtimeParams.radius ?? skill.cast?.search_range ?? 360));
   const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? (enemies.length || 1))));
-  return [...enemies]
+  return candidateEnemiesNear(enemies, player, radius)
     .map((enemy) => ({ enemy, distance: Math.hypot(enemy.x - player.x, enemy.y - player.y) }))
     .filter((item) => item.distance <= radius)
     .sort((left, right) => left.distance - right.distance)
@@ -6927,7 +10136,7 @@ function selectDamageZoneTargets(enemies: Enemy[], skill: SkillPreview, player: 
     const facingTarget = nearestEnemy(enemies, player);
     if (!facingTarget) return [];
     const direction = rotateDirection(guideDirection(player, facingTarget), Number(runtimeParams.angle_offset_deg ?? 0));
-    return [...enemies]
+    return candidateEnemiesNear(enemies, player, Math.max(length, width))
       .filter((enemy) => enemy.hp > 0)
       .map((enemy) => {
         const metrics = projectileLineMetrics(player, direction, enemy);
@@ -6939,7 +10148,7 @@ function selectDamageZoneTargets(enemies: Enemy[], skill: SkillPreview, player: 
       .map((item) => item.enemy);
   }
   const radius = Math.max(1, Number(runtimeParams.radius ?? skill.cast?.search_range ?? 360));
-  return [...enemies]
+  return candidateEnemiesNear(enemies, player, radius)
     .map((enemy) => ({ enemy, distance: Math.hypot(enemy.x - player.x, enemy.y - player.y) }))
     .filter((item) => item.enemy.hp > 0 && item.distance <= radius)
     .sort((left, right) => left.distance - right.distance)
@@ -6952,7 +10161,7 @@ function selectMeleeArcTargets(enemies: Enemy[], skill: SkillPreview, player: { 
   const arcAngle = clamp(Number(runtimeParams.arc_angle ?? 70), 1, 180);
   const arcRadius = Math.max(1, Number(runtimeParams.arc_radius ?? skill.cast?.search_range ?? 320));
   const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? (enemies.length || 1))));
-  const candidates = [...enemies]
+  const candidates = candidateEnemiesNear(enemies, player, arcRadius)
     .filter((enemy) => enemy.hp > 0 && distance(enemy, player) <= arcRadius)
     .sort((a, b) => distance(a, player) - distance(b, player));
   const facingTarget = candidates[0] ?? nearestEnemy(enemies, player);
@@ -6981,7 +10190,8 @@ function selectChainTargets(enemies: Enemy[], skill: SkillPreview, player: { x: 
   const maxTargets = Math.max(1, Math.round(Number(runtimeParams.max_targets ?? chainCount)));
   const limit = Math.min(chainCount, maxTargets);
   const allowRepeatTarget = Boolean(runtimeParams.allow_repeat_target ?? false);
-  const first = [...enemies]
+  const spatialIndex = createEnemySpatialIndex(enemies);
+  const first = queryEnemySpatialIndex(spatialIndex, player, searchRange)
     .filter((enemy) => enemy.hp > 0 && distance(enemy, player) <= searchRange)
     .sort((a, b) => distance(a, player) - distance(b, player))[0];
   if (!first) return [];
@@ -6989,7 +10199,7 @@ function selectChainTargets(enemies: Enemy[], skill: SkillPreview, player: { x: 
   const selectedIds = new Set([first.id]);
   while (selected.length < limit) {
     const current = selected[selected.length - 1];
-    const next = [...enemies]
+    const next = queryEnemySpatialIndex(spatialIndex, current, chainRadius)
       .filter((enemy) => enemy.hp > 0)
       .filter((enemy) => allowRepeatTarget || !selectedIds.has(enemy.id))
       .filter((enemy) => enemy.id !== current.id)
@@ -7003,7 +10213,7 @@ function selectChainTargets(enemies: Enemy[], skill: SkillPreview, player: { x: 
 }
 
 function nearestEnemy(enemies: Enemy[], source: { x: number; y: number }) {
-  return [...enemies]
+  return candidateEnemiesNear(enemies, source, ENEMY_AWARE_RANGE)
     .filter((enemy) => enemy.hp > 0)
     .sort((a, b) => distance(a, source) - distance(b, source))[0];
 }
@@ -7154,70 +10364,6 @@ function projectMovementVectorForAnimation(vector: { x: number; y: number }) {
   };
 }
 
-function createDefaultTilemap(width: number, height: number, tileSize: number): TilemapData {
-  const spawnTileX = Math.floor(width / 2);
-  const spawnTileY = Math.floor(height / 2);
-  const tiles: TileType[][] = Array.from({ length: height }, () => Array.from({ length: width }, () => "ground"));
-  const terrainAssets: TerrainTileAssetId[][] = Array.from({ length: height }, (_, y) =>
-    Array.from({ length: width }, (_, x) => forestRuinTerrainAsset(width, height, x, y))
-  );
-
-  createForestRuinObjectTiles(width, height, spawnTileX, spawnTileY).forEach((point) => {
-    if (tiles[point.y]?.[point.x] === "ground") tiles[point.y][point.x] = "object";
-  });
-
-  return {
-    mapId: "v2-forest-ruin-hd-tilemap",
-    width,
-    height,
-    tileSize,
-    tiles,
-    terrainAssets,
-    spawnPoint: {
-      tileX: spawnTileX,
-      tileY: spawnTileY,
-      x: spawnTileX * tileSize + tileSize / 2,
-      y: spawnTileY * tileSize + tileSize / 2
-    }
-  };
-}
-
-function forestRuinTerrainAsset(width: number, height: number, x: number, y: number): TerrainTileAssetId {
-  const centerX = Math.floor(width / 2);
-  const centerY = Math.floor(height / 2);
-  const distanceToBorder = Math.min(x, y, width - 1 - x, height - 1 - y);
-  const onMainPath = Math.abs(x - centerX) <= 1 || Math.abs(y - centerY) <= 1;
-  const onDiagonalPath = Math.abs((x - centerX) - (y - centerY)) <= 1 && x > 1 && y > 1 && x < width - 2 && y < height - 2;
-  const inCentralCourt = Math.abs(x - centerX) <= 2 && Math.abs(y - centerY) <= 2;
-  const hash = tileHash(x, y);
-
-  if (inCentralCourt && hash % 5 === 0) return "seamless_stone_ground_blood";
-  if (onMainPath) {
-    if (hash % 7 === 0) return "seamless_stone_ground_cracked";
-    if (hash % 5 === 0) return "seamless_stone_ground_broken";
-    return "seamless_stone_ground_plain";
-  }
-  if (onDiagonalPath) return hash % 2 === 0 ? "seamless_stone_ground_cracked" : "seamless_stone_ground_broken";
-  if ((x <= 3 && y <= 3) || (x >= width - 4 && y <= 3) || (x <= 3 && y >= height - 4) || (x >= width - 4 && y >= height - 4)) {
-    return hash % 2 === 0 ? "seamless_stone_ground_broken" : "seamless_stone_ground_cracked";
-  }
-  if ((x === centerX - 4 && y === centerY + 2) || (x === centerX + 4 && y === centerY - 2)) return "seamless_stone_ground_blood";
-  if (distanceToBorder <= 1 && hash % 3 === 0) return "seamless_stone_ground_cracked";
-  if (hash % 11 === 0) return "seamless_stone_ground_blood";
-  if (hash % 5 === 0) return "seamless_stone_ground_broken";
-  return "seamless_stone_ground_plain";
-}
-
-function createForestRuinObjectTiles(width: number, height: number, centerX: number, centerY: number) {
-  return [
-    { x: centerX, y: centerY },
-    { x: centerX - 4, y: centerY + 2 },
-    { x: centerX + 4, y: centerY - 2 },
-    { x: Math.min(width - 3, centerX + 5), y: centerY + 2 },
-    { x: Math.max(2, centerX - 5), y: centerY - 2 }
-  ];
-}
-
 function createBattleCamera(playerX: number, playerY: number, zoom = BATTLE_CAMERA_ZOOM): Camera2D {
   const playerScreen = projectBattleWorldToScreen(playerX, playerY);
   return {
@@ -7228,34 +10374,34 @@ function createBattleCamera(playerX: number, playerY: number, zoom = BATTLE_CAME
 }
 
 function projectBattleWorldToScreen(worldX: number, worldY: number) {
-  return addProjectionOffset(projectWorldToScreen(worldX, worldY), BATTLE_PROJECTION_BOUNDS);
+  return { x: worldX, y: worldY };
 }
 
 function battleTerrainTransform(camera: Camera2D) {
   return `translate(${BATTLE_CAMERA_ANCHOR_X}, ${BATTLE_CAMERA_ANCHOR_Y}) scale(${camera.zoom}) translate(${-camera.screenX}px, ${-camera.screenY}px)`;
 }
 
-function createBattleRenderEntities(player: { x: number; y: number; hp: number; maxHp: number }, enemies: Enemy[], props: SceneProp[]): BattleRenderEntity[] {
+function createBattleRenderEntities(player: { x: number; y: number; hp: number; maxHp: number }, enemies: Enemy[], renderScale = UNIT_RENDER_SCALE): BattleRenderEntity[] {
   return [
-    ...props.map((prop) => ({ kind: "prop" as const, id: prop.id, x: prop.x, y: prop.y, prop })),
     ...enemies.map((enemy) => ({
       kind: "enemy" as const,
       ...enemy,
-      playerDistance: distance(enemy, player)
+      playerDistance: distance(enemy, player),
+      renderScale
     })),
-    { kind: "player", id: "player", x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp }
+    { kind: "player" as const, id: "player" as const, x: player.x, y: player.y, hp: player.hp, maxHp: player.maxHp, renderScale }
   ].sort(compareDimetricDepth);
 }
 
 function createBattleRenderItems(
   player: { x: number; y: number; hp: number; maxHp: number },
   enemies: Enemy[],
-  props: SceneProp[],
   bolts: FireBolt[],
-  hitVfxs: HitVfx[]
+  hitVfxs: HitVfx[],
+  renderScale = UNIT_RENDER_SCALE
 ): BattleRenderItem[] {
   return [
-    ...createBattleRenderEntities(player, enemies, props),
+    ...createBattleRenderEntities(player, enemies, renderScale),
     ...bolts.map((bolt) => {
       const point = fireBoltWorldPoint(bolt);
       return { kind: "fire-bolt" as const, id: bolt.id, x: point.x, y: point.y, bolt };
@@ -7276,10 +10422,10 @@ function createBattleAnimationContexts(
   const playerMoving = Math.hypot(playerVisual.movementVector.x, playerVisual.movementVector.y) > 0.001;
   const enemyContexts = new Map<number, UnitAnimationContext>();
   enemies.forEach((enemy) => {
-    const unitId = selectEnemyUnitType(enemy.id);
+    const unitId = enemy.monsterId ?? selectEnemyUnitType(enemy.id);
     const visual = enemyVisuals.get(enemy.id);
     const attackActive = visual?.attackUntilMs !== undefined && elapsedMs < visual.attackUntilMs;
-    const movementVector = visual?.movementVector ?? projectMovementVectorForAnimation({ x: player.x - enemy.x, y: player.y - enemy.y });
+    const movementVector = visual?.movementVector ?? { x: player.x - enemy.x, y: player.y - enemy.y };
     const moving = Math.hypot(movementVector.x, movementVector.y) > 0.001;
     const enemyMoveSpeed = moving ? 58 : 0;
     enemyContexts.set(enemy.id, {
@@ -7326,7 +10472,7 @@ function renderBattleEntity(entity: BattleRenderEntity, depthIndex: number, anim
       <div
         key="player"
         className="player unit-visual unit-visual-player"
-        style={battleUnitStyle(entity, animationFrame, depthIndex)}
+        style={battleUnitStyle(entity, animationFrame, depthIndex, entity.renderScale)}
         data-animation-state={animationFrame.animation.state}
         data-animation-direction={animationFrame.animation.direction}
         data-animation-playback-rate={animationFrame.playbackRate}
@@ -7337,22 +10483,8 @@ function renderBattleEntity(entity: BattleRenderEntity, depthIndex: number, anim
     );
   }
 
-  if (entity.kind === "prop") {
-    const asset = BATTLE_PROP_ASSETS[entity.prop.assetId];
-    return (
-      <div
-        key={entity.id}
-        className={`scene-prop scene-prop-${entity.prop.type}`}
-        style={battlePropStyle(entity.prop, asset, depthIndex)}
-        aria-hidden="true"
-      >
-        <img src={asset.src} alt="" draggable={false} />
-      </div>
-    );
-  }
-
   const context = animationContexts.enemies.get(entity.id) ?? {
-    unitId: selectEnemyUnitType(entity.id),
+    unitId: entity.monsterId ?? selectEnemyUnitType(entity.id),
     requestedState: "idle" as const,
     movementVector: { x: 0, y: 0 },
     fallbackDirection: "down" as const,
@@ -7361,21 +10493,22 @@ function renderBattleEntity(entity: BattleRenderEntity, depthIndex: number, anim
     currentMoveSpeed: 0
   };
   const animationFrame = resolveUnitAnimation(context);
+  const healthVisible = entity.lastDamagedAt !== undefined
+    && animationContexts.player.elapsedMs / 1000 - entity.lastDamagedAt <= ENEMY_HEALTH_VISIBLE_SECONDS;
   return (
     <div
       key={`enemy-${entity.id}`}
       className={`enemy unit-visual unit-visual-${animationFrame.animation.unitId}`}
-      style={battleUnitStyle(entity, animationFrame, depthIndex)}
+      style={battleUnitStyle(entity, animationFrame, depthIndex, entity.renderScale)}
       data-animation-state={animationFrame.animation.state}
       data-animation-direction={animationFrame.animation.direction}
       data-animation-playback-rate={animationFrame.playbackRate}
     >
-      <div className="enemy-distance" aria-hidden="true">
-        {formatPreviewNumber(entity.playerDistance)}
-      </div>
-      <div className="enemy-health" aria-hidden="true">
-        <span style={{ width: `${Math.max(0, entity.hp / entity.maxHp) * 100}%` }} />
-      </div>
+      {healthVisible && (
+        <div className="enemy-health" aria-hidden="true">
+          <span style={{ width: `${Math.max(0, entity.hp / entity.maxHp) * 100}%` }} />
+        </div>
+      )}
       <UnitAnimationSprite frame={animationFrame} />
     </div>
   );
@@ -7424,7 +10557,7 @@ function unitAnimationMotionStyle(frame: UnitAnimationFrame): CSSProperties {
   };
 }
 
-function battleUnitStyle(entity: { x: number; y: number }, frame: UnitAnimationFrame, depthIndex: number): CSSProperties {
+function battleUnitStyle(entity: { x: number; y: number }, frame: UnitAnimationFrame, depthIndex: number, renderScale = UNIT_RENDER_SCALE): CSSProperties {
   const visualPoint = projectBattleWorldToScreen(entity.x, entity.y);
   const asset = frame.animation;
   return {
@@ -7435,20 +10568,7 @@ function battleUnitStyle(entity: { x: number; y: number }, frame: UnitAnimationF
     zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex,
     "--unit-anchor-x": asset.anchorX,
     "--unit-anchor-y": asset.anchorY,
-    "--unit-render-scale": UNIT_RENDER_SCALE * asset.scale
-  } as CSSProperties;
-}
-
-function battlePropStyle(prop: SceneProp, asset: { anchorX: number; anchorY: number }, depthIndex: number): CSSProperties {
-  const visualPoint = projectBattleWorldToScreen(prop.x, prop.y);
-  return {
-    left: visualPoint.x,
-    top: visualPoint.y,
-    width: prop.width,
-    height: prop.height,
-    zIndex: BATTLE_ENTITY_Z_INDEX_BASE + depthIndex,
-    "--prop-anchor-x": asset.anchorX,
-    "--prop-anchor-y": asset.anchorY
+    "--unit-render-scale": renderScale * asset.scale
   } as CSSProperties;
 }
 
@@ -7460,59 +10580,6 @@ function floatingTextStyle(text: FloatingText): CSSProperties {
     top: visualPoint.y - progress * FLOATING_TEXT_VISUAL_RISE_SPEED,
     opacity: Math.max(0, text.ttl / Math.max(0.001, text.duration))
   };
-}
-
-function MapTiles({ tilemap }: { tilemap: TilemapData }) {
-  return (
-    <>
-      {tilemap.tiles.flatMap((row, y) =>
-        row.flatMap((tile, x) => {
-          const terrainAsset = terrainAssetForTile(tile, x, y, tilemap.terrainAssets[y]?.[x]);
-          const edgeAssets: ReturnType<typeof edgeAssetsForTile> = [];
-          const tileWorldX = x * tilemap.tileSize;
-          const tileWorldY = y * tilemap.tileSize;
-          const visualPoint = projectBattleWorldToScreen(tileWorldX, tileWorldY);
-          const nodes: ReactNode[] = [];
-          if (terrainAsset) {
-            nodes.push(
-              <div
-                key={`tile-${x}-${y}`}
-                className={`map-tile ${TILE_RENDER_BY_TYPE[tile].className}`}
-                data-tile-type={tile}
-                data-terrain-asset={terrainAsset.id}
-                style={{
-                  left: visualPoint.x,
-                  top: visualPoint.y,
-                  width: terrainAsset.width,
-                  height: terrainAsset.height,
-                  zIndex: (x + y) * 2,
-                  backgroundImage: `url(${terrainAsset.src})`
-                }}
-              />
-            );
-          }
-          edgeAssets.forEach((edgeAsset, edgeIndex) => {
-            nodes.push(
-              <div
-                key={`edge-${edgeAsset.id}-${x}-${y}-${edgeIndex}`}
-                className="edge-tile"
-                data-edge-asset={edgeAsset.id}
-                style={{
-                  left: visualPoint.x,
-                  top: visualPoint.y,
-                  width: edgeAsset.width,
-                  height: edgeAsset.height,
-                  zIndex: (x + y) * 2 + 1 + edgeIndex,
-                  backgroundImage: `url(${edgeAsset.src})`
-                }}
-              />
-            );
-          });
-          return nodes;
-        })
-      )}
-    </>
-  );
 }
 
 function GemTooltip({ tooltip }: { tooltip: Tooltip }) {
@@ -8774,22 +11841,48 @@ function shapeClass(value: string) {
   return "glyph";
 }
 
-function createEnemy(id: number, playerX: number, playerY: number): Enemy {
+function createEnemy(id: number, playerX: number, playerY: number, map: BakedBattleMapData | null = null, spawnKind: "normal" | "elite" = "normal"): Enemy {
+  const maskedSpawn = randomEnemySpawnPoint(map, spawnKind);
+  if (maskedSpawn) {
+    return {
+      id,
+      x: maskedSpawn.x,
+      y: maskedSpawn.y,
+      hp: 32,
+      maxHp: 32,
+      monsterId: spawnKind === "elite" ? "enemy_brute" : "enemy_imp",
+      runtimeTier: "active"
+    };
+  }
+
   const angle = Math.random() * Math.PI * 2;
   const radius = 360 + Math.random() * 260;
+  const mapWidth = map?.meta.world_width ?? MAP_WIDTH;
+  const mapHeight = map?.meta.world_height ?? MAP_HEIGHT;
   return {
     id,
-    x: clamp(playerX + Math.cos(angle) * radius, 40, MAP_WIDTH - 40),
-    y: clamp(playerY + Math.sin(angle) * radius, 40, MAP_HEIGHT - 40),
+    x: clamp(playerX + Math.cos(angle) * radius, 40, mapWidth - 40),
+    y: clamp(playerY + Math.sin(angle) * radius, 40, mapHeight - 40),
     hp: 32,
-    maxHp: 32
+    maxHp: 32,
+    monsterId: spawnKind === "elite" ? "enemy_brute" : "enemy_imp",
+    runtimeTier: "active"
   };
 }
 
+function randomEnemySpawnPoint(map: BakedBattleMapData | null, spawnKind: "normal" | "elite") {
+  if (!map) return null;
+  const preferred = spawnKind === "elite" ? map.eliteSpawnPoints : map.enemySpawnPoints;
+  const pool = preferred.length > 0 ? preferred : map.enemySpawnPoints.length > 0 ? map.enemySpawnPoints : map.walkablePoints;
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function unitMovementState(moving: boolean, baseMoveSpeed: number, currentMoveSpeed: number): UnitAnimationState {
+  void baseMoveSpeed;
+  void currentMoveSpeed;
   if (!moving) return "idle";
-  if (baseMoveSpeed <= 0) return "run";
-  return currentMoveSpeed < baseMoveSpeed * UNIT_RUN_SPEED_RATIO ? "walk" : "run";
+  return "walk";
 }
 
 function createSkillTestDummies(firstId: number, playerX: number, playerY: number): Enemy[] {
@@ -8798,7 +11891,9 @@ function createSkillTestDummies(firstId: number, playerX: number, playerY: numbe
     x: clamp(playerX + offset.x, 40, MAP_WIDTH - 40),
     y: clamp(playerY + offset.y, 40, MAP_HEIGHT - 40),
     hp: SKILL_TEST_DUMMY_MAX_HP,
-    maxHp: SKILL_TEST_DUMMY_MAX_HP
+    maxHp: SKILL_TEST_DUMMY_MAX_HP,
+    monsterId: "enemy_imp",
+    runtimeTier: "active"
   }));
 }
 
