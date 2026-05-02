@@ -17,6 +17,7 @@ ALLOWED_SKILL_BEHAVIOR_TEMPLATES = frozenset(
         "player_nova",
         "melee_arc",
         "damage_zone",
+        "orbit_emitter",
         "line_pierce",
         "orbit",
         "delayed_area",
@@ -117,6 +118,14 @@ ALLOWED_PREVIEW_SHOW_FIELDS = frozenset(
         "impact_marker_id",
         "trigger_marker_id",
         "trigger_delay_ms",
+        "duration_ms",
+        "tick_interval_ms",
+        "orbit_radius",
+        "orbit_speed_deg_per_sec",
+        "orb_count",
+        "start_angle_deg",
+        "tick_marker_id",
+        "radius",
     }
 )
 
@@ -174,6 +183,37 @@ class AffixDefinition:
     apply_filter_tags: frozenset[str]
     name_key: str = ""
     description_key: str = ""
+
+
+@dataclass(frozen=True)
+class PlayerStatDefinition:
+    stat_id: str
+    name_key: str
+    category: str
+    value_type: str
+    v1_status: str
+    runtime_effective: bool
+    affix_spawn_enabled_v1: bool
+
+
+@dataclass(frozen=True)
+class CharacterPanelRow:
+    row_id: str
+    section_id: str
+    stat_id: str
+    icon_text: str
+    tone: str
+    formatter: str
+    order: int
+
+
+@dataclass(frozen=True)
+class CharacterPanelSection:
+    section_id: str
+    title_key: str
+    layout: str
+    order: int
+    rows: tuple[CharacterPanelRow, ...]
 
 
 @dataclass(frozen=True)
@@ -303,6 +343,68 @@ def load_localization(config_root: Path) -> dict[str, str]:
     return {str(key): str(value) for key, value in strings.items()}
 
 
+def load_player_stat_definitions(config_root: Path) -> dict[str, PlayerStatDefinition]:
+    data = load_toml(config_root / "player" / "player_stat_defs.toml")
+    definitions: dict[str, PlayerStatDefinition] = {}
+    for entry in data.get("stats", []):
+        stat_id = str(entry["id"])
+        definitions[stat_id] = PlayerStatDefinition(
+            stat_id=stat_id,
+            name_key=str(entry["name_key"]),
+            category=str(entry["category"]),
+            value_type=str(entry["value_type"]),
+            v1_status=str(entry["v1_status"]),
+            runtime_effective=bool(entry["runtime_effective"]),
+            affix_spawn_enabled_v1=bool(entry["affix_spawn_enabled_v1"]),
+        )
+    return definitions
+
+
+def load_player_base_stats(config_root: Path) -> dict[str, int | float | bool]:
+    data = load_toml(config_root / "player" / "player_base_stats.toml")
+    player_base = data.get("player_base", {})
+    if not isinstance(player_base, dict):
+        raise ValueError("player/player_base_stats.toml must contain [player_base]")
+    result: dict[str, int | float | bool] = {}
+    for key, value in player_base.items():
+        if not isinstance(value, (int, float, bool)):
+            raise ValueError(f"player base stat must be numeric or boolean: {key}")
+        result[str(key)] = value
+    return result
+
+
+def load_character_panel_sections(config_root: Path) -> tuple[CharacterPanelSection, ...]:
+    data = load_toml(config_root / "player" / "character_panel.toml")
+    raw_rows = data.get("rows", [])
+    rows_by_section: dict[str, list[CharacterPanelRow]] = {}
+    for entry in raw_rows:
+        row = CharacterPanelRow(
+            row_id=str(entry["id"]),
+            section_id=str(entry["section_id"]),
+            stat_id=str(entry["stat_id"]),
+            icon_text=str(entry.get("icon_text", "")),
+            tone=str(entry.get("tone", "")),
+            formatter=str(entry.get("formatter", "auto")),
+            order=int(entry.get("order", 0)),
+        )
+        rows_by_section.setdefault(row.section_id, []).append(row)
+
+    sections: list[CharacterPanelSection] = []
+    for entry in data.get("sections", []):
+        section_id = str(entry["id"])
+        rows = tuple(sorted(rows_by_section.get(section_id, []), key=lambda row: (row.order, row.row_id)))
+        sections.append(
+            CharacterPanelSection(
+                section_id=section_id,
+                title_key=str(entry["title_key"]),
+                layout=str(entry.get("layout", "detail")),
+                order=int(entry.get("order", 0)),
+                rows=rows,
+            )
+        )
+    return tuple(sorted(sections, key=lambda section: (section.order, section.section_id)))
+
+
 def load_board_rules(config_root: Path) -> BoardRules:
     layout = load_toml(config_root / "sudoku_board" / "board_layout.toml")["board"]
     placement = load_toml(config_root / "sudoku_board" / "placement_rules.toml")["placement"]
@@ -321,70 +423,72 @@ def load_board_rules(config_root: Path) -> BoardRules:
 
 def load_gem_definitions(config_root: Path) -> dict[str, GemDefinition]:
     definitions: dict[str, GemDefinition] = {}
-    for relative, table in [
-        (Path("gems") / "active_skill_gems.toml", "active_skill_gems"),
-        (Path("gems") / "passive_skill_gems.toml", "passive_skill_gems"),
-        (Path("gems") / "support_gems.toml", "support_gems"),
-    ]:
-        data = load_toml(config_root / relative)
-        for entry in data.get(table, []):
-            base_gem_id = entry["id"]
-            apply_filter = entry.get("apply_filter", {})
-            gem_type = entry.get("gem_type") or f"gem_type_{entry.get('sudoku_digit')}"
-            gem_kind = _gem_kind_from_entry(entry)
-            sudoku_digit = int(entry.get("sudoku_digit", _sudoku_digit_from_gem_type(gem_type)))
-            _require_valid_gem_kind(gem_kind, base_gem_id)
-            _require_valid_sudoku_digit(sudoku_digit, base_gem_id)
-            definitions[base_gem_id] = GemDefinition(
-                base_gem_id=base_gem_id,
-                gem_type=gem_type,
-                gem_kind=gem_kind,
-                sudoku_digit=sudoku_digit,
-                tags=frozenset(entry["tags"]),
-                name_key=entry.get("name_key", ""),
-                description_key=entry.get("description_key", ""),
-                category=entry.get("category", ""),
-                effect_stats=tuple(entry.get("effect_stats", [])),
-                passive_effects=tuple(_passive_effects(entry)),
-                skill_template_id=entry.get("skill_template"),
-                visual_effect=str(entry.get("visual_effect", "")),
-                shape_effect=str(entry.get("shape_effect", "")),
-                apply_filter_target_kinds=frozenset(apply_filter.get("target_kinds", [])),
-                apply_filter_tags_any=frozenset(apply_filter.get("tags_any", [])),
-                apply_filter_tags_all=frozenset(apply_filter.get("tags_all", [])),
-                apply_filter_tags_none=frozenset(apply_filter.get("tags_none", [])),
-            )
     for package in load_skill_packages(config_root).values():
-        package_id = str(package["id"])
-        existing = definitions.get(package_id)
-        if existing is not None:
-            definitions[package_id] = _active_gem_definition_from_package(package, existing)
+        definition = _active_gem_definition_from_package(package)
+        definitions[definition.base_gem_id] = definition
+    for entry in _load_gem_definition_packages(config_root, "passive"):
+        definition = _gem_definition_from_entry(entry)
+        definitions[definition.base_gem_id] = definition
+    for entry in _load_gem_definition_packages(config_root, "support"):
+        definition = _gem_definition_from_entry(entry)
+        definitions[definition.base_gem_id] = definition
     return definitions
 
 
-def _active_gem_definition_from_package(package: dict[str, Any], existing: GemDefinition) -> GemDefinition:
+def _load_gem_definition_packages(config_root: Path, kind: str) -> list[dict[str, Any]]:
+    package_dir = config_root / "skills" / kind
+    if not package_dir.exists():
+        return []
+    packages = [load_yaml_file(path) for path in sorted(package_dir.glob("*/skill.yaml"))]
+    return sorted(packages, key=lambda package: (int(package.get("sort_order", 999_999)), str(package.get("id", ""))))
+
+
+def _gem_definition_from_entry(entry: dict[str, Any]) -> GemDefinition:
+    base_gem_id = entry["id"]
+    apply_filter = entry.get("apply_filter", {})
+    gem_type = entry.get("gem_type") or f"gem_type_{entry.get('sudoku_digit')}"
+    gem_kind = _gem_kind_from_entry(entry)
+    sudoku_digit = int(entry.get("sudoku_digit", _sudoku_digit_from_gem_type(gem_type)))
+    _require_valid_gem_kind(gem_kind, base_gem_id)
+    _require_valid_sudoku_digit(sudoku_digit, base_gem_id)
+    return GemDefinition(
+        base_gem_id=base_gem_id,
+        gem_type=gem_type,
+        gem_kind=gem_kind,
+        sudoku_digit=sudoku_digit,
+        tags=frozenset(entry["tags"]),
+        name_key=entry.get("name_key", ""),
+        description_key=entry.get("description_key", ""),
+        category=entry.get("category", ""),
+        effect_stats=tuple(entry.get("effect_stats", [])),
+        passive_effects=tuple(_passive_effects(entry)),
+        skill_template_id=entry.get("skill_template"),
+        visual_effect=str(entry.get("visual_effect", "")),
+        shape_effect=str(entry.get("shape_effect", "")),
+        apply_filter_target_kinds=frozenset(apply_filter.get("target_kinds", [])),
+        apply_filter_tags_any=frozenset(apply_filter.get("tags_any", [])),
+        apply_filter_tags_all=frozenset(apply_filter.get("tags_all", [])),
+        apply_filter_tags_none=frozenset(apply_filter.get("tags_none", [])),
+    )
+
+
+def _active_gem_definition_from_package(package: dict[str, Any]) -> GemDefinition:
     package_id = str(package["id"])
     template_id = _legacy_template_id_from_package_id(package_id)
     classification = package["classification"]
     presentation = package["presentation"]
+    tags = {"gem", "active_skill_gem", "loot_gem", "gem_type_1", template_id}
+    tags.update(str(tag) for tag in classification["tags"])
     return GemDefinition(
         base_gem_id=package_id,
-        gem_type=existing.gem_type,
-        gem_kind=existing.gem_kind,
-        sudoku_digit=existing.sudoku_digit,
-        tags=frozenset(existing.tags | set(str(tag) for tag in classification["tags"]) | {template_id}),
+        gem_type="gem_type_1",
+        gem_kind="active_skill",
+        sudoku_digit=1,
+        tags=frozenset(tags),
         name_key=str(package["display"]["name_key"]),
         description_key=str(package["display"]["description_key"]),
-        category=existing.category,
-        effect_stats=existing.effect_stats,
-        passive_effects=existing.passive_effects,
         skill_template_id=template_id,
         visual_effect=str(presentation["vfx"]),
-        shape_effect=existing.shape_effect,
-        apply_filter_target_kinds=existing.apply_filter_target_kinds,
-        apply_filter_tags_any=existing.apply_filter_tags_any,
-        apply_filter_tags_all=existing.apply_filter_tags_all,
-        apply_filter_tags_none=existing.apply_filter_tags_none,
     )
 
 
@@ -595,6 +699,8 @@ def validate_skill_package_data(
         _validate_chain_params(params, package_id)
     if behavior_template == "damage_zone":
         _validate_damage_zone_params(params, behavior_templates[behavior_template], package_id)
+    if behavior_template == "orbit_emitter":
+        _validate_orbit_emitter_params(params, package_id)
     modules = package.get("modules")
     if modules is not None:
         _validate_skill_modules(modules, behavior_templates, package_id)
@@ -753,6 +859,28 @@ def _validate_damage_zone_params(params: dict[str, Any], template: dict[str, Any
         raise ValueError(f"skill package behavior.params.trigger_marker_id is required for trigger_position: {package_id}")
 
 
+def _validate_orbit_emitter_params(params: dict[str, Any], package_id: str) -> None:
+    if params.get("orbit_center_policy") != "caster":
+        raise ValueError(f"skill package behavior.params.orbit_center_policy is invalid: {package_id}")
+    if not _is_integer(params.get("duration_ms")) or params["duration_ms"] <= 0:
+        raise ValueError(f"skill package behavior.params.duration_ms must be positive: {package_id}")
+    if not _is_integer(params.get("tick_interval_ms")) or params["tick_interval_ms"] <= 0:
+        raise ValueError(f"skill package behavior.params.tick_interval_ms must be positive: {package_id}")
+    if params["tick_interval_ms"] > params["duration_ms"]:
+        raise ValueError(f"skill package behavior.params.tick_interval_ms must not exceed duration_ms: {package_id}")
+    if not _is_number(params.get("orbit_radius")) or params["orbit_radius"] <= 0:
+        raise ValueError(f"skill package behavior.params.orbit_radius must be positive: {package_id}")
+    if not _is_number(params.get("orbit_speed_deg_per_sec")):
+        raise ValueError(f"skill package behavior.params.orbit_speed_deg_per_sec must be numeric: {package_id}")
+    if not _is_integer(params.get("orb_count")) or params["orb_count"] <= 0:
+        raise ValueError(f"skill package behavior.params.orb_count must be a positive integer: {package_id}")
+    if not _is_number(params.get("start_angle_deg")):
+        raise ValueError(f"skill package behavior.params.start_angle_deg must be numeric: {package_id}")
+    marker_id = params.get("tick_marker_id")
+    if not isinstance(marker_id, str) or not marker_id:
+        raise ValueError(f"skill package behavior.params.tick_marker_id must be a non-empty string: {package_id}")
+
+
 def _validate_skill_modules(
     modules: Any,
     behavior_templates: dict[str, dict[str, Any]],
@@ -804,6 +932,13 @@ def _validate_skill_modules(
                     raise ValueError(f"skill package modules[{index}].params.travel_time_ms must be positive: {package_id}")
                 if not _is_number(params.get("arc_height")) or params["arc_height"] < 0:
                     raise ValueError(f"skill package modules[{index}].params.arc_height must be non-negative: {package_id}")
+        if module_type == "orbit_emitter":
+            _validate_orbit_emitter_params(params, package_id)
+            marker_id = params.get("tick_marker_id")
+            if marker_id is not None:
+                if marker_id in marker_ids:
+                    raise ValueError(f"skill package modules duplicate marker id '{marker_id}': {package_id}")
+                marker_ids.add(str(marker_id))
         if trigger_map:
             trigger_marker_id = trigger_map.get("trigger_marker_id")
             if not isinstance(trigger_marker_id, str) or not trigger_marker_id:
@@ -887,21 +1022,7 @@ def _require_localization_key_shape(value: Any, label: str) -> str:
 
 
 def load_skill_templates(config_root: Path) -> dict[str, SkillTemplate]:
-    data = load_toml(config_root / "skills" / "skill_templates.toml")
     templates: dict[str, SkillTemplate] = {}
-    for entry in data.get("skill_templates", []):
-        template = SkillTemplate(
-            template_id=entry["template_id"],
-            tags=frozenset(entry["tags"]),
-            base_damage=float(entry["base_damage"]),
-            base_cooldown_ms=int(entry["base_cooldown_ms"]),
-            name_key=entry.get("name_key", ""),
-            damage_type=entry.get("damage_type", ""),
-            behavior_type=entry.get("behavior_type", ""),
-            visual_effect=str(entry.get("visual_effect", "")),
-            scaling_stats=tuple(entry.get("scaling_stats", [])),
-        )
-        templates[template.template_id] = template
     for package in load_skill_packages(config_root).values():
         template = _skill_template_from_package(package)
         templates[template.template_id] = template

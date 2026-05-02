@@ -56,6 +56,24 @@ for (const text of requiredText) {
   }
 }
 
+if (!state.character_panel?.sections?.length) {
+  throw new Error("character_panel state is missing configured sections");
+}
+const characterPanelRows = state.character_panel.sections.flatMap((section) => section.rows ?? []);
+for (const statId of ["strength", "current_life", "move_speed"]) {
+  if (!characterPanelRows.some((row) => row.stat_id === statId)) {
+    throw new Error(`character_panel missing configured stat row: ${statId}`);
+  }
+}
+for (const obsoleteStat of ["pickup_radius", "active_skill_slots", "passive_skill_slots", "skill_slots_active"]) {
+  if (state.player_stats?.[obsoleteStat] || characterPanelRows.some((row) => row.stat_id === obsoleteStat)) {
+    throw new Error(`obsolete player stat is still exposed: ${obsoleteStat}`);
+  }
+}
+if (!app.includes("character_panel") || !app.includes("formatCharacterPanelValue")) {
+  throw new Error("CharacterInfoPanel must render the configured character_panel payload");
+}
+
 const requiredCode = [
   "draggable",
   "onDropGem",
@@ -94,7 +112,8 @@ const requiredCode = [
   "MAP_EDITOR_DEFAULT_SPAWN",
   "MAP_EDITOR_MINIMAP_WIDTH",
   "MAP_EDITOR_PLAYER_COLLIDER",
-  "MAP_EDITOR_PLAYER_RENDER_SCALE = 0.5",
+  "MAP_EDITOR_PLAYER_RENDER_SCALE = 0.35",
+  "const speed = enemy.boss ? 44 : 70",
   "MAP_EDITOR_STORAGE_KEY",
   "MAP_EDITOR_CURRENT_FILE_STORAGE_KEY",
   "MAP_EDITOR_HANDLE_DB_NAME",

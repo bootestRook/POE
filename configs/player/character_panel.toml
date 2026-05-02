@@ -1,0 +1,185 @@
+[[sections]]
+id = "attributes"
+title_key = "ui.character.section.attributes"
+layout = "attributes"
+order = 10
+
+[[sections]]
+id = "core"
+title_key = "ui.character.section.core"
+layout = "core"
+order = 20
+
+[[sections]]
+id = "resistances"
+title_key = "ui.character.section.resistances"
+layout = "resistance"
+order = 30
+
+[[sections]]
+id = "details"
+title_key = "ui.character.section.details"
+layout = "detail"
+order = 40
+
+[[rows]]
+id = "strength"
+section_id = "attributes"
+stat_id = "strength"
+icon_text = "力"
+tone = "life"
+formatter = "integer"
+order = 10
+
+[[rows]]
+id = "dexterity"
+section_id = "attributes"
+stat_id = "dexterity"
+icon_text = "敏"
+tone = "evasion"
+formatter = "integer"
+order = 20
+
+[[rows]]
+id = "intelligence"
+section_id = "attributes"
+stat_id = "intelligence"
+icon_text = "智"
+tone = "mana"
+formatter = "integer"
+order = 30
+
+[[rows]]
+id = "current_life"
+section_id = "core"
+stat_id = "current_life"
+icon_text = "生"
+tone = "life"
+formatter = "integer"
+order = 10
+
+[[rows]]
+id = "current_energy_shield"
+section_id = "core"
+stat_id = "current_energy_shield"
+icon_text = "盾"
+tone = "shield"
+formatter = "integer"
+order = 20
+
+[[rows]]
+id = "current_mana"
+section_id = "core"
+stat_id = "current_mana"
+icon_text = "魔"
+tone = "mana"
+formatter = "integer"
+order = 30
+
+[[rows]]
+id = "armor"
+section_id = "core"
+stat_id = "armor"
+icon_text = "甲"
+tone = "armor"
+formatter = "integer"
+order = 40
+
+[[rows]]
+id = "evasion"
+section_id = "core"
+stat_id = "evasion"
+icon_text = "闪"
+tone = "evasion"
+formatter = "integer"
+order = 50
+
+[[rows]]
+id = "fire_resistance"
+section_id = "resistances"
+stat_id = "fire_resistance_percent"
+icon_text = "火"
+tone = "fire"
+formatter = "percent"
+order = 10
+
+[[rows]]
+id = "cold_resistance"
+section_id = "resistances"
+stat_id = "cold_resistance_percent"
+icon_text = "冰"
+tone = "cold"
+formatter = "percent"
+order = 20
+
+[[rows]]
+id = "lightning_resistance"
+section_id = "resistances"
+stat_id = "lightning_resistance_percent"
+icon_text = "电"
+tone = "lightning"
+formatter = "percent"
+order = 30
+
+[[rows]]
+id = "erosion_resistance"
+section_id = "resistances"
+stat_id = "erosion_resistance_percent"
+icon_text = "蚀"
+tone = "shadow"
+formatter = "percent"
+order = 40
+
+[[rows]]
+id = "max_life"
+section_id = "details"
+stat_id = "max_life"
+icon_text = "生"
+tone = "life"
+formatter = "integer"
+order = 10
+
+[[rows]]
+id = "life_regen_flat"
+section_id = "details"
+stat_id = "life_regen_flat"
+icon_text = "回"
+tone = "life"
+formatter = "number"
+order = 20
+
+[[rows]]
+id = "move_speed"
+section_id = "details"
+stat_id = "move_speed"
+icon_text = "速"
+tone = "evasion"
+formatter = "multiplier"
+order = 30
+
+[[rows]]
+id = "max_mana"
+section_id = "details"
+stat_id = "max_mana"
+icon_text = "魔"
+tone = "mana"
+formatter = "integer"
+order = 40
+
+[[rows]]
+id = "max_energy_shield"
+section_id = "details"
+stat_id = "max_energy_shield"
+icon_text = "盾"
+tone = "shield"
+formatter = "integer"
+order = 50
+
+[[rows]]
+id = "energy_shield_charge_delay_ms"
+section_id = "details"
+stat_id = "energy_shield_charge_delay_ms"
+icon_text = "延"
+tone = "shield"
+formatter = "seconds_from_ms"
+order = 60

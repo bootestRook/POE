@@ -101,6 +101,7 @@ class SkillEffectCalculator:
     relation_coefficients: dict[str, float]
     scaling_rules: SkillScalingRules
     affix_definitions: dict[str, AffixDefinition]
+    player_runtime_stat_ids: frozenset[str] | None = None
 
     def calculate_all(self) -> tuple[FinalSkillInstance, ...]:
         validation = self.board.validate()
@@ -164,6 +165,8 @@ class SkillEffectCalculator:
             for effect in passive_definition.passive_effects:
                 if effect.target != "self_stat":
                     continue
+                if self.player_runtime_stat_ids is not None and effect.stat not in self.player_runtime_stat_ids:
+                    continue
                 value = effect.value + supported_values.get(effect.stat, 0.0)
                 modifiers.append(
                     PlayerStatModifier(
@@ -179,18 +182,29 @@ class SkillEffectCalculator:
 
     def apply_player_stat_contributions(self, player: object) -> tuple[PlayerStatModifier, ...]:
         modifiers = self.calculate_player_stat_modifiers()
-        max_life_add = sum(modifier.value for modifier in modifiers if modifier.stat == "max_life")
-        move_speed_add = sum(modifier.value for modifier in modifiers if modifier.stat == "move_speed")
+        modifiers_by_stat: dict[str, float] = {}
+        for modifier in modifiers:
+            modifiers_by_stat[modifier.stat] = modifiers_by_stat.get(modifier.stat, 0.0) + modifier.value
 
+        max_life_add = modifiers_by_stat.pop("max_life", 0.0)
         if max_life_add:
             old_max = float(getattr(player, "max_life"))
             old_current = float(getattr(player, "current_life"))
             setattr(player, "max_life", old_max + max_life_add)
             if old_current >= old_max:
                 setattr(player, "current_life", old_current + max_life_add)
+
+        move_speed_add = modifiers_by_stat.pop("move_speed", 0.0)
         if move_speed_add:
             base_move_speed = float(getattr(player, "move_speed", 1.0))
             setattr(player, "move_speed", base_move_speed * (1.0 + move_speed_add / 100.0))
+
+        for stat, value in modifiers_by_stat.items():
+            current = getattr(player, stat, 0)
+            if isinstance(current, bool):
+                setattr(player, stat, bool(current or value))
+            else:
+                setattr(player, stat, float(current) + value)
         return modifiers
 
     def _support_sources_for(self, target: GemInstance) -> list[tuple[GemInstance, str]]:
@@ -325,7 +339,11 @@ class SkillEffectCalculator:
 
         source_power = self._board_power(source, BOARD_SOURCE_STATS[relation])
         target_power = self._board_power(target, BOARD_TARGET_STATS[relation])
-        conduit_multiplier, conduit_modifiers = self._conduit_multiplier(target, relation)
+        conduit_multiplier, conduit_modifiers = self._conduit_multiplier(
+            target,
+            relation,
+            excluded_instance_id=source.instance_id,
+        )
         return relation_coefficient * source_power * target_power * conduit_multiplier, conduit_modifiers
 
     def _board_power(self, instance: GemInstance, stat: str) -> float:
@@ -335,10 +353,16 @@ class SkillEffectCalculator:
         self,
         target: GemInstance,
         relation: str,
+        *,
+        excluded_instance_id: str | None = None,
     ) -> tuple[float, list[AppliedModifier]]:
         multiplier = 1.0
         modifiers: list[AppliedModifier] = []
-        for conduit in self._matching_conduits(target, relation):
+        for conduit in self._matching_conduits(
+            target,
+            relation,
+            excluded_instance_id=excluded_instance_id,
+        ):
             amplifier = self._conduit_amplifier(conduit.base_gem_id, relation)
             if amplifier is None:
                 continue
@@ -359,10 +383,18 @@ class SkillEffectCalculator:
             )
         return multiplier, modifiers
 
-    def _matching_conduits(self, target: GemInstance, relation: str) -> list[GemInstance]:
+    def _matching_conduits(
+        self,
+        target: GemInstance,
+        relation: str,
+        *,
+        excluded_instance_id: str | None = None,
+    ) -> list[GemInstance]:
         conduits: list[GemInstance] = []
         for instance_id in self.board.view().cells.values():
             instance = self.board.inventory.require(instance_id)
+            if instance.instance_id == excluded_instance_id:
+                continue
             if "support_conduit" not in instance.tags:
                 continue
             if self._effective_relation(instance.instance_id, target.instance_id) == relation:
@@ -645,7 +677,7 @@ def _scaled_modules(modules: object, area_multiplier: float, speed_multiplier: f
         params = dict(next_module.get("params", {})) if isinstance(next_module.get("params"), dict) else {}
         if "projectile_speed" in params:
             params["projectile_speed"] = float(params["projectile_speed"]) * speed_multiplier
-        for area_key in ("radius", "length", "width"):
+        for area_key in ("radius", "length", "width", "orbit_radius"):
             if area_key in params:
                 params[area_key] = float(params[area_key]) * area_multiplier
         next_module["params"] = params

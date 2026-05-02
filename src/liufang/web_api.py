@@ -4,6 +4,7 @@ import json
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from .affixes import AffixGenerator
@@ -11,7 +12,10 @@ from .combat import CombatSession, Monster, Player, Position
 from .config import (
     load_affix_definitions,
     load_board_rules,
+    load_character_panel_sections,
     load_gem_definitions,
+    load_player_base_stats,
+    load_player_stat_definitions,
     load_rarity_affix_counts,
     load_relation_coefficients,
     load_skill_scaling_rules,
@@ -67,6 +71,7 @@ class V1WebAppApi:
             "drops": drops,
             "logs": list(self.logs),
             "player_stats": self._player_stats_view(),
+            "character_panel": self._character_panel_view(),
             "skill_editor": self.skill_editor.view(),
             "ui_text": {
                 "only_gems_on_board": self.presenter.localizer.text("ui.inventory.only_gems_on_board"),
@@ -87,7 +92,7 @@ class V1WebAppApi:
 
     def start_combat(self) -> dict[str, Any]:
         session = CombatSession.start(
-            player=Player("player_1", current_life=100, max_life=100, position=Position(0, 0), item_interaction_reach=2),
+            player=self._new_player("player_1"),
             monsters=[Monster("monster_1", current_life=5, max_life=5, position=Position(1, 0))],
             inventory=self.inventory,
             skill_effect_calculator=self._calculator(),
@@ -262,6 +267,7 @@ class V1WebAppApi:
             relation_coefficients=load_relation_coefficients(self.config_root),
             scaling_rules=load_skill_scaling_rules(self.config_root),
             affix_definitions={definition.affix_id: definition for definition in affixes},
+            player_runtime_stat_ids=self._player_runtime_stat_ids(),
         )
 
     def _create_loot_runtime(self) -> LootRuntime:
@@ -275,20 +281,79 @@ class V1WebAppApi:
             rng=random.Random(seed),
         )
 
-    def _player_stats_view(self) -> dict[str, Any]:
-        player = Player(
-            "player_preview",
-            current_life=100,
-            max_life=100,
+    def _player_runtime_stat_ids(self) -> frozenset[str]:
+        definitions = load_player_stat_definitions(self.config_root)
+        return frozenset(
+            stat_id
+            for stat_id, definition in definitions.items()
+            if definition.runtime_effective
+        )
+
+    def _new_player(self, player_id: str) -> Player:
+        base_stats = load_player_base_stats(self.config_root)
+        return Player(
+            player_id,
+            current_life=float(base_stats.get("current_life", 100)),
+            max_life=float(base_stats.get("max_life", 100)),
             position=Position(0, 0),
             item_interaction_reach=2,
-            move_speed=1.0,
+            move_speed=float(base_stats.get("move_speed", 1.0)),
         )
+
+    def _calculated_player_stat_values(self) -> dict[str, Any]:
+        base_stats = dict(load_player_base_stats(self.config_root))
+        player = SimpleNamespace(**base_stats)
         self._calculator().apply_player_stat_contributions(player)
+        for key in list(base_stats):
+            if hasattr(player, key):
+                base_stats[key] = getattr(player, key)
+        return base_stats
+
+    def _player_stats_view(self) -> dict[str, Any]:
+        stat_definitions = load_player_stat_definitions(self.config_root)
+        stat_values = self._calculated_player_stat_values()
         return {
-            "max_life": {"label_text": self.presenter.localizer.text("stat.max_life.name"), "value": player.max_life},
-            "move_speed": {"label_text": self.presenter.localizer.text("stat.move_speed.name"), "value": player.move_speed},
+            stat_id: {
+                "label_text": self.presenter.localizer.text(definition.name_key),
+                "value": stat_values.get(stat_id, False if definition.value_type == "boolean" else 0),
+                "value_type": definition.value_type,
+                "category": definition.category,
+                "v1_status": definition.v1_status,
+                "runtime_effective": definition.runtime_effective,
+                "affix_spawn_enabled_v1": definition.affix_spawn_enabled_v1,
+            }
+            for stat_id, definition in stat_definitions.items()
         }
+
+    def _character_panel_view(self) -> dict[str, Any]:
+        stat_view = self._player_stats_view()
+        sections = []
+        for section in load_character_panel_sections(self.config_root):
+            rows = []
+            for row in section.rows:
+                stat = stat_view[row.stat_id]
+                rows.append(
+                    {
+                        "id": row.row_id,
+                        "stat_id": row.stat_id,
+                        "label_text": stat["label_text"],
+                        "value": stat["value"],
+                        "value_type": stat["value_type"],
+                        "formatter": row.formatter,
+                        "icon_text": row.icon_text,
+                        "tone": row.tone,
+                        "v1_status": stat["v1_status"],
+                    }
+                )
+            sections.append(
+                {
+                    "id": section.section_id,
+                    "title_text": self.presenter.localizer.text(section.title_key),
+                    "layout": section.layout,
+                    "rows": rows,
+                }
+            )
+        return {"sections": sections}
 
     def _gem_name(self, instance: GemInstance) -> str:
         return self.presenter.localizer.text(self.definitions[instance.base_gem_id].name_key)

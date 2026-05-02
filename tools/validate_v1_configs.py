@@ -11,27 +11,24 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = ROOT / "configs"
 sys.path.insert(0, str(ROOT / "src"))
 
-from liufang.config import load_skill_packages
+from liufang.config import GemDefinition, load_gem_definitions, load_skill_packages
 
 EXPECTED_FILES = [
     "core/id_rules.toml",
     "core/random_rules.toml",
     "player/player_base_stats.toml",
     "player/player_stat_defs.toml",
+    "player/character_panel.toml",
     "combat/damage_types.toml",
     "combat/hit_rules.toml",
     "combat/status_effects.toml",
     "gems/gem_type_defs.toml",
-    "gems/active_skill_gems.toml",
-    "gems/passive_skill_gems.toml",
-    "gems/support_gems.toml",
     "gems/gem_tag_defs.toml",
     "gems/gem_instance_schema.toml",
     "sudoku_board/board_layout.toml",
     "sudoku_board/placement_rules.toml",
     "sudoku_board/relation_rules.toml",
     "sudoku_board/effect_routing_rules.toml",
-    "skills/skill_templates.toml",
     "skills/skill_scaling_rules.toml",
     "affixes/affix_defs.toml",
     "affixes/affix_spawn_rules.toml",
@@ -50,20 +47,27 @@ EXPECTED_SKILL_PACKAGE_FILES = [
     "skills/active/active_frost_nova/skill.yaml",
     "skills/active/active_puncture/skill.yaml",
     "skills/active/active_fungal_petards/skill.yaml",
+    "skills/active/active_lava_orb/skill.yaml",
+    "skills/passive/passive_fire_focus/skill.yaml",
+    "skills/passive/passive_vitality/skill.yaml",
+    "skills/passive/passive_swift_gathering/skill.yaml",
     "skills/behavior_templates/projectile.yaml",
     "skills/behavior_templates/chain.yaml",
     "skills/behavior_templates/player_nova.yaml",
     "skills/behavior_templates/melee_arc.yaml",
     "skills/behavior_templates/damage_zone.yaml",
+    "skills/behavior_templates/orbit_emitter.yaml",
 ]
 
 REQUIRED_STATS = {
     "max_life",
     "current_life",
     "move_speed",
-    "skill_slots_active",
+    "support_link_limit",
     "damage_add_percent",
     "damage_final_percent",
+    "hit_damage_add_percent",
+    "hit_damage_final_percent",
     "attack_speed_add_percent",
     "cast_speed_add_percent",
     "skill_speed_final_percent",
@@ -71,29 +75,46 @@ REQUIRED_STATS = {
     "added_cooldown_ms",
     "area_add_percent",
     "projectile_count_add",
+    "chain_count_add",
+    "pierce_count_add",
     "projectile_speed_add_percent",
+    "base_crit_chance_percent",
     "crit_chance_add_percent",
     "crit_damage_add_percent",
+    "cannot_crit",
     "status_chance_add_percent",
     "physical_damage_add_percent",
     "fire_damage_add_percent",
     "cold_damage_add_percent",
     "lightning_damage_add_percent",
+    "elemental_damage_add_percent",
+    "attack_damage_add_percent",
+    "spell_damage_add_percent",
+    "melee_damage_add_percent",
+    "ranged_damage_add_percent",
+    "projectile_damage_add_percent",
+    "area_damage_add_percent",
+    "active_gem_level_add",
+    "gem_level",
+    "source_power_row",
+    "source_power_column",
+    "source_power_box",
+    "target_power_row",
+    "target_power_column",
+    "target_power_box",
+    "conduit_power_row",
+    "conduit_power_column",
+    "conduit_power_box",
 }
 
-FORBIDDEN_V1_STATS = {
-    "mana",
-    "mana_regen",
-    "strength",
-    "dexterity",
-    "intelligence",
-    "armor",
-    "evasion",
-    "energy_shield",
-    "resistance_fire",
-    "resistance_cold",
-    "resistance_lightning",
+OBSOLETE_PLAYER_STATS = {
+    "pickup_radius",
+    "active_skill_slots",
+    "passive_skill_slots",
+    "skill_slots_active",
 }
+ALLOWED_PLAYER_STAT_STATUSES = {"V1_ACTIVE", "V1_DISPLAY_ONLY", "V1_RESERVED", "V2_PLUS"}
+ALLOWED_PLAYER_STAT_VALUE_TYPES = {"number", "integer", "percent", "boolean"}
 
 REQUIRED_TAGS = {
     "gem",
@@ -490,6 +511,38 @@ def check_no_random_affix_fields(entry: dict[str, Any], context: str, errors: li
         errors.append(f"{context}: real gem config must not contain random affix fields: {', '.join(present)}")
 
 
+def gem_definition_entry(definition: GemDefinition) -> dict[str, Any]:
+    return {
+        "id": definition.base_gem_id,
+        "name_key": definition.name_key,
+        "description_key": definition.description_key,
+        "category": definition.category,
+        "gem_type": definition.gem_type,
+        "gem_kind": definition.gem_kind,
+        "sudoku_digit": definition.sudoku_digit,
+        "skill_template": definition.skill_template_id,
+        "visual_effect": definition.visual_effect,
+        "shape_effect": definition.shape_effect,
+        "tags": sorted(definition.tags),
+        "effect_stats": list(definition.effect_stats),
+        "passive_effects": [
+            {
+                "target": effect.target,
+                "stat": effect.stat,
+                "value": effect.value,
+                "layer": effect.layer,
+            }
+            for effect in definition.passive_effects
+        ],
+        "apply_filter": {
+            "target_kinds": list(definition.apply_filter_target_kinds),
+            "tags_any": list(definition.apply_filter_tags_any),
+            "tags_all": list(definition.apply_filter_tags_all),
+            "tags_none": list(definition.apply_filter_tags_none),
+        },
+    }
+
+
 def check_forbidden_config_entries(value: Any, path: str, errors: list[str]) -> None:
     if isinstance(value, dict):
         for key, nested in value.items():
@@ -506,6 +559,9 @@ def check_forbidden_config_entries(value: Any, path: str, errors: list[str]) -> 
     if field_name not in {"id", "category", "v1_role", "behavior_type"}:
         return
     lowered = value.lower()
+    if path.startswith("configs/player/"):
+        return
+
     for forbidden in FORBIDDEN_CONFIG_IDS:
         if forbidden in lowered:
             errors.append(f"{path}: forbidden V1 config entry '{value}' contains '{forbidden}'")
@@ -550,9 +606,9 @@ def validate() -> list[str]:
     except Exception as exc:
         errors.append(f"skill packages: {exc}")
         skill_packages = {}
-    expected_skill_packages = {"active_fire_bolt", "active_ice_shards", "active_lightning_chain", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_fungal_petards"}
+    expected_skill_packages = {"active_fire_bolt", "active_ice_shards", "active_lightning_chain", "active_penetrating_shot", "active_frost_nova", "active_puncture", "active_fungal_petards", "active_lava_orb"}
     if set(skill_packages) != expected_skill_packages:
-        errors.append("skill packages must contain active_fire_bolt, active_ice_shards, active_lightning_chain, active_penetrating_shot, active_frost_nova, active_puncture and active_fungal_petards in this apply slice")
+        errors.append("skill packages must contain all migrated V1 active skill packages including active_lava_orb")
     for package_id, package in skill_packages.items():
         display = package.get("display", {})
         presentation = package.get("presentation", {})
@@ -562,7 +618,7 @@ def validate() -> list[str]:
                 errors.append(f"skill package '{package_id}' missing localization key '{localization_key}'")
         if isinstance(presentation, dict):
             for key_name, localization_key in presentation.items():
-                if key_name in {"hit_stop_ms", "camera_shake"}:
+                if key_name in {"hit_stop_ms", "camera_shake", "vfx_scale"}:
                     continue
                 if localization_key not in localization:
                     errors.append(
@@ -583,14 +639,39 @@ def validate() -> list[str]:
     missing_stats = sorted(REQUIRED_STATS - stat_ids)
     if missing_stats:
         errors.append(f"player stats missing required ids: {', '.join(missing_stats)}")
-    forbidden_stats = sorted(FORBIDDEN_V1_STATS & stat_ids)
-    if forbidden_stats:
-        errors.append(f"player stats contain V1-forbidden ids: {', '.join(forbidden_stats)}")
+    obsolete_stats = sorted(OBSOLETE_PLAYER_STATS & stat_ids)
+    if obsolete_stats:
+        errors.append(f"player stats contain obsolete ids: {', '.join(obsolete_stats)}")
+    runtime_stat_ids: set[str] = set()
+    affix_spawn_enabled_stat_ids: set[str] = set()
     for stat in stats:
         stat_id = stat.get("id")
         if isinstance(stat_id, str) and not compiled_id_pattern.match(stat_id):
             errors.append(f"player stats: id '{stat_id}' does not match id_rules")
         require_localization(stat, "player stats", localization, errors)
+        if stat.get("category") is None:
+            errors.append(f"player stats: '{stat_id}' missing category")
+        if stat.get("value_type") not in ALLOWED_PLAYER_STAT_VALUE_TYPES:
+            errors.append(f"player stats: '{stat_id}' has invalid value_type '{stat.get('value_type')}'")
+        v1_status = stat.get("v1_status")
+        if v1_status not in ALLOWED_PLAYER_STAT_STATUSES:
+            errors.append(f"player stats: '{stat_id}' has invalid v1_status '{v1_status}'")
+        runtime_effective = stat.get("runtime_effective")
+        if not isinstance(runtime_effective, bool):
+            errors.append(f"player stats: '{stat_id}' runtime_effective must be boolean")
+        elif runtime_effective and isinstance(stat_id, str):
+            runtime_stat_ids.add(stat_id)
+        affix_spawn_enabled = stat.get("affix_spawn_enabled_v1")
+        if not isinstance(affix_spawn_enabled, bool):
+            errors.append(f"player stats: '{stat_id}' affix_spawn_enabled_v1 must be boolean")
+        elif affix_spawn_enabled:
+            if v1_status != "V1_ACTIVE":
+                errors.append(f"player stats: '{stat_id}' cannot enable V1 affix spawning unless V1_ACTIVE")
+            if isinstance(stat_id, str):
+                affix_spawn_enabled_stat_ids.add(stat_id)
+    missing_runtime_stats = sorted(REQUIRED_STATS - runtime_stat_ids)
+    if missing_runtime_stats:
+        errors.append(f"player stats missing runtime-effective ids: {', '.join(missing_runtime_stats)}")
 
     player_base = data.get("player/player_base_stats.toml", {}).get("player_base", {})
     if not isinstance(player_base, dict):
@@ -599,6 +680,38 @@ def validate() -> list[str]:
     for stat_id in player_base:
         if stat_id not in stat_ids:
             errors.append(f"player_base: unknown stat '{stat_id}'")
+        if stat_id in OBSOLETE_PLAYER_STATS:
+            errors.append(f"player_base: obsolete stat '{stat_id}'")
+        if not isinstance(player_base[stat_id], (int, float, bool)):
+            errors.append(f"player_base: stat '{stat_id}' value must be numeric or boolean")
+    missing_base_stats = sorted(runtime_stat_ids - set(player_base))
+    if missing_base_stats:
+        errors.append(f"player_base missing runtime-effective stats: {', '.join(missing_base_stats)}")
+
+    character_panel = data.get("player/character_panel.toml", {})
+    panel_sections = items(character_panel, "sections")
+    panel_rows = items(character_panel, "rows")
+    panel_section_ids = unique_ids(panel_sections, "character panel sections", errors)
+    panel_row_ids = unique_ids(panel_rows, "character panel rows", errors)
+    _ = panel_row_ids
+    for section in panel_sections:
+        require_localized_key(section, "title_key", "character panel sections", localization, errors)
+        if section.get("layout") not in {"attributes", "core", "resistance", "detail"}:
+            errors.append(f"character panel section '{section.get('id')}': invalid layout '{section.get('layout')}'")
+    for row in panel_rows:
+        row_id = row.get("id", "<unknown>")
+        section_id = row.get("section_id")
+        stat_id = row.get("stat_id")
+        if section_id not in panel_section_ids:
+            errors.append(f"character panel row '{row_id}': unknown section_id '{section_id}'")
+        if stat_id not in stat_ids:
+            errors.append(f"character panel row '{row_id}': unknown stat_id '{stat_id}'")
+        if stat_id in OBSOLETE_PLAYER_STATS:
+            errors.append(f"character panel row '{row_id}': obsolete stat_id '{stat_id}'")
+        if not isinstance(row.get("icon_text"), str) or not row.get("icon_text"):
+            errors.append(f"character panel row '{row_id}': icon_text is required")
+        if row.get("formatter") not in {"auto", "integer", "number", "percent", "multiplier", "seconds_from_ms", "boolean"}:
+            errors.append(f"character panel row '{row_id}': invalid formatter '{row.get('formatter')}'")
 
     damage_types = items(data.get("combat/damage_types.toml", {}), "damage_types")
     damage_type_ids = unique_ids(damage_types, "damage types", errors)
@@ -713,48 +826,37 @@ def validate() -> list[str]:
     for tier in affix_tiers:
         require_localization(tier, "affix tiers", localization, errors)
 
-    skill_templates = items(data.get("skills/skill_templates.toml", {}), "skill_templates")
-    skill_template_ids = unique_ids(skill_templates, "skill templates", errors)
-    skill_template_ids_from_template_id: set[str] = set()
-    for template in skill_templates:
-        context = f"skill_templates:{template.get('id', '<unknown>')}"
-        template_id = template.get("template_id")
-        if not isinstance(template_id, str) or not template_id:
-            errors.append(f"{context}: missing template_id")
-        elif template_id in skill_template_ids_from_template_id:
-            errors.append(f"skill templates: duplicate template_id '{template_id}'")
-        else:
-            skill_template_ids_from_template_id.add(template_id)
-        for required_field in [
-            "name_key",
-            "damage_type",
-            "behavior_type",
-            "base_damage",
-            "base_cooldown_ms",
-            "tags",
-            "scaling_stats",
-        ]:
-            if required_field not in template:
-                errors.append(f"{context}: missing {required_field}")
-        if template.get("damage_type") not in damage_type_ids:
-            errors.append(f"{context}: unknown damage_type '{template.get('damage_type')}'")
-        if not isinstance(template.get("base_damage"), (int, float)):
-            errors.append(f"{context}: base_damage must be numeric")
-        if not isinstance(template.get("base_cooldown_ms"), int) or template.get("base_cooldown_ms", 0) <= 0:
-            errors.append(f"{context}: base_cooldown_ms must be a positive integer")
-        check_tags(template.get("tags"), tag_ids, context, errors)
-        scaling_stats = template.get("scaling_stats", [])
-        if not isinstance(scaling_stats, list):
-            errors.append(f"{context}: scaling_stats must be an array")
-        else:
-            for stat in scaling_stats:
-                if stat not in stat_ids:
-                    errors.append(f"{context}: unknown scaling stat '{stat}'")
-        require_localization(template, "skill templates", localization, errors)
+    try:
+        active_skill_packages = load_skill_packages(CONFIGS)
+    except Exception as exc:
+        errors.append(f"active skill packages failed validation: {exc}")
+        active_skill_packages = {}
+    if set(active_skill_packages) != set(REQUIRED_ACTIVE_GEMS):
+        errors.append("active Skill Packages must match the 8 V1 active gem ids exactly")
+    all_skill_template_ids = set(REQUIRED_ACTIVE_GEMS.values())
 
-    all_skill_template_ids = skill_template_ids | skill_template_ids_from_template_id
+    try:
+        gem_definitions = load_gem_definitions(CONFIGS)
+    except Exception as exc:
+        errors.append(f"gem definition packages failed validation: {exc}")
+        gem_definitions = {}
 
-    active_gems = items(data.get("gems/active_skill_gems.toml", {}), "active_skill_gems")
+    active_gems = [
+        gem_definition_entry(definition)
+        for definition in gem_definitions.values()
+        if definition.gem_kind == "active_skill"
+    ]
+    passive_gems = [
+        gem_definition_entry(definition)
+        for definition in gem_definitions.values()
+        if definition.gem_kind == "passive_skill"
+    ]
+    support_gems = [
+        gem_definition_entry(definition)
+        for definition in gem_definitions.values()
+        if definition.gem_kind == "support"
+    ]
+
     active_gem_ids = unique_ids(active_gems, "active skill gems", errors)
     if active_gem_ids != set(REQUIRED_ACTIVE_GEMS):
         errors.append("active skill gems must match the 8 V1 active gem ids exactly")
@@ -779,7 +881,6 @@ def validate() -> list[str]:
         require_localization(gem, "active skill gems", localization, errors)
         require_localized_key(gem, "description_key", "active skill gems", localization, errors)
 
-    passive_gems = items(data.get("gems/passive_skill_gems.toml", {}), "passive_skill_gems")
     passive_gem_ids = unique_ids(passive_gems, "passive skill gems", errors)
     if passive_gem_ids != REQUIRED_PASSIVE_GEMS:
         errors.append("passive skill gems must match the planned V1 Phase 2 passive ids exactly")
@@ -787,7 +888,7 @@ def validate() -> list[str]:
         context = f"passive_skill_gems:{gem.get('id', '<unknown>')}"
         check_gem_kind_and_digit(gem, "passive_skill", context, errors)
         check_no_random_affix_fields(gem, context, errors)
-        if "skill_template" in gem:
+        if gem.get("skill_template"):
             errors.append(f"{context}: passive skill gems must not declare skill_template")
         if gem.get("gem_type") not in gem_type_ids:
             errors.append(f"{context}: unknown gem_type '{gem.get('gem_type')}'")
@@ -826,7 +927,6 @@ def validate() -> list[str]:
         require_localization(gem, "passive skill gems", localization, errors)
         require_localized_key(gem, "description_key", "passive skill gems", localization, errors)
 
-    support_gems = items(data.get("gems/support_gems.toml", {}), "support_gems")
     support_gem_ids = unique_ids(support_gems, "support gems", errors)
     required_support_ids = set().union(*REQUIRED_SUPPORT_GEMS.values())
     if support_gem_ids != required_support_ids:
@@ -965,6 +1065,8 @@ def validate() -> list[str]:
             errors.append(f"{context}: unknown V1 affix category '{affix.get('category')}'")
         if affix.get("stat") not in legal_stat_ids:
             errors.append(f"{context}: unknown stat '{affix.get('stat')}'")
+        elif affix.get("stat") not in affix_spawn_enabled_stat_ids:
+            errors.append(f"{context}: stat '{affix.get('stat')}' is not enabled for V1 random affix spawning")
         if affix.get("group") not in affix_group_ids:
             errors.append(f"{context}: unknown affix group '{affix.get('group')}'")
         value_range = affix.get("value_range")
